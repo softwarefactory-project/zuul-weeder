@@ -1,0 +1,16 @@
+- project:
+    check: &jobs
+      jobs:
+        - cabal-test:
+            vars:
+              ghc_version: 8.8
+            nodeset:
+              nodes:
+                - name: container
+                  label: zuul-worker-haskell
+        - hlint:
+            nodeset:
+              nodes:
+                - name: container
+                  label: zuul-worker-haskell
+    gate: *jobs
