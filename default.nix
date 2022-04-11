@@ -4,8 +4,9 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, aeson, algebraic-graphs, base, directory, dhall, filepath
-    , lens, lib, mtl, streaming, tasty, tasty-hunit, text, uri-encode }:
+  f = { mkDerivation, aeson, algebraic-graphs, base, bytestring, directory
+    , dhall, filepath, lens, lib, mtl, streaming, tasty, tasty-hunit, text
+    , uri-encode }:
     mkDerivation {
       pname = "zuul-weeder";
       version = "0.1.0.0";
@@ -16,6 +17,7 @@ let
         aeson
         algebraic-graphs
         base
+        bytestring
         directory
         dhall
         filepath

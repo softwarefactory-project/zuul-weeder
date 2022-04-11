@@ -30,7 +30,6 @@ common common-options
                        -Wincomplete-uni-patterns
                        -Wincomplete-record-updates
                        -Wredundant-constraints
-                       -Wno-unused-imports
                        -fhide-source-paths
                        -Wunused-packages
   default-extensions:  OverloadedStrings
@@ -49,6 +48,7 @@ library
                      , directory
                      , filepath
                      , uri-encode
+                     , bytestring
   hs-source-dirs:      src
   exposed-modules:     Zuul.Weeder
                      , Zuul.ZKDump

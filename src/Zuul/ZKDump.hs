@@ -1,3 +1,8 @@
+--- This is expected to run on a dump done via
+--- python3 /var/log/zuul/zk-dump.py --cert /etc/zuul/ssl/zookeeper.crt --key /etc/zuul/ssl/zookeeper.key --ca /etc/zuul/ssl/zk-ca.pem managesf.sftests.com:2281 --decompress /var/log/zuul/zk-dump
+--- then
+--- S.print $ walk "/var/log/zuul/zk-dump"
+
 module Zuul.ZKDump
   ( walk,
     mkZKConfig,
@@ -5,19 +10,17 @@ module Zuul.ZKDump
   )
 where
 
-import Control.Monad (forM_, void, when)
+import Control.Exception (SomeException, try)
+import Control.Monad (forM_, when)
 import Control.Monad.Trans (liftIO)
-import Data.Maybe (mapMaybe)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS (readFile)
 import qualified Data.Text as T
   ( Text,
     breakOn,
     drop,
-    dropWhile,
-    intercalate,
-    isPrefixOf,
     isSuffixOf,
     pack,
-    replace,
     split,
   )
 import Network.URI.Encode (decodeText)
@@ -30,7 +33,7 @@ data ZKConfig = ZKConfig
     project :: T.Text,
     branch :: T.Text,
     filePath :: T.Text,
-    zkData :: Maybe T.Text
+    zkData :: Maybe ByteString
   }
   deriving (Show, Eq)
 
@@ -48,8 +51,20 @@ walk dumpPath = walkRecursive $ dumpPath </> "zuul" </> "config" </> "cache"
           else do
             when ("/0000000000/ZKDATA" `T.isSuffixOf` T.pack fullPath) $ do
               case mkZKConfig fullPath of
-                Nothing -> pure ()
-                Just zc -> S.yield zc
+                Nothing -> do
+                  liftIO . putStrLn $ "Unable to handle ZK path " <> fullPath
+                  pure ()
+                Just zc -> do
+                  zkDataM <- liftIO $ readZKData fullPath
+                  S.yield $ zc {zkData = zkDataM}
+    readZKData :: FilePath -> IO (Maybe ByteString)
+    readZKData path = do
+      zkDataE <- try $ BS.readFile path :: IO (Either SomeException ByteString)
+      case zkDataE of
+        Left err -> do
+          putStrLn $ "Unable to read content from " <> path <> " due to: " <> show err
+          pure Nothing
+        Right content -> pure $ Just content
 
 mkZKConfig :: FilePath -> Maybe ZKConfig
 mkZKConfig path = do
