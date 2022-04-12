@@ -7,6 +7,7 @@ module Zuul.ZKDump
   ( walkConfigNodes,
     mkZKConfig,
     ZKConfig (..),
+    ConfigError (..),
   )
 where
 
