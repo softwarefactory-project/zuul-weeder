@@ -4,7 +4,7 @@
 --- S.print $ walk "/var/log/zuul/zk-dump"
 
 module Zuul.ZKDump
-  ( walk,
+  ( walkConfigNodes,
     mkZKConfig,
     ZKConfig (..),
   )
@@ -12,7 +12,9 @@ where
 
 import Control.Exception (SomeException, try)
 import Control.Monad (forM_, when)
-import Control.Monad.Trans (liftIO)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Trans (lift)
+import Data.Aeson (Value)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS (readFile)
 import qualified Data.Text as T
@@ -23,6 +25,7 @@ import qualified Data.Text as T
     pack,
     split,
   )
+import qualified Data.Yaml as Y (ParseException, decodeEither')
 import Network.URI.Encode (decodeText)
 import qualified Streaming.Prelude as S
 import System.Directory (doesDirectoryExist, listDirectory)
@@ -33,41 +36,53 @@ data ZKConfig = ZKConfig
     project :: T.Text,
     branch :: T.Text,
     filePath :: T.Text,
-    zkData :: Maybe ByteString
+    zkJSONData :: Value
   }
   deriving (Show, Eq)
 
-walk :: FilePath -> S.Stream (S.Of ZKConfig) IO ()
-walk dumpPath = walkRecursive $ dumpPath </> "zuul" </> "config" </> "cache"
+data ConfigError
+  = ReadError SomeException
+  | DecodeError Y.ParseException
+  | InvalidPath FilePath
+  deriving (Show)
+
+type ZKConfigStream = S.Stream (S.Of (Either ConfigError ZKConfig)) IO ()
+
+walkConfigNodes :: FilePath -> ZKConfigStream
+walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul" </> "config" </> "cache"
   where
-    walkRecursive :: FilePath -> S.Stream (S.Of ZKConfig) IO ()
+    walkRecursive :: FilePath -> ZKConfigStream
     walkRecursive curPath = do
-      tree <- liftIO $ listDirectory curPath
+      tree <- lift $ listDirectory curPath
       forM_ tree $ \path -> do
         let fullPath = curPath </> path
-        isDirectory <- liftIO $ doesDirectoryExist fullPath
+        isDirectory <- lift $ doesDirectoryExist fullPath
         if isDirectory
           then walkRecursive fullPath
           else do
-            when ("/0000000000/ZKDATA" `T.isSuffixOf` T.pack fullPath) $ do
-              case mkZKConfig fullPath of
-                Nothing -> do
-                  liftIO . putStrLn $ "Unable to handle ZK path " <> fullPath
-                  pure ()
-                Just zc -> do
-                  zkDataM <- liftIO $ readZKData fullPath
-                  S.yield $ zc {zkData = zkDataM}
-    readZKData :: FilePath -> IO (Maybe ByteString)
-    readZKData path = do
-      zkDataE <- try $ BS.readFile path :: IO (Either SomeException ByteString)
-      case zkDataE of
-        Left err -> do
-          putStrLn $ "Unable to read content from " <> path <> " due to: " <> show err
-          pure Nothing
-        Right content -> pure $ Just content
+            when ("/0000000000/ZKDATA" `T.isSuffixOf` T.pack fullPath) $
+              lift (runExceptT (handleConfig fullPath)) >>= S.yield
 
-mkZKConfig :: FilePath -> Maybe ZKConfig
-mkZKConfig path = do
+    handleConfig :: FilePath -> ExceptT ConfigError IO ZKConfig
+    handleConfig fullPath = do
+      zkData <- readZKData fullPath
+      zkJSONData <- case Y.decodeEither' zkData of
+        Left err -> throwError $ DecodeError err
+        Right content -> pure content
+
+      case mkZKConfig zkJSONData fullPath of
+        Just config -> pure config
+        Nothing -> throwError $ InvalidPath fullPath
+
+    readZKData :: FilePath -> ExceptT ConfigError IO ByteString
+    readZKData path = do
+      zkDataE <- lift $ try $ BS.readFile path
+      case zkDataE of
+        Left err -> throwError $ ReadError err
+        Right content -> pure content
+
+mkZKConfig :: Value -> FilePath -> Maybe ZKConfig
+mkZKConfig zkJSONData path = do
   [_, _, filePath', _, branch', providerPath'] <-
     pure $
       take 6 $ reverse $ T.split (== '/') (T.pack path)
@@ -77,6 +92,5 @@ mkZKConfig path = do
 
   let branch = decodeText branch'
       filePath = decodeText filePath'
-      zkData = Nothing
 
   Just ZKConfig {..}

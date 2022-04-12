@@ -6,7 +6,7 @@ let
 
   f = { mkDerivation, aeson, algebraic-graphs, base, bytestring, directory
     , dhall, filepath, lens, lib, mtl, streaming, tasty, tasty-hunit, text
-    , uri-encode }:
+    , uri-encode, yaml }:
     mkDerivation {
       pname = "zuul-weeder";
       version = "0.1.0.0";
@@ -26,6 +26,7 @@ let
         streaming
         text
         uri-encode
+        yaml
       ];
       executableHaskellDepends = [ base ];
       testHaskellDepends = [ base tasty tasty-hunit ];
