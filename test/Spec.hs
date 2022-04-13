@@ -1,11 +1,20 @@
 module Main (main) where
 
 import Data.Aeson (Value, object)
+import Data.List (sort)
 import qualified Data.Yaml as Y (decodeFileEither)
 import System.FilePath ((</>))
 import Test.Tasty
 import Test.Tasty.HUnit
-import Zuul.ConfigLoader (Job (Job, jobName, parent), JobName (JobName), ZuulConfigElement (ZJob), decodeConfig)
+import Zuul.ConfigLoader
+  ( Job (Job, jobName, parent),
+    JobName (JobName),
+    PipelineName (PipelineName),
+    ProjectName (ProjectName),
+    ProjectPipeline (ProjectPipeline, pPipelineName, pipelineJobs, projectName),
+    ZuulConfigElement (ZJob, ZProjectPipeline),
+    decodeConfig,
+  )
 import Zuul.ZKDump (ZKConfig (..), mkZKConfig)
 
 main :: IO ()
@@ -51,6 +60,14 @@ tests =
             [ ZJob (Job {jobName = JobName "base", parent = Nothing}),
               ZJob (Job {jobName = JobName "config-check", parent = Just (JobName "base")}),
               ZJob (Job {jobName = JobName "config-update", parent = Just (JobName "base")}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "config", pPipelineName = PipelineName "post", pipelineJobs = [JobName "config-update"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "config", pPipelineName = PipelineName "check", pipelineJobs = [JobName "config-check"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "config", pPipelineName = PipelineName "gate", pipelineJobs = [JobName "config-check"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "zuul-jobs", pPipelineName = PipelineName "check", pipelineJobs = [JobName "noop"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "zuul-jobs", pPipelineName = PipelineName "gate", pipelineJobs = [JobName "noop"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "sf-jobs", pPipelineName = PipelineName "check", pipelineJobs = [JobName "linters"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = ProjectName "sf-jobs", pPipelineName = PipelineName "gate", pipelineJobs = [JobName "linters"]}),
               ZJob (Job {jobName = JobName "wait-for-changes-ahead", parent = Nothing})
             ]
-      assertEqual "Expect data extracted from Config elements" expected decoded
+
+      assertEqual "Expect data extracted from Config elements" (sort expected) (sort decoded)
