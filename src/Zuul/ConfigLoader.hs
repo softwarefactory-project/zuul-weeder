@@ -22,9 +22,19 @@ newtype PipelineName = PipelineName Text deriving (Eq, Ord, Show)
 
 newtype ProjectName = ProjectName Text deriving (Eq, Ord, Show)
 
+newtype NodesetName = NodesetName Text deriving (Eq, Ord, Show)
+
+newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
+
+data JobNodeset
+  = Nodeset NodesetName
+  | AnonymousNodeset [NodeLabelName]
+  deriving (Eq, Ord, Show)
+
 data Job = Job
   { jobName :: JobName,
-    parent :: Maybe JobName
+    parent :: Maybe JobName,
+    nodeset :: Maybe JobNodeset
   }
   deriving (Show, Eq, Ord)
 
@@ -72,10 +82,26 @@ decodeConfig zkJSONData =
         _ -> []
     decodeJob :: Object -> Job
     decodeJob va = case HM.lookup "name" va of
-      Just (String name) -> Job (JobName name) $ case HM.lookup "parent" va of
-        Just (String parent) -> Just $ JobName parent
-        _ -> Nothing
+      Just (String name) -> do
+        let jobName = JobName name
+            parent = case HM.lookup "parent" va of
+              Just (String p) -> Just $ JobName p
+              _ -> Nothing
+            nodeset = decodeNodeset
+         in Job {..}
       _ -> error $ "Unexpected job structure w/o name: " <> show va
+      where
+        decodeNodeset :: Maybe JobNodeset
+        decodeNodeset = case HM.lookup "nodeset" va of
+          Just (String n) -> Just . Nodeset $ NodesetName n
+          Just (Object nObj) -> case getObjValue "nodes" nObj of
+            Array nodes ->
+              Just $
+                AnonymousNodeset $
+                  NodeLabelName . getString . getObjValue "label"
+                    <$> (unwrapObject <$> V.toList nodes)
+            _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
+          _ -> error $ "Unexpected nodeset structure: " <> show va
     decodeProjectPipeline :: Object -> [ProjectPipeline]
     decodeProjectPipeline va =
       -- TODO: need file context to deduce the pipeline name

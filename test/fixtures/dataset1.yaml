@@ -97,8 +97,7 @@
     name: wait-for-changes-ahead
     parent: null
     timeout: 7200
-    nodeset:
-      nodes: []
+    nodeset: nodeset1
     vars:
       zuul_web_url: "https://sftests.com/zuul"
     description: |
