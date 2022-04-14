@@ -27,9 +27,15 @@ newtype NodesetName = NodesetName Text deriving (Eq, Ord, Show)
 newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
 
 data JobNodeset
-  = Nodeset NodesetName
-  | AnonymousNodeset [NodeLabelName]
+  = JobNodeset NodesetName
+  | JobAnonymousNodeset [NodeLabelName]
   deriving (Eq, Ord, Show)
+
+data Nodeset = Nodeset
+  { nodesetName :: NodesetName,
+    nodesetLabels :: [NodeLabelName]
+  }
+  deriving (Show, Eq, Ord)
 
 data Job = Job
   { jobName :: JobName,
@@ -55,6 +61,7 @@ data ZuulConfigElement
   = ZJob Job
   | ZPipeline Pipeline
   | ZProjectPipeline ProjectPipeline
+  | ZNodeset Nodeset
   deriving (Show, Eq, Ord)
 
 data Config = Config
@@ -79,6 +86,7 @@ decodeConfig zkJSONData =
       obj -> case getKey obj of
         "job" -> (: []) . ZJob . decodeJob . unwrapObject $ getObjValue "job" obj
         "project" -> ZProjectPipeline <$> (decodeProjectPipeline . unwrapObject $ getObjValue "project" obj)
+        "nodeset" -> (: []) . ZNodeset . decodeNodeset . unwrapObject $ getObjValue "nodeset" obj
         _ -> []
     decodeJob :: Object -> Job
     decodeJob va = case HM.lookup "name" va of
@@ -87,21 +95,31 @@ decodeConfig zkJSONData =
             parent = case HM.lookup "parent" va of
               Just (String p) -> Just $ JobName p
               _ -> Nothing
-            nodeset = decodeNodeset
+            nodeset = decodeJobNodeset
          in Job {..}
       _ -> error $ "Unexpected job structure w/o name: " <> show va
       where
-        decodeNodeset :: Maybe JobNodeset
-        decodeNodeset = case HM.lookup "nodeset" va of
-          Just (String n) -> Just . Nodeset $ NodesetName n
+        decodeJobNodeset :: Maybe JobNodeset
+        decodeJobNodeset = case HM.lookup "nodeset" va of
+          Just (String n) -> Just . JobNodeset $ NodesetName n
           Just (Object nObj) -> case getObjValue "nodes" nObj of
             Array nodes ->
               Just $
-                AnonymousNodeset $
+                JobAnonymousNodeset $
                   NodeLabelName . getString . getObjValue "label"
                     <$> (unwrapObject <$> V.toList nodes)
             _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
           _ -> error $ "Unexpected nodeset structure: " <> show va
+    decodeNodeset :: Object -> Nodeset
+    decodeNodeset va =
+      let nodesetName = NodesetName . getString $ getObjValue "name" va
+          nodesetLabels = case getObjValue "nodes" va of
+            Array nodes ->
+              NodeLabelName . getString . getObjValue "label"
+                <$> (unwrapObject <$> V.toList nodes)
+            _ -> error $ "Unexpected nodeset nodes structure: " <> show va
+       in Nodeset {..}
+
     decodeProjectPipeline :: Object -> [ProjectPipeline]
     decodeProjectPipeline va =
       -- TODO: need file context to deduce the pipeline name

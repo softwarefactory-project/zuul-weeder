@@ -115,3 +115,15 @@
          Wait timeout in minutes.
 
     run: playbooks/wait-for-changes-ahead.yaml
+
+- nodeset:
+    name: nodeset1
+    nodes:
+      - name: controller
+        label: controller-label
+      - name: compute1
+        label: compute-label
+      - name:
+          - compute2
+          - web
+        label: compute-label
