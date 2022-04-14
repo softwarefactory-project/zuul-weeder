@@ -7,7 +7,7 @@ import Control.Lens (Lens', lens, over)
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
-import Data.Map (Map)
+import Data.Map (Map, insert)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -67,12 +67,16 @@ data ZuulConfigElement
 data Config = Config
   { jobs :: Map (BranchName, JobName) Job,
     pipelines :: Map PipelineName Pipeline,
+    nodesets :: Map NodesetName Nodeset,
     configError :: [ConfigError]
   }
   deriving (Show)
 
 configErrorL :: Lens' Config [ConfigError]
 configErrorL = lens configError (\c ce -> c {configError = ce})
+
+configNodesetsL :: Lens' Config (Map NodesetName Nodeset)
+configNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 
 decodeConfig :: Value -> [ZuulConfigElement]
 decodeConfig zkJSONData =
@@ -163,14 +167,24 @@ decodeConfig zkJSONData =
       _ -> error $ "Expected a String out of JSON value: " <> show va
 
 loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
-loadConfig zkc = do
-  liftIO $ putStrLn $ "Loading " <> show zkc
-  case zkc of
+loadConfig zkcE = do
+  liftIO $ putStrLn $ "Loading " <> show zkcE
+  case zkcE of
     Left e -> modify (addError e)
-    Right _x -> pure ()
+    Right zkc ->
+      let zkcDecoded = decodeConfig $ zkJSONData zkc
+       in modify (storeElements zkcDecoded)
   where
     addError :: ConfigError -> Config -> Config
     addError ce = configErrorL `over` (ce :)
+    storeElements :: [ZuulConfigElement] -> Config -> Config
+    storeElements zces config = case zces of
+      [] -> config
+      (zce : xs) -> case zce of
+        ZNodeset node -> do
+          let newConfig = over configNodesetsL (insert (nodesetName node) node) config
+          storeElements xs newConfig
+        _ -> storeElements xs config
 
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty
