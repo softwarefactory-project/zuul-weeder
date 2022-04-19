@@ -3,12 +3,12 @@
 -- |
 module Zuul.ConfigLoader where
 
-import Control.Lens (Lens', lens, over)
+import Control.Lens (Lens', lens, over, view)
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
-import Data.Map (Map, insert)
-import Data.Maybe (mapMaybe)
+import Data.Map (Map, insert, lookup)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -25,6 +25,8 @@ newtype ProjectName = ProjectName Text deriving (Eq, Ord, Show)
 newtype NodesetName = NodesetName Text deriving (Eq, Ord, Show)
 
 newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
+
+newtype ProviderName = ProviderName Text deriving (Eq, Ord, Show)
 
 data JobNodeset
   = JobNodeset NodesetName
@@ -64,19 +66,29 @@ data ZuulConfigElement
   | ZNodeset Nodeset
   deriving (Show, Eq, Ord)
 
-data Config = Config
+data ProjectConfig = ProjectConfig
   { jobs :: Map (BranchName, JobName) Job,
     pipelines :: Map PipelineName Pipeline,
-    nodesets :: Map NodesetName Nodeset,
-    configError :: [ConfigError]
+    nodesets :: Map NodesetName Nodeset
   }
   deriving (Show)
 
-configErrorL :: Lens' Config [ConfigError]
-configErrorL = lens configError (\c ce -> c {configError = ce})
+configProviderNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
+configProviderNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 
-configNodesetsL :: Lens' Config (Map NodesetName Nodeset)
-configNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
+type CanonicalProjectName = (ProviderName, ProjectName)
+
+data Config = Config
+  { configs :: Map CanonicalProjectName ProjectConfig,
+    configErrors :: [ConfigError]
+  }
+  deriving (Show)
+
+configConfigsL :: Lens' Config (Map CanonicalProjectName ProjectConfig)
+configConfigsL = lens configs (\c nc -> c {configs = nc})
+
+configErrorsL :: Lens' Config [ConfigError]
+configErrorsL = lens configErrors (\c ce -> c {configErrors = ce})
 
 decodeConfig :: Value -> [ZuulConfigElement]
 decodeConfig zkJSONData =
@@ -173,18 +185,28 @@ loadConfig zkcE = do
     Left e -> modify (addError e)
     Right zkc ->
       let zkcDecoded = decodeConfig $ zkJSONData zkc
-       in modify (storeElements zkcDecoded)
+          projectC = (ProviderName $ provider zkc, ProjectName $ project zkc)
+       in modify (updateConfig projectC zkcDecoded)
   where
     addError :: ConfigError -> Config -> Config
-    addError ce = configErrorL `over` (ce :)
-    storeElements :: [ZuulConfigElement] -> Config -> Config
-    storeElements zces config = case zces of
-      [] -> config
+    addError ce = configErrorsL `over` (ce :)
+    updateConfig :: CanonicalProjectName -> [ZuulConfigElement] -> Config -> Config
+    updateConfig k zces config =
+      let projectConfig = fromMaybe emptyProjectConfig $ Data.Map.lookup k $ view configConfigsL config
+          newProjectConfig = updateProjectConfig zces projectConfig
+       in over configConfigsL (insert k newProjectConfig) config
+
+    updateProjectConfig :: [ZuulConfigElement] -> ProjectConfig -> ProjectConfig
+    updateProjectConfig zces projectConfig = case zces of
+      [] -> projectConfig
       (zce : xs) -> case zce of
         ZNodeset node -> do
-          let newConfig = over configNodesetsL (insert (nodesetName node) node) config
-          storeElements xs newConfig
-        _ -> storeElements xs config
+          let newConfig = over configProviderNodesetsL (insert (nodesetName node) node) projectConfig
+          updateProjectConfig xs newConfig
+        _ -> updateProjectConfig xs projectConfig
 
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty mempty
+emptyConfig = Config mempty mempty
+
+emptyProjectConfig :: ProjectConfig
+emptyProjectConfig = ProjectConfig mempty mempty mempty
