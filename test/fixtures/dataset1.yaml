@@ -58,7 +58,6 @@
       nodes: []
 
 - project:
-    name: config
     check:
       jobs:
         - config-check

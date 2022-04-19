@@ -22,11 +22,21 @@ newtype PipelineName = PipelineName Text deriving (Eq, Ord, Show)
 
 newtype ProjectName = ProjectName Text deriving (Eq, Ord, Show)
 
+newtype ProjectNameRE = ProjectNameRE Text deriving (Eq, Ord, Show)
+
 newtype NodesetName = NodesetName Text deriving (Eq, Ord, Show)
 
 newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
 
 newtype ProviderName = ProviderName Text deriving (Eq, Ord, Show)
+
+newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName) deriving (Eq, Ord, Show)
+
+data Project
+  = PName ProjectName
+  | PNameRE ProjectNameRE
+  | PNameCannonical CanonicalProjectName
+  deriving (Eq, Ord, Show)
 
 data JobNodeset
   = JobNodeset NodesetName
@@ -53,7 +63,7 @@ data Pipeline = Pipeline
   deriving (Show, Eq, Ord)
 
 data ProjectPipeline = ProjectPipeline
-  { projectName :: ProjectName,
+  { projectName :: Project,
     pPipelineName :: PipelineName,
     pipelineJobs :: [JobName]
   }
@@ -76,8 +86,6 @@ data ProjectConfig = ProjectConfig
 configProviderNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
 configProviderNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 
-type CanonicalProjectName = (ProviderName, ProjectName)
-
 data Config = Config
   { configs :: Map CanonicalProjectName ProjectConfig,
     configErrors :: [ConfigError]
@@ -90,8 +98,8 @@ configConfigsL = lens configs (\c nc -> c {configs = nc})
 configErrorsL :: Lens' Config [ConfigError]
 configErrorsL = lens configErrors (\c ce -> c {configErrors = ce})
 
-decodeConfig :: Value -> [ZuulConfigElement]
-decodeConfig zkJSONData =
+decodeConfig :: CanonicalProjectName -> Value -> [ZuulConfigElement]
+decodeConfig project zkJSONData =
   let rootObjs = case zkJSONData of
         Array vec -> V.toList vec
         _ -> error $ "Unexpected root data structure on: " <> show rootObjs
@@ -138,11 +146,13 @@ decodeConfig zkJSONData =
 
     decodeProjectPipeline :: Object -> [ProjectPipeline]
     decodeProjectPipeline va =
-      -- TODO: need file context to deduce the pipeline name
-      let name = maybe "" getString (HM.lookup "name" va)
-       in ( \(pName, jobs) ->
-              ProjectPipeline (ProjectName name) (PipelineName pName) jobs
-          )
+      let projectName = case getString <$> HM.lookup "name" va of
+            Nothing -> PNameCannonical project
+            Just name -> case T.uncons name of
+              Just ('^', _) -> PNameRE $ ProjectNameRE name
+              Just _ -> PName $ ProjectName name
+              Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
+       in (\(pName, jobs) -> ProjectPipeline projectName (PipelineName pName) jobs)
             <$> mapMaybe getPipelineJobs (HM.toList va)
       where
         getPipelineJobs :: (Text, Value) -> Maybe (Text, [JobName])
@@ -184,8 +194,8 @@ loadConfig zkcE = do
   case zkcE of
     Left e -> modify (addError e)
     Right zkc ->
-      let zkcDecoded = decodeConfig $ zkJSONData zkc
-          projectC = (ProviderName $ provider zkc, ProjectName $ project zkc)
+      let zkcDecoded = decodeConfig projectC $ zkJSONData zkc
+          projectC = CanonicalProjectName (ProviderName $ provider zkc, ProjectName $ project zkc)
        in modify (updateConfig projectC zkcDecoded)
   where
     addError :: ConfigError -> Config -> Config
