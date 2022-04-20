@@ -77,7 +77,7 @@ data ZuulConfigElement
   deriving (Show, Eq, Ord)
 
 data ProjectConfig = ProjectConfig
-  { jobs :: Map (BranchName, JobName) Job,
+  { jobs :: Map JobName Job,
     pipelines :: Map PipelineName Pipeline,
     nodesets :: Map NodesetName Nodeset
   }
@@ -87,19 +87,19 @@ configProviderNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
 configProviderNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 
 data Config = Config
-  { configs :: Map CanonicalProjectName ProjectConfig,
+  { configs :: Map (CanonicalProjectName, BranchName) ProjectConfig,
     configErrors :: [ConfigError]
   }
   deriving (Show)
 
-configConfigsL :: Lens' Config (Map CanonicalProjectName ProjectConfig)
+configConfigsL :: Lens' Config (Map (CanonicalProjectName, BranchName) ProjectConfig)
 configConfigsL = lens configs (\c nc -> c {configs = nc})
 
 configErrorsL :: Lens' Config [ConfigError]
 configErrorsL = lens configErrors (\c ce -> c {configErrors = ce})
 
-decodeConfig :: CanonicalProjectName -> Value -> [ZuulConfigElement]
-decodeConfig project zkJSONData =
+decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
+decodeConfig (project, _branch) zkJSONData =
   let rootObjs = case zkJSONData of
         Array vec -> V.toList vec
         _ -> error $ "Unexpected root data structure on: " <> show rootObjs
@@ -195,12 +195,15 @@ loadConfig zkcE = do
     Left e -> modify (addError e)
     Right zkc ->
       let zkcDecoded = decodeConfig projectC $ zkJSONData zkc
-          projectC = CanonicalProjectName (ProviderName $ provider zkc, ProjectName $ project zkc)
+          projectC =
+            ( CanonicalProjectName (ProviderName $ provider zkc, ProjectName $ project zkc),
+              BranchName $ branch zkc
+            )
        in modify (updateConfig projectC zkcDecoded)
   where
     addError :: ConfigError -> Config -> Config
     addError ce = configErrorsL `over` (ce :)
-    updateConfig :: CanonicalProjectName -> [ZuulConfigElement] -> Config -> Config
+    updateConfig :: (CanonicalProjectName, BranchName) -> [ZuulConfigElement] -> Config -> Config
     updateConfig k zces config =
       let projectConfig = fromMaybe emptyProjectConfig $ Data.Map.lookup k $ view configConfigsL config
           newProjectConfig = updateProjectConfig zces projectConfig

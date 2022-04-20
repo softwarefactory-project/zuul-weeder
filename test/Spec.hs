@@ -7,7 +7,8 @@ import System.FilePath ((</>))
 import Test.Tasty
 import Test.Tasty.HUnit
 import Zuul.ConfigLoader
-  ( CanonicalProjectName (CanonicalProjectName),
+  ( BranchName (BranchName),
+    CanonicalProjectName (CanonicalProjectName),
     Job (Job, jobName, nodeset, parent),
     JobName (JobName),
     JobNodeset (JobAnonymousNodeset, JobNodeset),
@@ -62,7 +63,7 @@ tests =
             )
     decodeZuulJSONConfig = do
       json <- loadFixture "dataset1"
-      let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName "")) json
+      let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
             [ ZJob (Job {jobName = JobName "base", parent = Nothing, nodeset = Just (JobAnonymousNodeset [NodeLabelName "pod-centos-7"])}),
               ZJob (Job {jobName = JobName "config-check", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset [])}),
