@@ -52,7 +52,8 @@ data Nodeset = Nodeset
 data Job = Job
   { jobName :: JobName,
     parent :: Maybe JobName,
-    nodeset :: Maybe JobNodeset
+    nodeset :: Maybe JobNodeset,
+    branches :: [BranchName]
   }
   deriving (Show, Eq, Ord)
 
@@ -123,6 +124,7 @@ decodeConfig (project, _branch) zkJSONData =
               Just (String p) -> Just $ JobName p
               _ -> Nothing
             nodeset = decodeJobNodeset
+            branches = decodeJobBranches
          in Job {..}
       _ -> error $ "Unexpected job structure w/o name: " <> show va
       where
@@ -136,8 +138,15 @@ decodeConfig (project, _branch) zkJSONData =
                   NodeLabelName . getString . getObjValue "label"
                     <$> (unwrapObject <$> V.toList nodes)
             _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
-          Just _ -> error $ "Unexpected nodeset structure: " <> show va
+          Just _va -> error $ "Unexpected nodeset structure: " <> show _va
           Nothing -> Nothing
+        decodeJobBranches :: [BranchName]
+        decodeJobBranches = case HM.lookup "branches" va of
+          Just (String branch) -> [BranchName branch]
+          Just (Array branches) -> BranchName . getString <$> V.toList branches
+          Just _va -> error $ "Unexpected branches structure: " <> show _va
+          Nothing -> []
+
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =
       let nodesetName = NodesetName . getString $ getObjValue "name" va
@@ -145,7 +154,7 @@ decodeConfig (project, _branch) zkJSONData =
             Array nodes ->
               NodeLabelName . getString . getObjValue "label"
                 <$> (unwrapObject <$> V.toList nodes)
-            _ -> error $ "Unexpected nodeset nodes structure: " <> show va
+            _va -> error $ "Unexpected nodeset nodes structure: " <> show _va
        in Nodeset {..}
 
     decodeProjectPipeline :: Object -> [ProjectPipeline]

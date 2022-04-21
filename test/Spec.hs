@@ -9,7 +9,7 @@ import Test.Tasty.HUnit
 import Zuul.ConfigLoader
   ( BranchName (BranchName),
     CanonicalProjectName (CanonicalProjectName),
-    Job (Job, jobName, nodeset, parent),
+    Job (Job, branches, jobName, nodeset, parent),
     JobName (JobName),
     JobNodeset (JobAnonymousNodeset, JobNodeset),
     NodeLabelName (NodeLabelName),
@@ -65,10 +65,10 @@ tests =
       json <- loadFixture "dataset1"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ ZJob (Job {jobName = JobName "base", parent = Nothing, nodeset = Just (JobAnonymousNodeset [NodeLabelName "pod-centos-7"])}),
-              ZJob (Job {jobName = JobName "config-check", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset [])}),
-              ZJob (Job {jobName = JobName "config-update", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset [])}),
-              ZJob (Job {jobName = JobName "wait-for-changes-ahead", parent = Nothing, nodeset = Just (JobNodeset (NodesetName "nodeset1"))}),
+            [ ZJob (Job {jobName = JobName "base", parent = Nothing, nodeset = Just (JobAnonymousNodeset [NodeLabelName "pod-centos-7"]), branches = []}),
+              ZJob (Job {jobName = JobName "config-check", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset []), branches = [BranchName "master"]}),
+              ZJob (Job {jobName = JobName "config-update", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset []), branches = [BranchName "master"]}),
+              ZJob (Job {jobName = JobName "wait-for-changes-ahead", parent = Nothing, nodeset = Just (JobNodeset (NodesetName "nodeset1")), branches = []}),
               ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pPipelineName = PipelineName "check", pipelineJobs = [JobName "linters"]}),
               ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pPipelineName = PipelineName "gate", pipelineJobs = [JobName "linters"]}),
               ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "zuul-jobs"), pPipelineName = PipelineName "check", pipelineJobs = [JobName "noop"]}),

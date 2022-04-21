@@ -34,6 +34,7 @@
     description: Validate the config repo.
     run: playbooks/config/check.yaml
     post-run: playbooks/config/check-fetch-artifacts.yaml
+    branches: "master"
     secrets:
       - service_user
     vars:
@@ -51,6 +52,8 @@
       - config
     description: Deploy config repo update.
     run: playbooks/config/update.yaml
+    branches:
+      - "master"
     secrets:
       - site_install_server
     semaphore: semaphore-config-update
