@@ -56,7 +56,8 @@ data Job = Job
   { jobName :: JobName,
     parent :: Maybe JobName,
     nodeset :: Maybe JobNodeset,
-    branches :: [BranchName]
+    branches :: [BranchName],
+    dependencies :: [JobName]
   }
   deriving (Show, Eq, Ord)
 
@@ -127,6 +128,7 @@ decodeConfig (project, _branch) zkJSONData =
               _ -> Nothing
             nodeset = decodeJobNodeset
             branches = decodeJobBranches
+            dependencies = decodeJobDependencies
          in Job {..}
       _ -> error $ "Unexpected job structure w/o name: " <> show va
       where
@@ -144,6 +146,8 @@ decodeConfig (project, _branch) zkJSONData =
           Nothing -> Nothing
         decodeJobBranches :: [BranchName]
         decodeJobBranches = decodeSimple "branches" BranchName va
+        decodeJobDependencies :: [JobName]
+        decodeJobDependencies = decodeSimple "dependencies" JobName va
 
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =

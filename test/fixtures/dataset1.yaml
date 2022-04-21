@@ -29,6 +29,9 @@
     name: config-check
     parent: base
     final: true
+    dependencies:
+      - job1
+      - job2
     allowed-projects:
       - config
     description: Validate the config repo.
