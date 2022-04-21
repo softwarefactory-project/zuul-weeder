@@ -7,8 +7,9 @@ import Control.Lens (Lens', lens, over, view)
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
+import Data.List (sort)
 import Data.Map (Map, insert, lookup)
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -61,28 +62,25 @@ data Job = Job
 
 data Pipeline = Pipeline
   { pipelineName :: PipelineName,
-    job :: JobName
+    pipelineJobs :: [JobName]
   }
   deriving (Show, Eq, Ord)
 
 data ProjectPipeline = ProjectPipeline
   { projectName :: Project,
-    pPipelineName :: PipelineName,
     pipelineTemplates :: [TemplateName],
-    pipelineJobs :: [JobName]
+    pipelinePipelines :: [Pipeline]
   }
   deriving (Show, Eq, Ord)
 
 data ZuulConfigElement
   = ZJob Job
-  | ZPipeline Pipeline
   | ZProjectPipeline ProjectPipeline
   | ZNodeset Nodeset
   deriving (Show, Eq, Ord)
 
 data ProjectConfig = ProjectConfig
   { jobs :: Map JobName Job,
-    pipelines :: Map PipelineName Pipeline,
     nodesets :: Map NodesetName Nodeset
   }
   deriving (Show)
@@ -116,7 +114,7 @@ decodeConfig (project, _branch) zkJSONData =
     getConfigElement rootObj = case unwrapObject rootObj of
       obj -> case getKey obj of
         "job" -> (: []) . ZJob . decodeJob . unwrapObject $ getObjValue "job" obj
-        "project" -> ZProjectPipeline <$> (decodeProjectPipeline . unwrapObject $ getObjValue "project" obj)
+        "project" -> (: []) . ZProjectPipeline . decodeProjectPipeline . unwrapObject $ getObjValue "project" obj
         "nodeset" -> (: []) . ZNodeset . decodeNodeset . unwrapObject $ getObjValue "nodeset" obj
         _ -> []
     decodeJob :: Object -> Job
@@ -156,7 +154,7 @@ decodeConfig (project, _branch) zkJSONData =
             _va -> error $ "Unexpected nodeset nodes structure: " <> show _va
        in Nodeset {..}
 
-    decodeProjectPipeline :: Object -> [ProjectPipeline]
+    decodeProjectPipeline :: Object -> ProjectPipeline
     decodeProjectPipeline va =
       let projectName = case getString <$> HM.lookup "name" va of
             Nothing -> PNameCannonical project
@@ -164,18 +162,15 @@ decodeConfig (project, _branch) zkJSONData =
               Just ('^', _) -> PNameRE $ ProjectNameRE name
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
-       in ( \(pName, jobs) ->
-              let pPipelineName = PipelineName pName
-                  pipelineTemplates = decodeSimple "templates" TemplateName va
-                  pipelineJobs = jobs
-               in ProjectPipeline {..}
-          )
-            <$> mapMaybe getPipelineJobs (HM.toList va)
+          pipelineTemplates = decodeSimple "templates" TemplateName va
+          pipelinePipelines = catMaybes $ getPipeline <$> sort (HM.toList va)
+       in ProjectPipeline {..}
       where
-        getPipelineJobs :: (Text, Value) -> Maybe (Text, [JobName])
-        getPipelineJobs (pipelineName, va') = case va' of
+        getPipeline :: (Text, Value) -> Maybe Pipeline
+        getPipeline (pipelineName', va') = case va' of
           Object inner ->
-            let jobs = case HM.lookup "jobs" inner of
+            let pipelineName = PipelineName pipelineName'
+                pipelineJobs = case HM.lookup "jobs" inner of
                   Just (String name) -> [JobName name]
                   Just (Array jobElems) ->
                     ( \jobElem -> case jobElem of
@@ -185,7 +180,7 @@ decodeConfig (project, _branch) zkJSONData =
                     )
                       <$> V.toList jobElems
                   _ -> error $ "Unexpected project pipeline format: " <> show inner
-             in Just (pipelineName, jobs)
+             in Just $ Pipeline {..}
           _ -> Nothing
     unwrapObject :: Value -> Object
     unwrapObject va = case va of
@@ -248,4 +243,4 @@ emptyConfig :: Config
 emptyConfig = Config mempty mempty
 
 emptyProjectConfig :: ProjectConfig
-emptyProjectConfig = ProjectConfig mempty mempty mempty
+emptyProjectConfig = ProjectConfig mempty mempty
