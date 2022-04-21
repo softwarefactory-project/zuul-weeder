@@ -54,16 +54,21 @@ data Nodeset = Nodeset
 
 data Job = Job
   { jobName :: JobName,
-    parent :: Maybe JobName,
-    nodeset :: Maybe JobNodeset,
-    branches :: [BranchName],
-    dependencies :: [JobName]
+    jobParent :: Maybe JobName,
+    jobNodeset :: Maybe JobNodeset,
+    jobBranches :: [BranchName],
+    jobDependencies :: [JobName]
   }
+  deriving (Show, Eq, Ord)
+
+data PipelineJob
+  = PJName JobName
+  | PJJob Job
   deriving (Show, Eq, Ord)
 
 data Pipeline = Pipeline
   { pipelineName :: PipelineName,
-    pipelineJobs :: [JobName]
+    pipelineJobs :: [PipelineJob]
   }
   deriving (Show, Eq, Ord)
 
@@ -123,14 +128,22 @@ decodeConfig (project, _branch) zkJSONData =
     decodeJob va = case HM.lookup "name" va of
       Just (String name) -> do
         let jobName = JobName name
-            parent = case HM.lookup "parent" va of
-              Just (String p) -> Just $ JobName p
-              _ -> Nothing
-            nodeset = decodeJobNodeset
-            branches = decodeJobBranches
-            dependencies = decodeJobDependencies
+            ( jobParent,
+              jobNodeset,
+              jobBranches,
+              jobDependencies
+              ) = decodeJobContent va
          in Job {..}
       _ -> error $ "Unexpected job structure w/o name: " <> show va
+    decodeJobContent :: Object -> (Maybe JobName, Maybe JobNodeset, [BranchName], [JobName])
+    decodeJobContent va =
+      let jobParent = case HM.lookup "parent" va of
+            Just (String p) -> Just $ JobName p
+            _ -> Nothing
+          jobNodeset = decodeJobNodeset
+          jobBranches = decodeJobBranches
+          jobDependencies = decodeJobDependencies
+       in (jobParent, jobNodeset, jobBranches, jobDependencies)
       where
         decodeJobNodeset :: Maybe JobNodeset
         decodeJobNodeset = case HM.lookup "nodeset" va of
@@ -168,25 +181,32 @@ decodeConfig (project, _branch) zkJSONData =
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
           pipelineTemplates = decodeSimple "templates" TemplateName va
-          pipelinePipelines = catMaybes $ getPipeline <$> sort (HM.toList va)
+          pipelinePipelines = catMaybes $ decodePipeline <$> sort (HM.toList va)
        in ProjectPipeline {..}
       where
-        getPipeline :: (Text, Value) -> Maybe Pipeline
-        getPipeline (pipelineName', va') = case va' of
+        decodePipeline :: (Text, Value) -> Maybe Pipeline
+        decodePipeline (pipelineName', va') = case va' of
           Object inner ->
             let pipelineName = PipelineName pipelineName'
                 pipelineJobs = case HM.lookup "jobs" inner of
-                  Just (String name) -> [JobName name]
-                  Just (Array jobElems) ->
-                    ( \jobElem -> case jobElem of
-                        Object jobObj -> JobName $ getKey jobObj
-                        String v -> JobName v
-                        _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
-                    )
-                      <$> V.toList jobElems
+                  Just (String name) -> [PJName $ JobName name]
+                  Just (Array jobElems) -> decodePipelineJob <$> sort (V.toList jobElems)
                   _ -> error $ "Unexpected project pipeline format: " <> show inner
              in Just $ Pipeline {..}
           _ -> Nothing
+        decodePipelineJob :: Value -> PipelineJob
+        decodePipelineJob jobElem = case jobElem of
+          Object jobObj ->
+            let key = getKey jobObj
+                jobName = JobName key
+                ( jobParent,
+                  jobNodeset,
+                  jobBranches,
+                  jobDependencies
+                  ) = decodeJobContent $ unwrapObject $ getObjValue key jobObj
+             in PJJob $ Job {..}
+          String v -> PJName $ JobName v
+          _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
     unwrapObject :: Value -> Object
     unwrapObject va = case va of
       Object hm -> hm

@@ -9,13 +9,14 @@ import Test.Tasty.HUnit
 import Zuul.ConfigLoader
   ( BranchName (BranchName),
     CanonicalProjectName (CanonicalProjectName),
-    Job (Job, branches, dependencies, jobName, nodeset, parent),
+    Job (Job, jobBranches, jobDependencies, jobName, jobNodeset, jobParent),
     JobName (JobName),
     JobNodeset (JobAnonymousNodeset, JobNodeset),
     NodeLabelName (NodeLabelName),
     Nodeset (Nodeset, nodesetLabels, nodesetName),
     NodesetName (NodesetName),
     Pipeline (Pipeline, pipelineJobs, pipelineName),
+    PipelineJob (PJJob, PJName),
     PipelineName (PipelineName),
     Project (PName, PNameCannonical),
     ProjectName (ProjectName),
@@ -44,7 +45,9 @@ tests =
   testGroup
     "ZKDump module"
     [ testCase "Extract data from ZK path" extractDataZKPath,
-      testCase "Decode Zuul JSON config" decodeZuulJSONConfig
+      testCase "Decode Jobs config" decodeJobsConfig,
+      testCase "Decode Projects config" decodeProjectsConfig,
+      testCase "Decode Nodesets config" decodeNodesetsConfig
     ]
   where
     extractDataZKPath =
@@ -63,17 +66,33 @@ tests =
                     }
                 )
             )
-    decodeZuulJSONConfig = do
-      json <- loadFixture "dataset1"
+    decodeJobsConfig = do
+      json <- loadFixture "jobs"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ ZJob (Job {jobName = JobName "base", parent = Nothing, nodeset = Just (JobAnonymousNodeset [NodeLabelName "pod-centos-7"]), branches = [], dependencies = []}),
-              ZJob (Job {jobName = JobName "config-check", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset []), branches = [BranchName "master"], dependencies = [JobName "job1", JobName "job2"]}),
-              ZJob (Job {jobName = JobName "config-update", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset []), branches = [BranchName "master"], dependencies = []}),
-              ZJob (Job {jobName = JobName "wait-for-changes-ahead", parent = Nothing, nodeset = Just (JobNodeset (NodesetName "nodeset1")), branches = [], dependencies = []}),
-              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pipelineTemplates = [], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [JobName "linters"]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [JobName "linters"]}]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "zuul-jobs"), pipelineTemplates = [TemplateName "project-template"], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [JobName "noop"]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [JobName "noop"]}]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pipelineTemplates = [], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [JobName "config-check"]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [JobName "config-check"]}, Pipeline {pipelineName = PipelineName "post", pipelineJobs = [JobName "config-update"]}]}),
-              ZNodeset (Nodeset {nodesetName = NodesetName "nodeset1", nodesetLabels = [NodeLabelName "controller-label", NodeLabelName "compute-label", NodeLabelName "compute-label"]})
+            [ ZJob (Job {jobName = JobName "base", jobParent = Nothing, jobNodeset = Just (JobAnonymousNodeset [NodeLabelName "pod-centos-7"]), jobBranches = [], jobDependencies = []}),
+              ZJob (Job {jobName = JobName "config-check", jobParent = Just (JobName "base"), jobNodeset = Just (JobAnonymousNodeset []), jobBranches = [BranchName "master"], jobDependencies = [JobName "job1", JobName "job2"]}),
+              ZJob (Job {jobName = JobName "config-update", jobParent = Just (JobName "base"), jobNodeset = Just (JobAnonymousNodeset []), jobBranches = [BranchName "master"], jobDependencies = []}),
+              ZJob (Job {jobName = JobName "wait-for-changes-ahead", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "nodeset1")), jobBranches = [], jobDependencies = []})
             ]
-      assertEqual "Expect data extracted from Config elements" (sort expected) (sort decoded)
+
+      assertEqual "Expect data extracted from Jobs Config elements" (sort expected) (sort decoded)
+
+    decodeProjectsConfig = do
+      json <- loadFixture "projects"
+      let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
+          expected =
+            [ ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "config"), pipelineTemplates = [], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJName (JobName "config-check")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJName (JobName "config-check")]}, Pipeline {pipelineName = PipelineName "post", pipelineJobs = [PJName (JobName "config-update")]}]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pipelineTemplates = [TemplateName "sf-ci-jobs"], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}, Pipeline {pipelineName = PipelineName "experimental", pipelineJobs = [PJJob (Job {jobName = JobName "sf-ci-openshift-integration", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}]})
+            ]
+
+      assertEqual "Expect data extracted from Projects Config elements" (sort expected) (sort decoded)
+
+    decodeNodesetsConfig = do
+      json <- loadFixture "nodesets"
+      let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
+          expected =
+            [ ZNodeset (Nodeset {nodesetName = NodesetName "nodeset1", nodesetLabels = [NodeLabelName "controller-label", NodeLabelName "compute-label", NodeLabelName "compute-label"]})
+            ]
+
+      assertEqual "Expect data extracted from Nodesets Config elements" (sort expected) (sort decoded)

@@ -1,0 +1,29 @@
+- project:
+    name: config
+    check:
+      jobs:
+        - config-check
+    gate:
+      jobs:
+        - config-check
+    post:
+      jobs:
+        - config-update
+
+- project:
+    templates:
+      - sf-ci-jobs
+    check:
+      jobs:
+        - linters:
+            nodeset: linters-pod
+    gate:
+      jobs:
+        - linters:
+            nodeset: linters-pod
+    experimental:
+      jobs:
+        - sf-rpm-build
+        - sf-ci-openshift-integration:
+            dependencies:
+              - sf-rpm-build

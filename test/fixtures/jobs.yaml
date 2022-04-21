@@ -1,5 +1,3 @@
-# This file is managed by ansible, do not edit directly
----
 - job:
     name: base
     parent: null
@@ -20,10 +18,6 @@
       nodes:
         - name: container
           label: pod-centos-7
-
-- semaphore:
-    name: semaphore-config-update
-    max: 1
 
 - job:
     name: config-check
@@ -63,43 +57,6 @@
     nodeset:
       nodes: []
 
-- project:
-    check:
-      jobs:
-        - config-check
-    gate:
-      jobs:
-        - config-check
-    post:
-      jobs:
-        - config-update
-
-- project:
-    name: zuul-jobs
-    templates:
-      - project-template
-    check:
-      jobs:
-        - noop
-    gate:
-      jobs:
-        - noop
-
-
-- project:
-    name: sf-jobs
-    check:
-      jobs:
-        - linters:
-            vars:
-              linters: [flake8, yamllint]
-    gate:
-      jobs:
-        - linters:
-            vars:
-              linters: [flake8, yamllint]
-
-
 - job:
     name: wait-for-changes-ahead
     parent: null
@@ -122,15 +79,3 @@
          Wait timeout in minutes.
 
     run: playbooks/wait-for-changes-ahead.yaml
-
-- nodeset:
-    name: nodeset1
-    nodes:
-      - name: controller
-        label: controller-label
-      - name: compute1
-        label: compute-label
-      - name:
-          - compute2
-          - web
-        label: compute-label
