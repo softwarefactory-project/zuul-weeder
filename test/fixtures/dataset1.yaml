@@ -73,6 +73,8 @@
 
 - project:
     name: zuul-jobs
+    templates:
+      - project-template
     check:
       jobs:
         - noop

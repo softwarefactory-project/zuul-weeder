@@ -30,6 +30,8 @@ newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
 
 newtype ProviderName = ProviderName Text deriving (Eq, Ord, Show)
 
+newtype TemplateName = TemplateName Text deriving (Eq, Ord, Show)
+
 newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName) deriving (Eq, Ord, Show)
 
 data Project
@@ -66,6 +68,7 @@ data Pipeline = Pipeline
 data ProjectPipeline = ProjectPipeline
   { projectName :: Project,
     pPipelineName :: PipelineName,
+    pipelineTemplates :: [TemplateName],
     pipelineJobs :: [JobName]
   }
   deriving (Show, Eq, Ord)
@@ -141,11 +144,7 @@ decodeConfig (project, _branch) zkJSONData =
           Just _va -> error $ "Unexpected nodeset structure: " <> show _va
           Nothing -> Nothing
         decodeJobBranches :: [BranchName]
-        decodeJobBranches = case HM.lookup "branches" va of
-          Just (String branch) -> [BranchName branch]
-          Just (Array branches) -> BranchName . getString <$> V.toList branches
-          Just _va -> error $ "Unexpected branches structure: " <> show _va
-          Nothing -> []
+        decodeJobBranches = decodeSimple "branches" BranchName va
 
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =
@@ -165,7 +164,12 @@ decodeConfig (project, _branch) zkJSONData =
               Just ('^', _) -> PNameRE $ ProjectNameRE name
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
-       in (\(pName, jobs) -> ProjectPipeline projectName (PipelineName pName) jobs)
+       in ( \(pName, jobs) ->
+              let pPipelineName = PipelineName pName
+                  pipelineTemplates = decodeSimple "templates" TemplateName va
+                  pipelineJobs = jobs
+               in ProjectPipeline {..}
+          )
             <$> mapMaybe getPipelineJobs (HM.toList va)
       where
         getPipelineJobs :: (Text, Value) -> Maybe (Text, [JobName])
@@ -200,6 +204,12 @@ decodeConfig (project, _branch) zkJSONData =
     getString va = case va of
       String str -> str
       _ -> error $ "Expected a String out of JSON value: " <> show va
+    decodeSimple :: Text -> (Text -> a) -> Object -> [a]
+    decodeSimple k build va = case HM.lookup k va of
+      Just (String template) -> [build template]
+      Just (Array templates) -> build . getString <$> V.toList templates
+      Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
+      Nothing -> []
 
 loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
 loadConfig zkcE = do

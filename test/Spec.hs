@@ -18,8 +18,9 @@ import Zuul.ConfigLoader
     PipelineName (PipelineName),
     Project (PName, PNameCannonical),
     ProjectName (ProjectName),
-    ProjectPipeline (ProjectPipeline, pPipelineName, pipelineJobs, projectName),
+    ProjectPipeline (ProjectPipeline, pPipelineName, pipelineJobs, pipelineTemplates, projectName),
     ProviderName (ProviderName),
+    TemplateName (TemplateName),
     ZuulConfigElement (ZJob, ZNodeset, ZProjectPipeline),
     decodeConfig,
   )
@@ -69,13 +70,13 @@ tests =
               ZJob (Job {jobName = JobName "config-check", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset []), branches = [BranchName "master"]}),
               ZJob (Job {jobName = JobName "config-update", parent = Just (JobName "base"), nodeset = Just (JobAnonymousNodeset []), branches = [BranchName "master"]}),
               ZJob (Job {jobName = JobName "wait-for-changes-ahead", parent = Nothing, nodeset = Just (JobNodeset (NodesetName "nodeset1")), branches = []}),
-              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pPipelineName = PipelineName "check", pipelineJobs = [JobName "linters"]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pPipelineName = PipelineName "gate", pipelineJobs = [JobName "linters"]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "zuul-jobs"), pPipelineName = PipelineName "check", pipelineJobs = [JobName "noop"]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "zuul-jobs"), pPipelineName = PipelineName "gate", pipelineJobs = [JobName "noop"]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pPipelineName = PipelineName "check", pipelineJobs = [JobName "config-check"]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pPipelineName = PipelineName "gate", pipelineJobs = [JobName "config-check"]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pPipelineName = PipelineName "post", pipelineJobs = [JobName "config-update"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pPipelineName = PipelineName "check", pipelineTemplates = [], pipelineJobs = [JobName "linters"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "sf-jobs"), pPipelineName = PipelineName "gate", pipelineTemplates = [], pipelineJobs = [JobName "linters"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "zuul-jobs"), pPipelineName = PipelineName "check", pipelineTemplates = [TemplateName "project-template"], pipelineJobs = [JobName "noop"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "zuul-jobs"), pPipelineName = PipelineName "gate", pipelineTemplates = [TemplateName "project-template"], pipelineJobs = [JobName "noop"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pPipelineName = PipelineName "check", pipelineTemplates = [], pipelineJobs = [JobName "config-check"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pPipelineName = PipelineName "gate", pipelineTemplates = [], pipelineJobs = [JobName "config-check"]}),
+              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pPipelineName = PipelineName "post", pipelineTemplates = [], pipelineJobs = [JobName "config-update"]}),
               ZNodeset (Nodeset {nodesetName = NodesetName "nodeset1", nodesetLabels = [NodeLabelName "controller-label", NodeLabelName "compute-label", NodeLabelName "compute-label"]})
             ]
       assertEqual "Expect data extracted from Config elements" (sort expected) (sort decoded)
