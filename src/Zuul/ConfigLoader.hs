@@ -9,7 +9,7 @@ import Data.Aeson (Object, Value (Array, Object, String))
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import Data.List (sort)
 import Data.Map (Map, insert, lookup)
-import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Vector as V
@@ -108,15 +108,16 @@ decodeConfig (project, _branch) zkJSONData =
   let rootObjs = case zkJSONData of
         Array vec -> V.toList vec
         _ -> error $ "Unexpected root data structure on: " <> show rootObjs
-   in concatMap getConfigElement rootObjs
+   in mapMaybe getConfigElement rootObjs
   where
-    getConfigElement :: Value -> [ZuulConfigElement]
-    getConfigElement rootObj = case unwrapObject rootObj of
-      obj -> case getKey obj of
-        "job" -> (: []) . ZJob . decodeJob . unwrapObject $ getObjValue "job" obj
-        "project" -> (: []) . ZProjectPipeline . decodeProjectPipeline . unwrapObject $ getObjValue "project" obj
-        "nodeset" -> (: []) . ZNodeset . decodeNodeset . unwrapObject $ getObjValue "nodeset" obj
-        _ -> []
+    getConfigElement :: Value -> Maybe ZuulConfigElement
+    getConfigElement rootObj =
+      let obj = unwrapObject rootObj
+       in case getKey obj of
+            "job" -> Just . ZJob . decodeJob . unwrapObject $ getObjValue "job" obj
+            "project" -> Just . ZProjectPipeline . decodeProjectPipeline . unwrapObject $ getObjValue "project" obj
+            "nodeset" -> Just . ZNodeset . decodeNodeset . unwrapObject $ getObjValue "nodeset" obj
+            _ -> Nothing
     decodeJob :: Object -> Job
     decodeJob va = case HM.lookup "name" va of
       Just (String name) -> do
