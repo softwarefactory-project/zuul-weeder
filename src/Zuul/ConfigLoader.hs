@@ -86,6 +86,9 @@ data ProjectConfig = ProjectConfig
 configProviderNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
 configProviderNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 
+configProviderJobsL :: Lens' ProjectConfig (Map JobName Job)
+configProviderJobsL = lens jobs (\c jobs -> c {jobs = jobs})
+
 data Config = Config
   { configs :: Map (CanonicalProjectName, BranchName) ProjectConfig,
     configErrors :: [ConfigError]
@@ -133,7 +136,8 @@ decodeConfig (project, _branch) zkJSONData =
                   NodeLabelName . getString . getObjValue "label"
                     <$> (unwrapObject <$> V.toList nodes)
             _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
-          _ -> error $ "Unexpected nodeset structure: " <> show va
+          Just _ -> error $ "Unexpected nodeset structure: " <> show va
+          Nothing -> Nothing
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =
       let nodesetName = NodesetName . getString $ getObjValue "name" va
@@ -213,9 +217,12 @@ loadConfig zkcE = do
     updateProjectConfig zces projectConfig = case zces of
       [] -> projectConfig
       (zce : xs) -> case zce of
-        ZNodeset node -> do
-          let newConfig = over configProviderNodesetsL (insert (nodesetName node) node) projectConfig
-          updateProjectConfig xs newConfig
+        ZJob job ->
+          updateProjectConfig xs $
+            over configProviderJobsL (insert (jobName job) job) projectConfig
+        ZNodeset node ->
+          updateProjectConfig xs $
+            over configProviderNodesetsL (insert (nodesetName node) node) projectConfig
         _ -> updateProjectConfig xs projectConfig
 
 emptyConfig :: Config
