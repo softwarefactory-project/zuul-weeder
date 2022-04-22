@@ -155,16 +155,14 @@ decodeConfig (project, _branch) zkJSONData =
             _ -> error $ "Unexpected trigger value in: " <> show va
        in Pipeline {..}
     decodeJob :: Object -> Job
-    decodeJob va = case HM.lookup "name" va of
-      Just (String name) -> do
-        let jobName = JobName name
-            ( jobParent,
-              jobNodeset,
-              jobBranches,
-              jobDependencies
-              ) = decodeJobContent va
-         in Job {..}
-      _ -> error $ "Unexpected job structure w/o name: " <> show va
+    decodeJob va =
+      let jobName = JobName $ getName va
+          ( jobParent,
+            jobNodeset,
+            jobBranches,
+            jobDependencies
+            ) = decodeJobContent va
+       in Job {..}
     decodeJobContent :: Object -> (Maybe JobName, Maybe JobNodeset, [BranchName], [JobName])
     decodeJobContent va =
       let jobParent = case HM.lookup "parent" va of
