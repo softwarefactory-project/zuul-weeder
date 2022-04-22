@@ -87,15 +87,19 @@ data ZuulConfigElement
 
 data ProjectConfig = ProjectConfig
   { jobs :: Map JobName Job,
-    nodesets :: Map NodesetName Nodeset
+    nodesets :: Map NodesetName Nodeset,
+    projectPipelines :: Map Project ProjectPipeline
   }
   deriving (Show)
 
-configProviderNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
-configProviderNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
+projectConfigNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
+projectConfigNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 
-configProviderJobsL :: Lens' ProjectConfig (Map JobName Job)
-configProviderJobsL = lens jobs (\c jobs -> c {jobs = jobs})
+projectConfigJobsL :: Lens' ProjectConfig (Map JobName Job)
+projectConfigJobsL = lens jobs (\c jobs -> c {jobs = jobs})
+
+projectConfigProjectsL :: Lens' ProjectConfig (Map Project ProjectPipeline)
+projectConfigProjectsL = lens projectPipelines (\c project -> c {projectPipelines = project})
 
 data Config = Config
   { configs :: Map (CanonicalProjectName, BranchName) ProjectConfig,
@@ -258,14 +262,18 @@ loadConfig zkcE = do
       (zce : xs) -> case zce of
         ZJob job ->
           updateProjectConfig xs $
-            over configProviderJobsL (insert (jobName job) job) projectConfig
+            over projectConfigJobsL (insert (jobName job) job) projectConfig
         ZNodeset node ->
           updateProjectConfig xs $
-            over configProviderNodesetsL (insert (nodesetName node) node) projectConfig
-        _ -> updateProjectConfig xs projectConfig
+            over projectConfigNodesetsL (insert (nodesetName node) node) projectConfig
+        ZProjectPipeline project ->
+          updateProjectConfig xs $
+            over projectConfigProjectsL (insert (projectName project) project) projectConfig
+
+-- _ -> updateProjectConfig xs projectConfig
 
 emptyConfig :: Config
 emptyConfig = Config mempty mempty
 
 emptyProjectConfig :: ProjectConfig
-emptyProjectConfig = ProjectConfig mempty mempty
+emptyProjectConfig = ProjectConfig mempty mempty mempty
