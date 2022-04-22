@@ -38,17 +38,19 @@ common common-options
 
 library
   import:              common-options
-  build-depends:       aeson
+  build-depends:       aeson < 2
                      , dhall
                      , algebraic-graphs
                      , mtl
                      , lens
+                     , generic-lens
                      , text
                      , streaming
                      , directory
                      , filepath
                      , uri-encode
                      , bytestring
+                     , text-display
                      , yaml
                      , containers
                      , unordered-containers

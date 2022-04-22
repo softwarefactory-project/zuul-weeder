@@ -1,24 +1,33 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedLabels #-}
 
 -- |
 module Zuul.ConfigLoader where
 
-import Control.Lens (Lens', lens, over, view)
+import Control.Lens ((%=))
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
-import Data.Function ((&))
+import Data.Foldable (traverse_)
+import Data.Generics.Labels ()
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import Data.List (sort)
-import Data.Map (Map, insert, lookup)
-import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
+import Data.Map (Map, insertWith)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Display
+import qualified Data.Text.Lazy.Builder as TB
 import qualified Data.Vector as V
+import GHC.Generics (Generic)
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
 
 newtype BranchName = BranchName Text deriving (Eq, Ord, Show)
 
-newtype JobName = JobName Text deriving (Eq, Ord, Show)
+newtype JobName = JobName Text
+  deriving (Eq, Ord, Show)
+  deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance JobName)
 
 newtype PipelineName = PipelineName Text deriving (Eq, Ord, Show)
 
@@ -26,7 +35,9 @@ newtype ProjectName = ProjectName Text deriving (Eq, Ord, Show)
 
 newtype ProjectNameRE = ProjectNameRE Text deriving (Eq, Ord, Show)
 
-newtype NodesetName = NodesetName Text deriving (Eq, Ord, Show)
+newtype NodesetName = NodesetName Text
+  deriving (Eq, Ord, Show)
+  deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance NodesetName)
 
 newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
 
@@ -100,41 +111,51 @@ data ZuulConfigElement
   | ZPipeline Pipeline
   deriving (Show, Eq, Ord)
 
-data ProjectConfig = ProjectConfig
-  { jobs :: Map JobName Job,
-    nodesets :: Map NodesetName Nodeset,
-    projectPipelines :: Map Project ProjectPipeline,
-    projectTemplates :: Map Project ProjectPipeline,
-    pipelines :: Map PipelineName Pipeline
-  }
-  deriving (Show)
+instance Data.Text.Display.Display ZuulConfigElement where
+  displayBuilder zce = case zce of
+    ZJob job -> Data.Text.Display.displayBuilder $ jobName job
+    ZNodeset ns -> Data.Text.Display.displayBuilder $ nodesetName ns
+    _ -> TB.fromText "unknown"
 
-projectConfigNodesetsL :: Lens' ProjectConfig (Map NodesetName Nodeset)
-projectConfigNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
+newtype ConfigPath = ConfigPath FilePath deriving (Show, Eq, Ord)
 
-projectConfigJobsL :: Lens' ProjectConfig (Map JobName Job)
-projectConfigJobsL = lens jobs (\c jobs -> c {jobs = jobs})
+newtype ConfigLoc = ConfigLoc (CanonicalProjectName, BranchName, ConfigPath) deriving (Show, Eq, Ord)
 
-projectConfigProjectPipelinesL :: Lens' ProjectConfig (Map Project ProjectPipeline)
-projectConfigProjectPipelinesL = lens projectPipelines (\c pipeline -> c {projectPipelines = pipeline})
+instance Data.Text.Display.Display CanonicalProjectName where
+  displayBuilder (CanonicalProjectName (_, ProjectName projectName)) = TB.fromText projectName
 
-projectConfigProjectTemplatesL :: Lens' ProjectConfig (Map Project ProjectPipeline)
-projectConfigProjectTemplatesL = lens projectTemplates (\c template -> c {projectTemplates = template})
+instance Data.Text.Display.Display ConfigLoc where
+  displayBuilder (ConfigLoc (cpn, bn, ConfigPath cp)) =
+    Data.Text.Display.displayBuilder cpn
+      <> branchBuilder
+      <> TB.fromText (": " <> T.pack cp)
+    where
+      branchBuilder = case bn of
+        BranchName "master" -> ""
+        BranchName n -> TB.fromText $ "[" <> n <> "]"
 
-projectConfigPipelinesL :: Lens' ProjectConfig (Map PipelineName Pipeline)
-projectConfigPipelinesL = lens pipelines (\c pipeline -> c {pipelines = pipeline})
+type ConfigMap a b = Map a [(ConfigLoc, b)]
 
 data Config = Config
-  { configs :: Map (CanonicalProjectName, BranchName) ProjectConfig,
+  { configJobs :: ConfigMap JobName Job,
+    configNodesets :: ConfigMap NodesetName Nodeset,
+    configProjectPipelines :: ConfigMap Project ProjectPipeline,
+    configProjectTemplates :: ConfigMap Project ProjectPipeline,
+    configPipelines :: ConfigMap PipelineName Pipeline,
     configErrors :: [ConfigError]
   }
-  deriving (Show)
+  deriving (Show, Generic)
 
-configConfigsL :: Lens' Config (Map (CanonicalProjectName, BranchName) ProjectConfig)
-configConfigsL = lens configs (\c nc -> c {configs = nc})
-
-configErrorsL :: Lens' Config [ConfigError]
-configErrorsL = lens configErrors (\c ce -> c {configErrors = ce})
+updateTopConfig :: ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
+updateTopConfig configLoc ze = case ze of
+  ZJob job -> #configJobs %= insertConfig (jobName job) job
+  ZNodeset node -> #configNodesets %= insertConfig (nodesetName node) node
+  ZProjectPipeline project -> #configProjectPipelines %= insertConfig (pName project) project
+  ZProjectTemplate template -> #configProjectTemplates %= insertConfig (pName template) template
+  ZPipeline pipeline -> #configPipelines %= insertConfig (pipelineName pipeline) pipeline
+  where
+    insertConfig :: Ord a => a -> b -> ConfigMap a b -> ConfigMap a b
+    insertConfig k v = Data.Map.insertWith mappend k [(configLoc, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
 decodeConfig (project, _branch) zkJSONData =
@@ -282,49 +303,20 @@ decodeConfig (project, _branch) zkJSONData =
 
 loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
 loadConfig zkcE = do
-  liftIO $ putStrLn $ "Loading " <> show zkcE
+  -- liftIO $ putStrLn $ "Loading " <> show zkcE
   case zkcE of
-    Left e -> modify (addError e)
+    Left e -> #configErrors %= (e :)
     Right zkc ->
-      let zkcDecoded = decodeConfig projectC $ zkJSONData zkc
-          projectC =
-            ( CanonicalProjectName (ProviderName $ provider zkc, ProjectName $ project zkc),
-              BranchName $ branch zkc
-            )
-       in modify (updateConfig projectC zkcDecoded)
-  where
-    addError :: ConfigError -> Config -> Config
-    addError ce = configErrorsL `over` (ce :)
-    updateConfig :: (CanonicalProjectName, BranchName) -> [ZuulConfigElement] -> Config -> Config
-    updateConfig k zces config =
-      let projectConfig = fromMaybe emptyProjectConfig $ Data.Map.lookup k $ view configConfigsL config
-          newProjectConfig = updateProjectConfig zces projectConfig
-       in over configConfigsL (insert k newProjectConfig) config
-
-    updateProjectConfig :: [ZuulConfigElement] -> ProjectConfig -> ProjectConfig
-    updateProjectConfig zces projectConfig = case zces of
-      [] -> projectConfig
-      (zce : xs) -> case zce of
-        ZJob job ->
-          updateProjectConfig xs $
-            projectConfig & over projectConfigJobsL (insert (jobName job) job)
-        ZNodeset node ->
-          updateProjectConfig xs $
-            projectConfig & over projectConfigNodesetsL (insert (nodesetName node) node)
-        ZProjectPipeline project ->
-          updateProjectConfig xs $
-            projectConfig & over projectConfigProjectPipelinesL (insert (pName project) project)
-        ZProjectTemplate template ->
-          updateProjectConfig xs $
-            projectConfig & over projectConfigProjectTemplatesL (insert (pName template) template)
-        ZPipeline pipeline ->
-          updateProjectConfig xs $
-            projectConfig & over projectConfigPipelinesL (insert (pipelineName pipeline) pipeline)
-
--- _ -> updateProjectConfig xs projectConfig
+      let zkcDecoded = decodeConfig (canonicalProjectName, branchName) $ zkJSONData zkc
+          canonicalProjectName =
+            CanonicalProjectName
+              ( ProviderName $ provider zkc,
+                ProjectName $ project zkc
+              )
+          branchName = BranchName $ branch zkc
+          configPath = ConfigPath (T.unpack $ filePath zkc)
+          configLoc = ConfigLoc (canonicalProjectName, branchName, configPath)
+       in traverse_ (updateTopConfig configLoc) zkcDecoded
 
 emptyConfig :: Config
-emptyConfig = Config mempty mempty
-
-emptyProjectConfig :: ProjectConfig
-emptyProjectConfig = ProjectConfig mempty mempty mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty mempty mempty

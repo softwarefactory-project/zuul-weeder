@@ -1,50 +1,12 @@
-{ nixpkgs ? import <nixpkgs> { }, compiler ? "default", doBenchmark ? false }:
-
 let
+  pkgs = import (fetchTarball {
+    url =
+      "https://github.com/NixOS/nixpkgs/archive/4d60081494259c0785f7e228518fee74e0792c1b.tar.gz";
+    sha256 = "sha256:15vxvzy9sxsnnxn53w2n44vklv7irzxvqv8xj9dn78z9zwl17jhq";
+  }) { config.allowBroken = true; };
 
-  inherit (nixpkgs) pkgs;
+  drv = pkgs.haskellPackages.callCabal2nix "zuul-weeder" ./. { };
 
-  f = { mkDerivation, aeson, algebraic-graphs, base, bytestring, containers
-    , unordered-containers, directory, dhall, filepath, lens, lib, mtl
-    , streaming, tasty, tasty-hunit, text, uri-encode, yaml }:
-    mkDerivation {
-      pname = "zuul-weeder";
-      version = "0.1.0.0";
-      src = ./.;
-      isLibrary = true;
-      isExecutable = true;
-      libraryHaskellDepends = [
-        aeson
-        algebraic-graphs
-        base
-        bytestring
-        containers
-        unordered-containers
-        directory
-        dhall
-        filepath
-        lens
-        mtl
-        streaming
-        text
-        uri-encode
-        yaml
-      ];
-      executableHaskellDepends = [ base ];
-      testHaskellDepends = [ base tasty tasty-hunit ];
-      homepage =
-        "https://github.com/softwarefactory-project/zuul-weeder#readme";
-      description = "Detect dead configuration in Zuul";
-      license = lib.licenses.asl20;
-    };
+  shellDrv = pkgs.haskellPackages.shellFor { packages = p: [ drv ]; };
 
-  haskellPackages = if compiler == "default" then
-    pkgs.haskellPackages
-  else
-    pkgs.haskell.packages.${compiler};
-
-  variant = if doBenchmark then pkgs.haskell.lib.doBenchmark else pkgs.lib.id;
-
-  drv = variant (haskellPackages.callPackage f { });
-
-in if pkgs.lib.inNixShell then drv.env else drv
+in if pkgs.lib.inNixShell then shellDrv else drv
