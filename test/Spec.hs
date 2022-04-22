@@ -21,7 +21,7 @@ import Zuul.ConfigLoader
     PipelineJob (PJJob, PJName),
     PipelineName (PipelineName),
     PipelineTrigger (PipelineTrigger, connectionName),
-    Project (PName, PNameCannonical),
+    Project (PName, PNameCannonical, TName),
     ProjectName (ProjectName),
     ProjectPipeline (ProjectPipeline, pName, pipelinePipelines, pipelineTemplates),
     ProviderName (ProviderName),
@@ -106,7 +106,7 @@ tests =
       json <- loadFixture "project-templates"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ ZProjectTemplate (ProjectPipeline {pName = PName (ProjectName "sf-ci-jobs"), pipelineTemplates = [], pipelinePipelines = [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-tenants", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJJob (Job {jobName = JobName "wait-for-changes-ahead", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-ci-functional-allinone", JobName "sf-ci-functional-minimal"]}), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}]})
+            [ ZProjectTemplate (ProjectPipeline {pName = TName (TemplateName "sf-ci-jobs"), pipelineTemplates = [], pipelinePipelines = [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-tenants", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJJob (Job {jobName = JobName "wait-for-changes-ahead", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-ci-functional-allinone", JobName "sf-ci-functional-minimal"]}), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}]})
             ]
 
       assertEqual "Expect data extracted from Project templates Config elements" (sort expected) (sort decoded)

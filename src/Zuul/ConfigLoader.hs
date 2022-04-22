@@ -39,6 +39,7 @@ newtype ConnectionName = ConnectionName Text deriving (Eq, Ord, Show)
 
 data Project
   = PName ProjectName
+  | TName TemplateName
   | PNameRE ProjectNameRE
   | PNameCannonical CanonicalProjectName
   deriving (Eq, Ord, Show)
@@ -101,7 +102,9 @@ data ZuulConfigElement
 data ProjectConfig = ProjectConfig
   { jobs :: Map JobName Job,
     nodesets :: Map NodesetName Nodeset,
-    projectPipelines :: Map Project ProjectPipeline
+    projectPipelines :: Map Project ProjectPipeline,
+    projectTemplates :: Map Project ProjectPipeline,
+    pipelines :: Map PipelineName Pipeline
   }
   deriving (Show)
 
@@ -111,8 +114,14 @@ projectConfigNodesetsL = lens nodesets (\c nodesets -> c {nodesets = nodesets})
 projectConfigJobsL :: Lens' ProjectConfig (Map JobName Job)
 projectConfigJobsL = lens jobs (\c jobs -> c {jobs = jobs})
 
-projectConfigProjectsL :: Lens' ProjectConfig (Map Project ProjectPipeline)
-projectConfigProjectsL = lens projectPipelines (\c project -> c {projectPipelines = project})
+projectConfigProjectPipelinesL :: Lens' ProjectConfig (Map Project ProjectPipeline)
+projectConfigProjectPipelinesL = lens projectPipelines (\c pipeline -> c {projectPipelines = pipeline})
+
+projectConfigProjectTemplatesL :: Lens' ProjectConfig (Map Project ProjectPipeline)
+projectConfigProjectTemplatesL = lens projectTemplates (\c template -> c {projectTemplates = template})
+
+projectConfigPipelinesL :: Lens' ProjectConfig (Map PipelineName Pipeline)
+projectConfigPipelinesL = lens pipelines (\c pipeline -> c {pipelines = pipeline})
 
 data Config = Config
   { configs :: Map (CanonicalProjectName, BranchName) ProjectConfig,
@@ -141,7 +150,7 @@ decodeConfig (project, _branch) zkJSONData =
             "nodeset" -> Just . ZNodeset . decodeNodeset $ getE "nodeset" obj
             "project" -> Just . ZProjectPipeline . decodeProjectPipeline $ getE "project" obj
             -- We use the same decoder as for "project" as the structure is slightly the same
-            "project-template" -> Just . ZProjectTemplate . decodeProjectPipeline $ getE "project-template" obj
+            "project-template" -> Just . ZProjectTemplate . decodeProjectTemplate $ getE "project-template" obj
             "pipeline" -> Just . ZPipeline . decodePipeline $ getE "pipeline" obj
             _ -> Nothing
       where
@@ -235,6 +244,14 @@ decodeConfig (project, _branch) zkJSONData =
              in PJJob $ Job {..}
           String v -> PJName $ JobName v
           _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
+    decodeProjectTemplate :: Object -> ProjectPipeline
+    decodeProjectTemplate va =
+      let template = decodeProjectPipeline va
+       in template {pName = TName . getPName $ pName template}
+      where
+        getPName :: Project -> TemplateName
+        getPName (PName (ProjectName name)) = TemplateName name
+        getPName _va = error $ "Unexpected template name: " <> show _va
 
     unwrapObject :: Value -> Object
     unwrapObject va = case va of
@@ -295,11 +312,18 @@ loadConfig zkcE = do
             over projectConfigNodesetsL (insert (nodesetName node) node) projectConfig
         ZProjectPipeline project ->
           updateProjectConfig xs $
-            over projectConfigProjectsL (insert (pName project) project) projectConfig
-        _ -> updateProjectConfig xs projectConfig
+            over projectConfigProjectPipelinesL (insert (pName project) project) projectConfig
+        ZProjectTemplate template ->
+          updateProjectConfig xs $
+            over projectConfigProjectTemplatesL (insert (pName template) template) projectConfig
+        ZPipeline pipeline ->
+          updateProjectConfig xs $
+            over projectConfigPipelinesL (insert (pipelineName pipeline) pipeline) projectConfig
+
+-- _ -> updateProjectConfig xs projectConfig
 
 emptyConfig :: Config
 emptyConfig = Config mempty mempty
 
 emptyProjectConfig :: ProjectConfig
-emptyProjectConfig = ProjectConfig mempty mempty mempty
+emptyProjectConfig = ProjectConfig mempty mempty mempty mempty mempty
