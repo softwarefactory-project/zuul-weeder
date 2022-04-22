@@ -205,7 +205,7 @@ decodeConfig (project, _branch) zkJSONData =
           nodesetLabels = case getObjValue "nodes" va of
             Array nodes ->
               NodeLabelName . getString . getObjValue "label"
-                <$> (unwrapObject <$> V.toList nodes)
+                <$> (unwrapObject <$> sort (V.toList nodes))
             _va -> error $ "Unexpected nodeset nodes structure: " <> show _va
        in Nodeset {..}
 

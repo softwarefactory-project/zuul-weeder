@@ -97,7 +97,7 @@ tests =
       json <- loadFixture "nodesets"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ ZNodeset (Nodeset {nodesetName = NodesetName "nodeset1", nodesetLabels = [NodeLabelName "controller-label", NodeLabelName "compute-label", NodeLabelName "compute-label"]})
+            [ ZNodeset (Nodeset {nodesetName = NodesetName "nodeset1", nodesetLabels = [NodeLabelName "compute-label", NodeLabelName "compute-label", NodeLabelName "controller-label"]})
             ]
 
       assertEqual "Expect data extracted from Nodesets Config elements" (sort expected) (sort decoded)
