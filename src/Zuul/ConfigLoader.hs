@@ -6,6 +6,7 @@ module Zuul.ConfigLoader where
 import Control.Lens (Lens', lens, over, view)
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
+import Data.Function ((&))
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import Data.List (sort)
 import Data.Map (Map, insert, lookup)
@@ -195,9 +196,9 @@ decodeConfig (project, _branch) zkJSONData =
           Just _va -> error $ "Unexpected nodeset structure: " <> show _va
           Nothing -> Nothing
         decodeJobBranches :: [BranchName]
-        decodeJobBranches = decodeSimple "branches" BranchName va
+        decodeJobBranches = decodeAsList "branches" BranchName va
         decodeJobDependencies :: [JobName]
-        decodeJobDependencies = decodeSimple "dependencies" JobName va
+        decodeJobDependencies = decodeAsList "dependencies" JobName va
 
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =
@@ -217,7 +218,7 @@ decodeConfig (project, _branch) zkJSONData =
               Just ('^', _) -> PNameRE $ ProjectNameRE name
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
-          pipelineTemplates = decodeSimple "templates" TemplateName va
+          pipelineTemplates = decodeAsList "templates" TemplateName va
           pipelinePipelines = catMaybes $ decodePPipeline <$> sort (HM.toList va)
        in ProjectPipeline {..}
       where
@@ -270,10 +271,10 @@ decodeConfig (project, _branch) zkJSONData =
     getString va = case va of
       String str -> str
       _ -> error $ "Expected a String out of JSON value: " <> show va
-    decodeSimple :: Text -> (Text -> a) -> Object -> [a]
-    decodeSimple k build va = case HM.lookup k va of
-      Just (String template) -> [build template]
-      Just (Array templates) -> build . getString <$> sort (V.toList templates)
+    decodeAsList :: Text -> (Text -> a) -> Object -> [a]
+    decodeAsList k build va = case HM.lookup k va of
+      Just (String x) -> [build x]
+      Just (Array xs) -> build . getString <$> sort (V.toList xs)
       Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
       Nothing -> []
     getName :: Object -> Text
@@ -306,19 +307,19 @@ loadConfig zkcE = do
       (zce : xs) -> case zce of
         ZJob job ->
           updateProjectConfig xs $
-            over projectConfigJobsL (insert (jobName job) job) projectConfig
+            projectConfig & over projectConfigJobsL (insert (jobName job) job)
         ZNodeset node ->
           updateProjectConfig xs $
-            over projectConfigNodesetsL (insert (nodesetName node) node) projectConfig
+            projectConfig & over projectConfigNodesetsL (insert (nodesetName node) node)
         ZProjectPipeline project ->
           updateProjectConfig xs $
-            over projectConfigProjectPipelinesL (insert (pName project) project) projectConfig
+            projectConfig & over projectConfigProjectPipelinesL (insert (pName project) project)
         ZProjectTemplate template ->
           updateProjectConfig xs $
-            over projectConfigProjectTemplatesL (insert (pName template) template) projectConfig
+            projectConfig & over projectConfigProjectTemplatesL (insert (pName template) template)
         ZPipeline pipeline ->
           updateProjectConfig xs $
-            over projectConfigPipelinesL (insert (pipelineName pipeline) pipeline) projectConfig
+            projectConfig & over projectConfigPipelinesL (insert (pipelineName pipeline) pipeline)
 
 -- _ -> updateProjectConfig xs projectConfig
 
