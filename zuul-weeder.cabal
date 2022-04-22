@@ -76,6 +76,7 @@ test-suite zuul-weeder-test
   main-is:             Spec.hs
   build-depends:       tasty                      >= 0.11.2   && < 1.5
                      , tasty-hunit                >= 0.10     && < 0.11
+                     , containers
                      , aeson
                      , filepath
                      , yaml

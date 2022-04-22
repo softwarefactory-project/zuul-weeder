@@ -15,6 +15,7 @@ import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import Data.List (sort)
 import Data.Map (Map, insertWith)
 import Data.Maybe (catMaybes, mapMaybe)
+import qualified Data.Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Display
@@ -90,7 +91,7 @@ data PPipeline = PPipeline
 data ProjectPipeline = ProjectPipeline
   { pName :: Project,
     pipelineTemplates :: [TemplateName],
-    pipelinePipelines :: [PPipeline]
+    pipelinePipelines :: Data.Set.Set PPipeline
   }
   deriving (Show, Eq, Ord)
 
@@ -240,7 +241,7 @@ decodeConfig (project, _branch) zkJSONData =
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
           pipelineTemplates = decodeAsList "templates" TemplateName va
-          pipelinePipelines = catMaybes $ decodePPipeline <$> sort (HM.toList va)
+          pipelinePipelines = Data.Set.fromList $ catMaybes $ decodePPipeline <$> HM.toList va
        in ProjectPipeline {..}
       where
         decodePPipeline :: (Text, Value) -> Maybe PPipeline
@@ -249,7 +250,7 @@ decodeConfig (project, _branch) zkJSONData =
             let pPipelineName = PipelineName pipelineName'
                 pPipelineJobs = case HM.lookup "jobs" inner of
                   Just (String name) -> [PJName $ JobName name]
-                  Just (Array jobElems) -> decodePPipelineJob <$> sort (V.toList jobElems)
+                  Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
                   _ -> error $ "Unexpected project pipeline format: " <> show inner
              in Just $ PPipeline {..}
           _ -> Nothing
