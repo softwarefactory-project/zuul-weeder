@@ -35,6 +35,8 @@ newtype TemplateName = TemplateName Text deriving (Eq, Ord, Show)
 
 newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName) deriving (Eq, Ord, Show)
 
+newtype ConnectionName = ConnectionName Text deriving (Eq, Ord, Show)
+
 data Project
   = PName ProjectName
   | PNameRE ProjectNameRE
@@ -66,16 +68,25 @@ data PipelineJob
   | PJJob Job
   deriving (Show, Eq, Ord)
 
-data Pipeline = Pipeline
-  { pipelineName :: PipelineName,
-    pipelineJobs :: [PipelineJob]
+data PPipeline = PPipeline
+  { pPipelineName :: PipelineName,
+    pPipelineJobs :: [PipelineJob]
   }
   deriving (Show, Eq, Ord)
 
 data ProjectPipeline = ProjectPipeline
   { pName :: Project,
     pipelineTemplates :: [TemplateName],
-    pipelinePipelines :: [Pipeline]
+    pipelinePipelines :: [PPipeline]
+  }
+  deriving (Show, Eq, Ord)
+
+newtype PipelineTrigger = PipelineTrigger {connectionName :: ConnectionName}
+  deriving (Show, Ord, Eq)
+
+data Pipeline = Pipeline
+  { pipelineName :: PipelineName,
+    pipelineTriggers :: [PipelineTrigger]
   }
   deriving (Show, Eq, Ord)
 
@@ -84,6 +95,7 @@ data ZuulConfigElement
   | ZProjectPipeline ProjectPipeline
   | ZNodeset Nodeset
   | ZProjectTemplate ProjectPipeline
+  | ZPipeline Pipeline
   deriving (Show, Eq, Ord)
 
 data ProjectConfig = ProjectConfig
@@ -125,12 +137,23 @@ decodeConfig (project, _branch) zkJSONData =
     getConfigElement rootObj =
       let obj = unwrapObject rootObj
        in case getKey obj of
-            "job" -> Just . ZJob . decodeJob . unwrapObject $ getObjValue "job" obj
-            "nodeset" -> Just . ZNodeset . decodeNodeset . unwrapObject $ getObjValue "nodeset" obj
-            "project" -> Just . ZProjectPipeline . decodeProjectPipeline . unwrapObject $ getObjValue "project" obj
+            "job" -> Just . ZJob . decodeJob $ getE "job" obj
+            "nodeset" -> Just . ZNodeset . decodeNodeset $ getE "nodeset" obj
+            "project" -> Just . ZProjectPipeline . decodeProjectPipeline $ getE "project" obj
             -- We use the same decoder as for "project" as the structure is slightly the same
-            "project-template" -> Just . ZProjectTemplate . decodeProjectPipeline . unwrapObject $ getObjValue "project-template" obj
+            "project-template" -> Just . ZProjectTemplate . decodeProjectPipeline $ getE "project-template" obj
+            "pipeline" -> Just . ZPipeline . decodePipeline $ getE "pipeline" obj
             _ -> Nothing
+      where
+        getE :: Text -> Object -> Object
+        getE k o = unwrapObject $ getObjValue k o
+    decodePipeline :: Object -> Pipeline
+    decodePipeline va =
+      let pipelineName = PipelineName $ getName va
+          pipelineTriggers = case getObjValue "trigger" va of
+            Object triggers -> PipelineTrigger . ConnectionName <$> HM.keys triggers
+            _ -> error $ "Unexpected trigger value in: " <> show va
+       in Pipeline {..}
     decodeJob :: Object -> Job
     decodeJob va = case HM.lookup "name" va of
       Just (String name) -> do
@@ -188,21 +211,21 @@ decodeConfig (project, _branch) zkJSONData =
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
           pipelineTemplates = decodeSimple "templates" TemplateName va
-          pipelinePipelines = catMaybes $ decodePipeline <$> sort (HM.toList va)
+          pipelinePipelines = catMaybes $ decodePPipeline <$> sort (HM.toList va)
        in ProjectPipeline {..}
       where
-        decodePipeline :: (Text, Value) -> Maybe Pipeline
-        decodePipeline (pipelineName', va') = case va' of
+        decodePPipeline :: (Text, Value) -> Maybe PPipeline
+        decodePPipeline (pipelineName', va') = case va' of
           Object inner ->
-            let pipelineName = PipelineName pipelineName'
-                pipelineJobs = case HM.lookup "jobs" inner of
+            let pPipelineName = PipelineName pipelineName'
+                pPipelineJobs = case HM.lookup "jobs" inner of
                   Just (String name) -> [PJName $ JobName name]
-                  Just (Array jobElems) -> decodePipelineJob <$> sort (V.toList jobElems)
+                  Just (Array jobElems) -> decodePPipelineJob <$> sort (V.toList jobElems)
                   _ -> error $ "Unexpected project pipeline format: " <> show inner
-             in Just $ Pipeline {..}
+             in Just $ PPipeline {..}
           _ -> Nothing
-        decodePipelineJob :: Value -> PipelineJob
-        decodePipelineJob jobElem = case jobElem of
+        decodePPipelineJob :: Value -> PipelineJob
+        decodePPipelineJob jobElem = case jobElem of
           Object jobObj ->
             let key = getKey jobObj
                 jobName = JobName key
@@ -238,6 +261,8 @@ decodeConfig (project, _branch) zkJSONData =
       Just (Array templates) -> build . getString <$> sort (V.toList templates)
       Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
       Nothing -> []
+    getName :: Object -> Text
+    getName = getString . getObjValue "name"
 
 loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
 loadConfig zkcE = do

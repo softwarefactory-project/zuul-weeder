@@ -1,0 +1,5 @@
+- pipeline:
+    name: check
+    trigger:
+      my_gerrit: []
+      my_gitlab: []
