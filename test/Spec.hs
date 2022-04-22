@@ -20,10 +20,10 @@ import Zuul.ConfigLoader
     PipelineName (PipelineName),
     Project (PName, PNameCannonical),
     ProjectName (ProjectName),
-    ProjectPipeline (ProjectPipeline, pipelinePipelines, pipelineTemplates, projectName),
+    ProjectPipeline (ProjectPipeline, pName, pipelinePipelines, pipelineTemplates),
     ProviderName (ProviderName),
     TemplateName (TemplateName),
-    ZuulConfigElement (ZJob, ZNodeset, ZProjectPipeline),
+    ZuulConfigElement (ZJob, ZNodeset, ZProjectPipeline, ZProjectTemplate),
     decodeConfig,
   )
 import Zuul.ZKDump (ZKConfig (..), mkZKConfig)
@@ -83,8 +83,8 @@ tests =
       json <- loadFixture "projects"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ ZProjectPipeline (ProjectPipeline {projectName = PName (ProjectName "config"), pipelineTemplates = [], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJName (JobName "config-check")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJName (JobName "config-check")]}, Pipeline {pipelineName = PipelineName "post", pipelineJobs = [PJName (JobName "config-update")]}]}),
-              ZProjectPipeline (ProjectPipeline {projectName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pipelineTemplates = [TemplateName "sf-ci-jobs"], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}, Pipeline {pipelineName = PipelineName "experimental", pipelineJobs = [PJJob (Job {jobName = JobName "sf-ci-openshift-integration", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}]})
+            [ ZProjectPipeline (ProjectPipeline {pName = PName (ProjectName "config"), pipelineTemplates = [], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJName (JobName "config-check")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJName (JobName "config-check")]}, Pipeline {pipelineName = PipelineName "post", pipelineJobs = [PJName (JobName "config-update")]}]}),
+              ZProjectPipeline (ProjectPipeline {pName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pipelineTemplates = [TemplateName "sf-ci-jobs"], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}, Pipeline {pipelineName = PipelineName "experimental", pipelineJobs = [PJJob (Job {jobName = JobName "sf-ci-openshift-integration", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}]})
             ]
 
       assertEqual "Expect data extracted from Projects Config elements" (sort expected) (sort decoded)
@@ -101,6 +101,8 @@ tests =
     decodeProjectTemplatesConfig = do
       json <- loadFixture "project-templates"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
-          expected = []
+          expected =
+            [ ZProjectTemplate (ProjectPipeline {pName = PName (ProjectName "sf-ci-jobs"), pipelineTemplates = [], pipelinePipelines = [Pipeline {pipelineName = PipelineName "check", pipelineJobs = [PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-tenants", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}, Pipeline {pipelineName = PipelineName "gate", pipelineJobs = [PJJob (Job {jobName = JobName "wait-for-changes-ahead", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-ci-functional-allinone", JobName "sf-ci-functional-minimal"]}), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJName (JobName "sf-rpm-build")]}]})
+            ]
 
       assertEqual "Expect data extracted from Project templates Config elements" (sort expected) (sort decoded)

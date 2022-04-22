@@ -73,7 +73,7 @@ data Pipeline = Pipeline
   deriving (Show, Eq, Ord)
 
 data ProjectPipeline = ProjectPipeline
-  { projectName :: Project,
+  { pName :: Project,
     pipelineTemplates :: [TemplateName],
     pipelinePipelines :: [Pipeline]
   }
@@ -83,6 +83,7 @@ data ZuulConfigElement
   = ZJob Job
   | ZProjectPipeline ProjectPipeline
   | ZNodeset Nodeset
+  | ZProjectTemplate ProjectPipeline
   deriving (Show, Eq, Ord)
 
 data ProjectConfig = ProjectConfig
@@ -125,8 +126,10 @@ decodeConfig (project, _branch) zkJSONData =
       let obj = unwrapObject rootObj
        in case getKey obj of
             "job" -> Just . ZJob . decodeJob . unwrapObject $ getObjValue "job" obj
-            "project" -> Just . ZProjectPipeline . decodeProjectPipeline . unwrapObject $ getObjValue "project" obj
             "nodeset" -> Just . ZNodeset . decodeNodeset . unwrapObject $ getObjValue "nodeset" obj
+            "project" -> Just . ZProjectPipeline . decodeProjectPipeline . unwrapObject $ getObjValue "project" obj
+            -- We use the same decoder as for "project" as the structure is slightly the same
+            "project-template" -> Just . ZProjectTemplate . decodeProjectPipeline . unwrapObject $ getObjValue "project-template" obj
             _ -> Nothing
     decodeJob :: Object -> Job
     decodeJob va = case HM.lookup "name" va of
@@ -157,7 +160,7 @@ decodeConfig (project, _branch) zkJSONData =
               Just $
                 JobAnonymousNodeset $
                   NodeLabelName . getString . getObjValue "label"
-                    <$> (unwrapObject <$> V.toList nodes)
+                    <$> (unwrapObject <$> sort (V.toList nodes))
             _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
           Just _va -> error $ "Unexpected nodeset structure: " <> show _va
           Nothing -> Nothing
@@ -178,7 +181,7 @@ decodeConfig (project, _branch) zkJSONData =
 
     decodeProjectPipeline :: Object -> ProjectPipeline
     decodeProjectPipeline va =
-      let projectName = case getString <$> HM.lookup "name" va of
+      let pName = case getString <$> HM.lookup "name" va of
             Nothing -> PNameCannonical project
             Just name -> case T.uncons name of
               Just ('^', _) -> PNameRE $ ProjectNameRE name
@@ -211,6 +214,7 @@ decodeConfig (project, _branch) zkJSONData =
              in PJJob $ Job {..}
           String v -> PJName $ JobName v
           _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
+
     unwrapObject :: Value -> Object
     unwrapObject va = case va of
       Object hm -> hm
@@ -231,7 +235,7 @@ decodeConfig (project, _branch) zkJSONData =
     decodeSimple :: Text -> (Text -> a) -> Object -> [a]
     decodeSimple k build va = case HM.lookup k va of
       Just (String template) -> [build template]
-      Just (Array templates) -> build . getString <$> V.toList templates
+      Just (Array templates) -> build . getString <$> sort (V.toList templates)
       Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
       Nothing -> []
 
@@ -268,9 +272,8 @@ loadConfig zkcE = do
             over projectConfigNodesetsL (insert (nodesetName node) node) projectConfig
         ZProjectPipeline project ->
           updateProjectConfig xs $
-            over projectConfigProjectsL (insert (projectName project) project) projectConfig
-
--- _ -> updateProjectConfig xs projectConfig
+            over projectConfigProjectsL (insert (pName project) project) projectConfig
+        _ -> updateProjectConfig xs projectConfig
 
 emptyConfig :: Config
 emptyConfig = Config mempty mempty
