@@ -47,7 +47,8 @@ tests =
     [ testCase "Extract data from ZK path" extractDataZKPath,
       testCase "Decode Jobs config" decodeJobsConfig,
       testCase "Decode Projects config" decodeProjectsConfig,
-      testCase "Decode Nodesets config" decodeNodesetsConfig
+      testCase "Decode Nodesets config" decodeNodesetsConfig,
+      testCase "Decode Project templates config" decodeProjectTemplatesConfig
     ]
   where
     extractDataZKPath =
@@ -96,3 +97,10 @@ tests =
             ]
 
       assertEqual "Expect data extracted from Nodesets Config elements" (sort expected) (sort decoded)
+
+    decodeProjectTemplatesConfig = do
+      json <- loadFixture "project-templates"
+      let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
+          expected = []
+
+      assertEqual "Expect data extracted from Project templates Config elements" (sort expected) (sort decoded)

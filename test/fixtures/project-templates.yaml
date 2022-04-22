@@ -1,0 +1,28 @@
+- project-template:
+    name: sf-ci-jobs
+    check:
+      jobs:
+        - sf-rpm-build
+        - sf-ci-functional-minimal:
+            dependencies:
+              - sf-rpm-build
+        - sf-ci-functional-allinone:
+            dependencies:
+              - sf-rpm-build
+        - sf-tenants:
+            dependencies:
+              - sf-rpm-build
+    gate:
+      queue: sf-master
+      jobs:
+        - sf-rpm-build
+        - sf-ci-functional-minimal:
+            dependencies:
+              - sf-rpm-build
+        - sf-ci-functional-allinone:
+            dependencies:
+              - sf-rpm-build
+        - wait-for-changes-ahead:
+            dependencies:
+              - sf-ci-functional-minimal
+              - sf-ci-functional-allinone
