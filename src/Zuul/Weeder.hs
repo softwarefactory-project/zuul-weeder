@@ -26,28 +26,33 @@ main :: IO ()
 main = do
   args <- map pack <$> getArgs
   case args of
-    [path, "dependency", key, name] -> printDependency path key name
-    [path, "dot"] -> do
-      config <- loadConfig (unpack path)
-      let x = analyzeConfig (filterTenant tenant) config
-      let style = Algebra.Graph.Export.Dot.defaultStyle Data.Text.Display.display
-      let dot = Algebra.Graph.Export.Dot.export style (configGraph x)
-      putStrLn $ unpack dot
+    [path, "what-require", key, name] -> printReachable (unpack path) key name configRequireGraph
+    [path, "what-depends-on", key, name] -> printReachable (unpack path) key name configDependsOnGraph
+    [path, "require-dot"] -> outputDot (unpack path) configRequireGraph
+    [path, "depends-on-dot"] -> outputDot (unpack path) configDependsOnGraph
     _ -> putStrLn "usage: zuul-weeder path"
 
 -- TODO
 tenant :: Tenant
 tenant = Tenant
 
-printDependency :: Text -> Text -> Text -> IO ()
-printDependency path key name = do
-  config <- loadConfig (unpack path)
+outputDot :: FilePath -> (Analysis -> ConfigGraph) -> IO ()
+outputDot path graph = do
+  config <- loadConfig path
+  let x = analyzeConfig (filterTenant tenant) config
+  let style = Algebra.Graph.Export.Dot.defaultStyle Data.Text.Display.display
+  let dot = Algebra.Graph.Export.Dot.export style (graph x)
+  putStrLn $ unpack dot
+
+printReachable :: FilePath -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
+printReachable path key name graph = do
+  config <- loadConfig path
   let vertex =
         Data.Maybe.fromMaybe (error "Can't find") $
           findVertex key name config
       analyzis = analyzeConfig (filterTenant tenant) config
       reachables =
-        findReachable vertex (configGraph analyzis)
+        findReachable vertex (graph analyzis)
   forM_ reachables $ \(loc, obj) -> do
     putStrLn $ unpack $ display loc <> " -> " <> display obj
 
@@ -68,7 +73,8 @@ type Vertex = (Zuul.ConfigLoader.ConfigLoc, Zuul.ConfigLoader.ZuulConfigElement)
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
 data Analysis = Analysis
-  { configGraph :: ConfigGraph,
+  { configRequireGraph :: ConfigGraph,
+    configDependsOnGraph :: ConfigGraph,
     graphErrors :: [String]
   }
   deriving (Show, Generic)
@@ -91,7 +97,7 @@ filterTenant :: Tenant -> ConfigLoc -> Bool
 filterTenant _ = const True
 
 analyzeConfig :: (ConfigLoc -> Bool) -> Config -> Analysis
-analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebra.Graph.empty mempty)
+analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
   where
     filterElems :: [(ConfigLoc, a)] -> [(ConfigLoc, a)]
     filterElems = filter (\(cl, _) -> filterConfig cl)
@@ -107,8 +113,7 @@ analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebr
         -- look for nodeset location
         case jobNodeset job of
           Just (JobNodeset nodeset) -> case Data.Map.lookup nodeset (configNodesets config) of
-            Just xs -> forM_ xs $ \(loc', ns) -> do
-              #configGraph %= Algebra.Graph.overlay (Algebra.Graph.circuit [(loc', ZNodeset ns), (loc, ZJob job)])
+            Just xs -> forM_ xs $ \(loc', ns) -> feedState ((loc, ZJob job), (loc', ZNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           _ ->
             -- Ignore inlined nodeset
@@ -117,16 +122,19 @@ analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebr
         case jobParent job of
           Just parent -> do
             case Data.Map.lookup parent (configJobs config) of
-              Just xs -> forM_ xs $ \(loc', pj) -> do
-                #configGraph %= Algebra.Graph.overlay (Algebra.Graph.circuit [(loc', ZJob pj), (loc, ZJob job)])
+              Just xs -> forM_ xs $ \(loc', pj) -> feedState ((loc, ZJob job), (loc', ZJob pj))
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
         -- look for job dependencies
         forM_ (jobDependencies job) $ \dJob' -> do
           case Data.Map.lookup dJob' (configJobs config) of
-            Just xs -> forM_ xs $ \(loc', dJob) -> do
-              #configGraph %= Algebra.Graph.overlay (Algebra.Graph.circuit [(loc', ZJob dJob), (loc, ZJob job)])
+            Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, ZJob job), (loc', ZJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
+      where
+        feedState :: (Vertex, Vertex) -> State Analysis ()
+        feedState (a, b) = do
+          #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
+          #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
 
 -- look for semaphore, secret, ...
 -- pure ()
