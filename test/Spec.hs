@@ -1,8 +1,9 @@
 module Main (main) where
 
-import Data.Aeson (Value, object)
+import Data.Aeson (Value, eitherDecodeFileStrict, object)
 import Data.List (sort)
-import Data.Set (fromList)
+import qualified Data.Map (fromList, toList)
+import qualified Data.Set (fromList)
 import qualified Data.Yaml as Y (decodeFileEither)
 import System.FilePath ((</>))
 import Test.Tasty
@@ -27,13 +28,18 @@ import Zuul.ConfigLoader
     ProjectPipeline (ProjectPipeline, pName, pipelinePipelines, pipelineTemplates),
     ProviderName (ProviderName),
     TemplateName (TemplateName),
+    TenantName (TenantName),
     ZuulConfigElement (ZJob, ZNodeset, ZPipeline, ZProjectPipeline, ZProjectTemplate),
     decodeConfig,
   )
-import Zuul.ZKDump (ZKConfig (..), mkZKConfig)
+import Zuul.Tenant (TenantConfig (..), TenantConnectionConfig (..), TenantsConfig (..), decodeTenantsConfig)
+import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
 
 main :: IO ()
 main = defaultMain (testGroup "Tests" [tests])
+
+fixturesPath :: FilePath
+fixturesPath = "test/fixtures"
 
 loadFixture :: FilePath -> IO Value
 loadFixture name = do
@@ -41,8 +47,13 @@ loadFixture name = do
   case contentE of
     Left _any -> error $ "Unable to decode fixture " <> name
     Right bs -> pure bs
-  where
-    fixturesPath = "test/fixtures"
+
+loadJSONFixture :: FilePath -> IO Value
+loadJSONFixture name = do
+  contentE <- eitherDecodeFileStrict $ fixturesPath </> name <> ".json"
+  case contentE of
+    Left _any -> error $ "Unable to decode fixture " <> name
+    Right bs -> pure bs
 
 tests :: TestTree
 tests =
@@ -53,7 +64,8 @@ tests =
       testCase "Decode Projects config" decodeProjectsConfig,
       testCase "Decode Nodesets config" decodeNodesetsConfig,
       testCase "Decode Project templates config" decodeProjectTemplatesConfig,
-      testCase "Decode Pipeline config" decodePipelineConfig
+      testCase "Decode Pipeline config" decodePipelineConfig,
+      testCase "Decode Tenant config" decodeTenants
     ]
   where
     extractDataZKPath =
@@ -88,8 +100,8 @@ tests =
       json <- loadFixture "projects"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ ZProjectPipeline (ProjectPipeline {pName = PName (ProjectName "config"), pipelineTemplates = [], pipelinePipelines = fromList [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJName (JobName "config-check")]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJName (JobName "config-check")]}, PPipeline {pPipelineName = PipelineName "post", pPipelineJobs = [PJName (JobName "config-update")]}]}),
-              ZProjectPipeline (ProjectPipeline {pName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pipelineTemplates = [TemplateName "sf-ci-jobs"], pipelinePipelines = fromList [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}, PPipeline {pPipelineName = PipelineName "experimental", pPipelineJobs = [PJName (JobName "sf-rpm-build"), PJJob (Job {jobName = JobName "sf-ci-openshift-integration", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]})]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}]})
+            [ ZProjectPipeline (ProjectPipeline {pName = PName (ProjectName "config"), pipelineTemplates = [], pipelinePipelines = Data.Set.fromList [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJName (JobName "config-check")]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJName (JobName "config-check")]}, PPipeline {pPipelineName = PipelineName "post", pPipelineJobs = [PJName (JobName "config-update")]}]}),
+              ZProjectPipeline (ProjectPipeline {pName = PNameCannonical (CanonicalProjectName (ProviderName "", ProjectName "")), pipelineTemplates = [TemplateName "sf-ci-jobs"], pipelinePipelines = Data.Set.fromList [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}, PPipeline {pPipelineName = PipelineName "experimental", pPipelineJobs = [PJName (JobName "sf-rpm-build"), PJJob (Job {jobName = JobName "sf-ci-openshift-integration", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]})]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJJob (Job {jobName = JobName "linters", jobParent = Nothing, jobNodeset = Just (JobNodeset (NodesetName "linters-pod")), jobBranches = [], jobDependencies = []})]}]})
             ]
 
       assertEqual "Expect data extracted from Projects Config elements" (sort expected) (sort decoded)
@@ -107,7 +119,7 @@ tests =
       json <- loadFixture "project-templates"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
           expected =
-            [ZProjectTemplate (ProjectPipeline {pName = TName (TemplateName "sf-ci-jobs"), pipelineTemplates = [], pipelinePipelines = fromList [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJName (JobName "sf-rpm-build"), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-tenants", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]})]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJName (JobName "sf-rpm-build"), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "wait-for-changes-ahead", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-ci-functional-allinone", JobName "sf-ci-functional-minimal"]})]}]})]
+            [ZProjectTemplate (ProjectPipeline {pName = TName (TemplateName "sf-ci-jobs"), pipelineTemplates = [], pipelinePipelines = Data.Set.fromList [PPipeline {pPipelineName = PipelineName "check", pPipelineJobs = [PJName (JobName "sf-rpm-build"), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-tenants", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]})]}, PPipeline {pPipelineName = PipelineName "gate", pPipelineJobs = [PJName (JobName "sf-rpm-build"), PJJob (Job {jobName = JobName "sf-ci-functional-minimal", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "sf-ci-functional-allinone", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-rpm-build"]}), PJJob (Job {jobName = JobName "wait-for-changes-ahead", jobParent = Nothing, jobNodeset = Nothing, jobBranches = [], jobDependencies = [JobName "sf-ci-functional-allinone", JobName "sf-ci-functional-minimal"]})]}]})]
 
       assertEqual "Expect data extracted from Project templates Config elements" (sort expected) (sort decoded)
 
@@ -119,3 +131,10 @@ tests =
             ]
 
       assertEqual "Expect data extracted from Pipeline Config elements" (sort expected) (sort decoded)
+
+    decodeTenants = do
+      json <- loadJSONFixture "system-config"
+      let decoded = decodeTenantsConfig (ZKSystemConfig json)
+          expected = [(TenantName "local", TenantConfig {connections = Data.Map.fromList [(ConnectionName "gerrit", TenantConnectionConfig {configProjects = [ProjectName "config"], untrustedProjects = [ProjectName "sf-jobs", ProjectName "zuul-jobs"]})]})]
+
+      assertEqual "Expect data extracted from Pipeline Config elements" expected (Data.Map.toList $ tenants decoded)

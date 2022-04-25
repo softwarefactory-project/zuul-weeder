@@ -14,7 +14,6 @@ import qualified Data.Maybe
 import qualified Data.Set
 import Data.Text (Text, pack, unpack)
 import Data.Text.Display (display)
-import Debug.Trace
 import GHC.Generics (Generic)
 import Streaming
 import qualified Streaming.Prelude as S
@@ -99,7 +98,7 @@ findVertex "nodeset" name config = case Data.Map.lookup (NodesetName name) (conf
   _ -> Nothing
 findVertex "nodelabel" name config = case Data.Map.lookup (NodeLabelName name) (configNodelabels config) of
   Just [(loc, x)] -> Just (loc, ZNodeLabel x)
-  _ -> trace (show $ configNodelabels config) Nothing
+  _ -> Nothing
 findVertex _ _ _ = Nothing
 
 findReachable :: Vertex -> ConfigGraph -> Data.Set.Set Vertex

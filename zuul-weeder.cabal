@@ -58,6 +58,7 @@ library
   exposed-modules:     Zuul.Weeder
                      , Zuul.ZKDump
                      , Zuul.ConfigLoader
+                     , Zuul.Tenant
 
 executable zuul-weeder
   import:              common-options

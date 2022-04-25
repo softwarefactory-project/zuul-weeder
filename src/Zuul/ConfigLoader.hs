@@ -52,6 +52,8 @@ newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName) 
 
 newtype ConnectionName = ConnectionName Text deriving (Eq, Ord, Show)
 
+newtype TenantName = TenantName Data.Text.Text deriving (Show, Eq, Ord)
+
 data Project
   = PName ProjectName
   | TName TemplateName
@@ -284,14 +286,6 @@ decodeConfig (project, _branch) zkJSONData =
         getPName (PName (ProjectName name)) = TemplateName name
         getPName _va = error $ "Unexpected template name: " <> show _va
 
-    unwrapObject :: Value -> Object
-    unwrapObject va = case va of
-      Object hm -> hm
-      _ -> error $ "Expecting an Object out of JSON Value: " <> show va
-    getObjValue :: Text -> Object -> Value
-    getObjValue k hm = case HM.lookup k hm of
-      Just va -> va
-      Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object"
     -- Zuul config elements are object with an unique key
     getKey :: Object -> Text
     getKey hm = case take 1 $ HM.keys hm of
@@ -309,6 +303,16 @@ decodeConfig (project, _branch) zkJSONData =
       Nothing -> []
     getName :: Object -> Text
     getName = getString . getObjValue "name"
+
+unwrapObject :: Value -> Object
+unwrapObject va = case va of
+  Object hm -> hm
+  _ -> error $ "Expecting an Object out of JSON Value: " <> show va
+
+getObjValue :: Text -> Object -> Value
+getObjValue k hm = case HM.lookup k hm of
+  Just va -> va
+  Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object"
 
 loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
 loadConfig zkcE = do

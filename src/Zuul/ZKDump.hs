@@ -6,8 +6,10 @@
 module Zuul.ZKDump
   ( walkConfigNodes,
     mkZKConfig,
+    readSystemConfig,
     ZKConfig (..),
     ConfigError (..),
+    ZKSystemConfig (..),
   )
 where
 
@@ -15,7 +17,7 @@ import Control.Exception (SomeException, try)
 import Control.Monad (forM_, when)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Trans (lift)
-import Data.Aeson (Value)
+import Data.Aeson (Value, eitherDecodeFileStrict)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS (readFile)
 import qualified Data.Text as T
@@ -41,6 +43,8 @@ data ZKConfig = ZKConfig
   }
   deriving (Show, Eq)
 
+newtype ZKSystemConfig = ZKSystemConfig Value deriving (Show, Eq)
+
 data ConfigError
   = ReadError SomeException
   | DecodeError Y.ParseException
@@ -50,7 +54,7 @@ data ConfigError
 type ZKConfigStream = S.Stream (S.Of (Either ConfigError ZKConfig)) IO ()
 
 walkConfigNodes :: FilePath -> ZKConfigStream
-walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul" </> "config" </> "cache"
+walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
   where
     walkRecursive :: FilePath -> ZKConfigStream
     walkRecursive curPath = do
@@ -81,6 +85,14 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul" </> "config" </> 
       case zkDataE of
         Left err -> throwError $ ReadError err
         Right content -> pure content
+
+readSystemConfig :: FilePath -> IO (Either String ZKSystemConfig)
+readSystemConfig dumpPath = do
+  configE <- readC
+  pure $ ZKSystemConfig <$> configE
+  where
+    readC :: IO (Either String Value)
+    readC = eitherDecodeFileStrict $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
 
 mkZKConfig :: Value -> FilePath -> Maybe ZKConfig
 mkZKConfig zkJSONData path = do

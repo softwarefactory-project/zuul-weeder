@@ -1,0 +1,56 @@
+{
+    "system_attributes": {
+        "default_ansible_version": null,
+        "default_hold_expiration": 86400,
+        "max_hold_expiration": 0,
+        "use_relative_priority": false,
+        "web_root": "https://sftests.com/zuul/t/{tenant.name}/",
+        "web_status_url": "",
+        "websocket_url": null
+    },
+    "unparsed_abide": {
+        "admin_rules": [
+            {
+                "conditions": [
+                    {
+                        "groups": "config-ptl"
+                    },
+                    {
+                        "groups": "config-core"
+                    }
+                ],
+                "name": "config-acl"
+            }
+        ],
+        "tenants": {
+            "local": {
+                "max-job-timeout": 10800,
+                "name": "local",
+                "report-build-page": true,
+                "source": {
+                    "gerrit": {
+                        "config-projects": [
+                            {
+                                "config": {}
+                            }
+                        ],
+                        "untrusted-projects": [
+                            {
+                                "sf-jobs": {}
+                            },
+                            {
+                                "zuul-jobs": {
+                                    "include": [
+                                        "job"
+                                    ],
+                                    "shadow": "sf-jobs"
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        "uuid": "b748d19f1c674b29b728d81e79520635"
+    }
+}
