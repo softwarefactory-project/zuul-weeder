@@ -40,7 +40,9 @@ newtype NodesetName = NodesetName Text
   deriving (Eq, Ord, Show)
   deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance NodesetName)
 
-newtype NodeLabelName = NodeLabelName Text deriving (Eq, Ord, Show)
+newtype NodeLabelName = NodeLabelName Text
+  deriving (Eq, Ord, Show)
+  deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance NodeLabelName)
 
 newtype ProviderName = ProviderName Text deriving (Eq, Ord, Show)
 
@@ -110,12 +112,14 @@ data ZuulConfigElement
   | ZNodeset Nodeset
   | ZProjectTemplate ProjectPipeline
   | ZPipeline Pipeline
+  | ZNodeLabel NodeLabelName
   deriving (Show, Eq, Ord)
 
 instance Data.Text.Display.Display ZuulConfigElement where
   displayBuilder zce = case zce of
     ZJob job -> Data.Text.Display.displayBuilder $ jobName job
     ZNodeset ns -> Data.Text.Display.displayBuilder $ nodesetName ns
+    ZNodeLabel label -> Data.Text.Display.displayBuilder label
     _ -> TB.fromText "unknown"
 
 newtype ConfigPath = ConfigPath FilePath deriving (Show, Eq, Ord)
@@ -140,6 +144,7 @@ type ConfigMap a b = Map a [(ConfigLoc, b)]
 data Config = Config
   { configJobs :: ConfigMap JobName Job,
     configNodesets :: ConfigMap NodesetName Nodeset,
+    configNodelabels :: ConfigMap NodeLabelName NodeLabelName,
     configProjectPipelines :: ConfigMap Project ProjectPipeline,
     configProjectTemplates :: ConfigMap Project ProjectPipeline,
     configPipelines :: ConfigMap PipelineName Pipeline,
@@ -150,10 +155,13 @@ data Config = Config
 updateTopConfig :: ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
 updateTopConfig configLoc ze = case ze of
   ZJob job -> #configJobs %= insertConfig (jobName job) job
-  ZNodeset node -> #configNodesets %= insertConfig (nodesetName node) node
+  ZNodeset node -> do
+    #configNodesets %= insertConfig (nodesetName node) node
+    traverse_ (\v -> #configNodelabels %= insertConfig v v) $ Data.Set.fromList (nodesetLabels node)
   ZProjectPipeline project -> #configProjectPipelines %= insertConfig (pName project) project
   ZProjectTemplate template -> #configProjectTemplates %= insertConfig (pName template) template
   ZPipeline pipeline -> #configPipelines %= insertConfig (pipelineName pipeline) pipeline
+  ZNodeLabel _ -> pure ()
   where
     insertConfig :: Ord a => a -> b -> ConfigMap a b -> ConfigMap a b
     insertConfig k v = Data.Map.insertWith mappend k [(configLoc, v)]
@@ -320,4 +328,4 @@ loadConfig zkcE = do
        in traverse_ (updateTopConfig configLoc) zkcDecoded
 
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty

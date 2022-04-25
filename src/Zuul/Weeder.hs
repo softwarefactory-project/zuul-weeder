@@ -14,11 +14,22 @@ import qualified Data.Maybe
 import qualified Data.Set
 import Data.Text (Text, pack, unpack)
 import Data.Text.Display (display)
+import Debug.Trace
 import GHC.Generics (Generic)
 import Streaming
 import qualified Streaming.Prelude as S
 import System.Environment
-import Zuul.ConfigLoader (Config (..), ConfigLoc (..), Job (..), JobName (..), JobNodeset (..), NodesetName (..), ZuulConfigElement (..))
+import Zuul.ConfigLoader
+  ( Config (..),
+    ConfigLoc (..),
+    Job (..),
+    JobName (..),
+    JobNodeset (..),
+    NodeLabelName (NodeLabelName),
+    Nodeset (..),
+    NodesetName (..),
+    ZuulConfigElement (..),
+  )
 import qualified Zuul.ConfigLoader
 import Zuul.ZKDump
 
@@ -86,6 +97,9 @@ findVertex "job" name config = case Data.Map.lookup (JobName name) (configJobs c
 findVertex "nodeset" name config = case Data.Map.lookup (NodesetName name) (configNodesets config) of
   Just [(loc, x)] -> Just (loc, ZNodeset x)
   _ -> Nothing
+findVertex "nodelabel" name config = case Data.Map.lookup (NodeLabelName name) (configNodelabels config) of
+  Just [(loc, x)] -> Just (loc, ZNodeLabel x)
+  _ -> trace (show $ configNodelabels config) Nothing
 findVertex _ _ _ = Nothing
 
 findReachable :: Vertex -> ConfigGraph -> Data.Set.Set Vertex
@@ -105,6 +119,13 @@ analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebr
     go :: State Analysis ()
     go = do
       goJobs $ filterElems $ concat $ Data.Map.elems $ configJobs config
+      goNodesets $ filterElems $ concat $ Data.Map.elems $ configNodesets config
+
+    goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
+    goNodesets nodesets = do
+      forM_ nodesets $ \(loc, nodeset) -> do
+        forM_ (nodesetLabels nodeset) $ \label -> do
+          feedState ((loc, ZNodeset nodeset), (loc, ZNodeLabel label))
 
     goJobs :: [(ConfigLoc, Job)] -> State Analysis ()
     goJobs jobs = do
@@ -130,11 +151,11 @@ analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebr
           case Data.Map.lookup dJob' (configJobs config) of
             Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, ZJob job), (loc', ZJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
-      where
-        feedState :: (Vertex, Vertex) -> State Analysis ()
-        feedState (a, b) = do
-          #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
-          #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
+
+    feedState :: (Vertex, Vertex) -> State Analysis ()
+    feedState (a, b) = do
+      #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
+      #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
 
 -- look for semaphore, secret, ...
 -- pure ()
