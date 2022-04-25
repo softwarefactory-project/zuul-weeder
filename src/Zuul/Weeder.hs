@@ -113,6 +113,14 @@ analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebr
           _ ->
             -- Ignore inlined nodeset
             pure ()
+        -- look for job parent
+        case jobParent job of
+          Just parent -> do
+            case Data.Map.lookup parent (configJobs config) of
+              Just xs -> forM_ xs $ \(loc', pj) -> do
+                #configGraph %= Algebra.Graph.overlay (Algebra.Graph.circuit [(loc', ZJob pj), (loc, ZJob job)])
+              Nothing -> #graphErrors %= (("Can't find : " <> show job) :)
+          Nothing -> pure ()
 
         -- look for semaphore, secret, ...
         pure ()
