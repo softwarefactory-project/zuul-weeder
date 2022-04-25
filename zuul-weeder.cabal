@@ -39,7 +39,6 @@ common common-options
 library
   import:              common-options
   build-depends:       aeson < 2
-                     , dhall
                      , algebraic-graphs
                      , mtl
                      , lens
