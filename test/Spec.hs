@@ -8,6 +8,7 @@ import qualified Data.Yaml as Y (decodeFileEither)
 import System.FilePath ((</>))
 import Test.Tasty
 import Test.Tasty.HUnit
+import Zuul.Config (Connection (Connection, connCName, connName), ConnectionCName (ConnectionCName), readConnections)
 import Zuul.ConfigLoader
   ( BranchName (BranchName),
     CanonicalProjectName (CanonicalProjectName),
@@ -65,7 +66,8 @@ tests =
       testCase "Decode Nodesets config" decodeNodesetsConfig,
       testCase "Decode Project templates config" decodeProjectTemplatesConfig,
       testCase "Decode Pipeline config" decodePipelineConfig,
-      testCase "Decode Tenant config" decodeTenants
+      testCase "Decode Tenant config" decodeTenants,
+      testCase "Decode Connections config" decodeConnections
     ]
   where
     extractDataZKPath =
@@ -138,3 +140,8 @@ tests =
           expected = [(TenantName "local", TenantConfig {connections = Data.Map.fromList [(ConnectionName "gerrit", TenantConnectionConfig {configProjects = [ProjectName "config"], untrustedProjects = [ProjectName "sf-jobs", ProjectName "zuul-jobs"]})]})]
 
       assertEqual "Expect data extracted from Pipeline Config elements" expected (Data.Map.toList $ tenants decoded)
+
+    decodeConnections = do
+      conns <- readConnections $ fixturesPath </> "zuul.conf"
+      let expected = [Connection {connName = ConnectionName "gerrit", connCName = ConnectionCName "sftests.com"}]
+      assertEqual "Expect connections extracted from Zuul.conf" expected conns

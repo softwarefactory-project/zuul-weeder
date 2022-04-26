@@ -54,11 +54,13 @@ library
                      , containers
                      , unordered-containers
                      , vector
+                     , ini
   hs-source-dirs:      src
   exposed-modules:     Zuul.Weeder
                      , Zuul.ZKDump
                      , Zuul.ConfigLoader
                      , Zuul.Tenant
+                     , Zuul.Config
 
 executable zuul-weeder
   import:              common-options
