@@ -8,7 +8,7 @@ import qualified Data.Yaml as Y (decodeFileEither)
 import System.FilePath ((</>))
 import Test.Tasty
 import Test.Tasty.HUnit
-import Zuul.Config (Connection (Connection, connCName, connName), ConnectionCName (ConnectionCName), readConnections)
+import Zuul.Config (ConnectionCName (ConnectionCName), readConnections)
 import Zuul.ConfigLoader
   ( BranchName (BranchName),
     CanonicalProjectName (CanonicalProjectName),
@@ -143,5 +143,5 @@ tests =
 
     decodeConnections = do
       conns <- readConnections $ fixturesPath </> "zuul.conf"
-      let expected = [Connection {connName = ConnectionName "gerrit", connCName = ConnectionCName "sftests.com"}]
-      assertEqual "Expect connections extracted from Zuul.conf" expected conns
+      let expected = [(ConnectionName "gerrit", ConnectionCName "sftests.com")]
+      assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conns)
