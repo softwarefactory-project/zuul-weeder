@@ -36,7 +36,9 @@
                         ],
                         "untrusted-projects": [
                             {
-                                "sf-jobs": {}
+                                "sf-jobs": {
+                                    "exclude": "pipeline"
+                                }
                             },
                             {
                                 "zuul-jobs": {
@@ -44,6 +46,11 @@
                                         "job"
                                     ],
                                     "shadow": "sf-jobs"
+                                }
+                            },
+                            {
+                                "zuul-distro-jobs": {
+                                    "include": []
                                 }
                             }
                         ]

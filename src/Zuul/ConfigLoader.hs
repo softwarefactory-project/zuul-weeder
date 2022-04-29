@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedLabels #-}
 
--- |
 module Zuul.ConfigLoader where
 
 import Control.Lens ((%=))
@@ -291,18 +290,16 @@ decodeConfig (project, _branch) zkJSONData =
     getKey hm = case take 1 $ HM.keys hm of
       (keyName : _) -> keyName
       [] -> error $ "Unable to get Object key on: " <> show hm
-    getString :: Value -> Text
-    getString va = case va of
-      String str -> str
-      _ -> error $ "Expected a String out of JSON value: " <> show va
-    decodeAsList :: Text -> (Text -> a) -> Object -> [a]
-    decodeAsList k build va = case HM.lookup k va of
-      Just (String x) -> [build x]
-      Just (Array xs) -> build . getString <$> sort (V.toList xs)
-      Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
-      Nothing -> []
+
     getName :: Object -> Text
     getName = getString . getObjValue "name"
+
+decodeAsList :: Text -> (Text -> a) -> Object -> [a]
+decodeAsList k build va = case HM.lookup k va of
+  Just (String x) -> [build x]
+  Just (Array xs) -> build . getString <$> sort (V.toList xs)
+  Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
+  Nothing -> []
 
 unwrapObject :: Value -> Object
 unwrapObject va = case va of
@@ -314,9 +311,13 @@ getObjValue k hm = case HM.lookup k hm of
   Just va -> va
   Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object"
 
+getString :: Value -> Text
+getString va = case va of
+  String str -> str
+  _ -> error $ "Expected a String out of JSON value: " <> show va
+
 loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
 loadConfig zkcE = do
-  -- liftIO $ putStrLn $ "Loading " <> show zkcE
   case zkcE of
     Left e -> #configErrors %= (e :)
     Right zkc ->

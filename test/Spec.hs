@@ -33,7 +33,7 @@ import Zuul.ConfigLoader
     ZuulConfigElement (ZJob, ZNodeset, ZPipeline, ZProjectPipeline, ZProjectTemplate),
     decodeConfig,
   )
-import Zuul.Tenant (TenantConfig (..), TenantConnectionConfig (..), TenantsConfig (..), decodeTenantsConfig, getTenantProjects)
+import Zuul.Tenant (ProjectNameWithOptions (ProjectNameWithOptions, includedConfigElements, projectName), TenantConfig (..), TenantConnectionConfig (..), TenantsConfig (..), ZuulConfigType (..), decodeTenantsConfig, getTenantProjects)
 import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
 
 main :: IO ()
@@ -138,7 +138,7 @@ tests =
     decodeTenants = do
       json <- loadJSONFixture "system-config"
       let decoded = decodeTenantsConfig (ZKSystemConfig json)
-          expected = [(TenantName "local", TenantConfig {connections = Data.Map.fromList [(ConnectionName "gerrit", TenantConnectionConfig {configProjects = [ProjectName "config"], untrustedProjects = [ProjectName "sf-jobs", ProjectName "zuul-jobs"]})]})]
+          expected = [(TenantName "local", TenantConfig {connections = Data.Map.fromList [(ConnectionName "gerrit", TenantConnectionConfig {configProjects = [ProjectNameWithOptions {projectName = ProjectName "config", includedConfigElements = Data.Set.fromList [PipelineT, JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]}], untrustedProjects = [ProjectNameWithOptions {projectName = ProjectName "sf-jobs", includedConfigElements = Data.Set.fromList [JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]}, ProjectNameWithOptions {projectName = ProjectName "zuul-jobs", includedConfigElements = Data.Set.fromList [JobT]}, ProjectNameWithOptions {projectName = ProjectName "zuul-distro-jobs", includedConfigElements = Data.Set.fromList []}]})]})]
 
       assertEqual "Expect data extracted from Pipeline Config elements" expected (Data.Map.toList $ tenants decoded)
 
@@ -153,6 +153,6 @@ tests =
       let tenantsConfig = decodeTenantsConfig (ZKSystemConfig json)
           tenantConfig = getTenantProjects conns tenantsConfig (TenantName "local")
           tenantConfigAlt = getTenantProjects conns tenantsConfig (TenantName "unknown")
-          expected = Just [CanonicalProjectName (ProviderName "sftests.com", ProjectName "config"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-jobs"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-jobs")]
+          expected = Just [CanonicalProjectName (ProviderName "sftests.com", ProjectName "config"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-jobs"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-jobs"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-distro-jobs")]
       assertEqual "Expect tenant projects" expected tenantConfig
       assertEqual "Expect empty tenant projects" Nothing tenantConfigAlt

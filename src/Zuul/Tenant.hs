@@ -2,8 +2,10 @@ module Zuul.Tenant where
 
 import Control.Lens
 import qualified Data.Aeson
-import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
+import qualified Data.HashMap.Strict as HM (lookup, toList)
 import qualified Data.Map
+import Data.Maybe (isJust)
+import qualified Data.Set
 import qualified Data.Text
 import qualified Data.Vector as V
 import Zuul.Config (ConfigConnections, ConnectionCName (ConnectionCName))
@@ -13,14 +15,45 @@ import Zuul.ConfigLoader
     ProjectName (ProjectName),
     ProviderName (ProviderName),
     TenantName (TenantName),
+    decodeAsList,
     getObjValue,
     unwrapObject,
   )
 import Zuul.ZKDump (ZKSystemConfig (..))
 
+data ZuulConfigType
+  = PipelineT
+  | JobT
+  | SemaphoreT
+  | ProjectT
+  | ProjectTemplateT
+  | NodesetT
+  | SecretT
+  deriving (Show, Eq, Ord, Enum, Bounded)
+
+allItems :: Data.Set.Set ZuulConfigType
+allItems = Data.Set.fromList [minBound .. maxBound]
+
+toItemType :: Data.Text.Text -> ZuulConfigType
+toItemType name = case name of
+  "pipeline" -> PipelineT
+  "job" -> JobT
+  "semaphore" -> SemaphoreT
+  "project" -> ProjectT
+  "project-template" -> ProjectTemplateT
+  "nodeset" -> NodesetT
+  "secret" -> SecretT
+  _type -> error $ "Unexpected configuration item type: " <> Data.Text.unpack _type
+
+data ProjectNameWithOptions = ProjectNameWithOptions
+  { projectName :: ProjectName,
+    includedConfigElements :: Data.Set.Set ZuulConfigType
+  }
+  deriving (Show, Eq, Ord)
+
 data TenantConnectionConfig = TenantConnectionConfig
-  { configProjects :: [ProjectName],
-    untrustedProjects :: [ProjectName]
+  { configProjects :: [ProjectNameWithOptions],
+    untrustedProjects :: [ProjectNameWithOptions]
   }
   deriving (Show, Eq, Ord)
 
@@ -73,10 +106,22 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
           untrustedProjects = getProjects "untrusted-projects"
        in TenantConnectionConfig {..}
       where
-        getProjects :: Data.Text.Text -> [ProjectName]
+        getProjects :: Data.Text.Text -> [ProjectNameWithOptions]
         getProjects ptype = case HM.lookup ptype $ unwrapObject cnx of
-          Just (Data.Aeson.Array vec) -> ProjectName <$> concatMap (HM.keys . unwrapObject) (V.toList vec)
+          Just (Data.Aeson.String name) -> [ProjectNameWithOptions (ProjectName name) mempty]
+          Just (Data.Aeson.Array vec) -> getProject <$> concatMap (HM.toList . unwrapObject) (V.toList vec)
           _ -> []
+        -- TODO: support https://zuul-ci.org/docs/zuul/latest/tenants.html#attr-tenant.untrusted-projects.%3Cproject-group%3E
+        getProject :: (Data.Text.Text, Data.Aeson.Value) -> ProjectNameWithOptions
+        getProject (name, options') =
+          let options = unwrapObject options'
+              included = Data.Set.fromList $ toItemType <$> decodeAsList "include" id options
+              excluded = Data.Set.fromList $ toItemType <$> decodeAsList "exclude" id options
+              includedElements
+                | isJust $ HM.lookup "include" options = included
+                | isJust $ HM.lookup "exclude" options = Data.Set.difference allItems excluded
+                | otherwise = allItems
+           in ProjectNameWithOptions (ProjectName name) includedElements
 
 getTenantProjects :: ConfigConnections -> TenantsConfig -> TenantName -> Maybe [CanonicalProjectName]
 getTenantProjects connections tenantsConfig tenantName =
@@ -90,4 +135,4 @@ getTenantProjects connections tenantsConfig tenantName =
           providerName = case Data.Map.lookup connectionName connections of
             Just (ConnectionCName pn) -> ProviderName pn
             Nothing -> error "Unable to find project connection's provider name"
-       in (\project -> CanonicalProjectName (providerName, project)) <$> projects
+       in (\project -> CanonicalProjectName (providerName, project)) <$> (projectName <$> projects)
