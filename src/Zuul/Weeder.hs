@@ -20,8 +20,7 @@ import qualified Streaming.Prelude as S
 import System.Environment
 import Zuul.Config (readConnections)
 import Zuul.ConfigLoader
-  ( CanonicalProjectName,
-    Config (..),
+  ( Config (..),
     ConfigLoc (..),
     Job (..),
     JobName (..),
@@ -33,7 +32,7 @@ import Zuul.ConfigLoader
     ZuulConfigElement (..),
   )
 import qualified Zuul.ConfigLoader
-import Zuul.Tenant (decodeTenantsConfig, getTenantProjects)
+import Zuul.Tenant (TenantProjects, ZuulConfigType (JobT, NodesetT), decodeTenantsConfig, getTenantProjects)
 import Zuul.ZKDump
 
 data Command
@@ -73,14 +72,14 @@ runCommand zkDumpPath configPath tenant command = do
       WhatRequireDot graph -> outputDot config tenantProjects graph
       WhatDependsOnDot graph -> outputDot config tenantProjects graph
 
-outputDot :: Config -> [CanonicalProjectName] -> (Analysis -> ConfigGraph) -> IO ()
+outputDot :: Config -> TenantProjects -> (Analysis -> ConfigGraph) -> IO ()
 outputDot config tenantProjects graph = do
   let x = analyzeConfig (filterTenant tenantProjects) config
   let style = Algebra.Graph.Export.Dot.defaultStyle Data.Text.Display.display
   let dot = Algebra.Graph.Export.Dot.export style (graph x)
   putStrLn $ unpack dot
 
-printReachable :: Config -> [CanonicalProjectName] -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
+printReachable :: Config -> TenantProjects -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
 printReachable config tenantProjects key name graph = do
   let vertex =
         Data.Maybe.fromMaybe (error "Can't find") $
@@ -103,7 +102,7 @@ loadConfig =
     -- Stream (Of ZKConfig) IO
     . walkConfigNodes
 
-loadTenantProjects :: FilePath -> FilePath -> TenantName -> IO (Maybe [CanonicalProjectName])
+loadTenantProjects :: FilePath -> FilePath -> TenantName -> IO (Maybe TenantProjects)
 loadTenantProjects dumpPath configPath tenantName = do
   connections <- readConnections configPath
   systemConfigE <- readSystemConfig dumpPath
@@ -137,20 +136,25 @@ findVertex _ _ _ = Nothing
 findReachable :: Vertex -> ConfigGraph -> Data.Set.Set Vertex
 findReachable v = Data.Set.fromList . Algebra.Graph.ToGraph.reachable v
 
-filterTenant :: [CanonicalProjectName] -> ConfigLoc -> Bool
-filterTenant tenantProjects (ConfigLoc (project, _, _)) = project `elem` tenantProjects
+filterTenant :: TenantProjects -> ConfigLoc -> ZuulConfigType -> Bool
+filterTenant tenantProjects (ConfigLoc (project, _, _)) itemType =
+  let matches = filter (\p -> fst p == project) tenantProjects
+   in case matches of
+        [] -> False
+        [match] -> itemType `elem` snd match
+        _ -> error "Unexpected Config location not found"
 
-analyzeConfig :: (ConfigLoc -> Bool) -> Config -> Analysis
+analyzeConfig :: (ConfigLoc -> ZuulConfigType -> Bool) -> Config -> Analysis
 analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
   where
     -- TODO: We need to handle included/excluded config type (and shadow)
-    filterElems :: [(ConfigLoc, a)] -> [(ConfigLoc, a)]
-    filterElems = filter (\(cl, _) -> filterConfig cl)
+    filterElems :: ZuulConfigType -> [(ConfigLoc, a)] -> [(ConfigLoc, a)]
+    filterElems itemType = filter (\(cl, _) -> filterConfig cl itemType)
 
     go :: State Analysis ()
     go = do
-      goJobs $ filterElems $ concat $ Data.Map.elems $ configJobs config
-      goNodesets $ filterElems $ concat $ Data.Map.elems $ configNodesets config
+      goJobs $ filterElems JobT $ concat $ Data.Map.elems $ configJobs config
+      goNodesets $ filterElems NodesetT $ concat $ Data.Map.elems $ configNodesets config
 
     goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
     goNodesets nodesets = do

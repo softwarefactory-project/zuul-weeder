@@ -153,6 +153,6 @@ tests =
       let tenantsConfig = decodeTenantsConfig (ZKSystemConfig json)
           tenantConfig = getTenantProjects conns tenantsConfig (TenantName "local")
           tenantConfigAlt = getTenantProjects conns tenantsConfig (TenantName "unknown")
-          expected = Just [CanonicalProjectName (ProviderName "sftests.com", ProjectName "config"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-jobs"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-jobs"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-distro-jobs")]
+          expected = Just [(CanonicalProjectName (ProviderName "sftests.com", ProjectName "config"), [PipelineT, JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]), (CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-jobs"), [JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]), (CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-jobs"), [JobT]), (CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-distro-jobs"), [])]
       assertEqual "Expect tenant projects" expected tenantConfig
       assertEqual "Expect empty tenant projects" Nothing tenantConfigAlt

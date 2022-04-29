@@ -51,6 +51,8 @@ data ProjectNameWithOptions = ProjectNameWithOptions
   }
   deriving (Show, Eq, Ord)
 
+type TenantProjects = [(CanonicalProjectName, [ZuulConfigType])]
+
 data TenantConnectionConfig = TenantConnectionConfig
   { configProjects :: [ProjectNameWithOptions],
     untrustedProjects :: [ProjectNameWithOptions]
@@ -123,16 +125,21 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
                 | otherwise = allItems
            in ProjectNameWithOptions (ProjectName name) includedElements
 
-getTenantProjects :: ConfigConnections -> TenantsConfig -> TenantName -> Maybe [CanonicalProjectName]
+getTenantProjects :: ConfigConnections -> TenantsConfig -> TenantName -> Maybe TenantProjects
 getTenantProjects connections tenantsConfig tenantName =
   let tenantConfig = Data.Map.lookup tenantName $ view tenantsConfigL tenantsConfig
       tenantLayout = Data.Map.toList <$> (view tenantConfigL <$> tenantConfig)
    in concatMap extractProject <$> tenantLayout
   where
-    extractProject :: (ConnectionName, TenantConnectionConfig) -> [CanonicalProjectName]
+    extractProject :: (ConnectionName, TenantConnectionConfig) -> TenantProjects
     extractProject (connectionName, TenantConnectionConfig {..}) =
       let projects = configProjects <> untrustedProjects
           providerName = case Data.Map.lookup connectionName connections of
             Just (ConnectionCName pn) -> ProviderName pn
             Nothing -> error "Unable to find project connection's provider name"
-       in (\project -> CanonicalProjectName (providerName, project)) <$> (projectName <$> projects)
+       in ( \ProjectNameWithOptions {..} ->
+              ( CanonicalProjectName (providerName, projectName),
+                Data.Set.toList includedConfigElements
+              )
+          )
+            <$> projects
