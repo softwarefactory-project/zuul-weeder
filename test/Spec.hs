@@ -33,7 +33,7 @@ import Zuul.ConfigLoader
     ZuulConfigElement (ZJob, ZNodeset, ZPipeline, ZProjectPipeline, ZProjectTemplate),
     decodeConfig,
   )
-import Zuul.Tenant (TenantConfig (..), TenantConnectionConfig (..), TenantsConfig (..), decodeTenantsConfig)
+import Zuul.Tenant (TenantConfig (..), TenantConnectionConfig (..), TenantsConfig (..), decodeTenantsConfig, getTenantProjects)
 import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
 
 main :: IO ()
@@ -67,7 +67,8 @@ tests =
       testCase "Decode Project templates config" decodeProjectTemplatesConfig,
       testCase "Decode Pipeline config" decodePipelineConfig,
       testCase "Decode Tenant config" decodeTenants,
-      testCase "Decode Connections config" decodeConnections
+      testCase "Decode Connections config" decodeConnections,
+      testCase "Get Tenant projects" testGetTenantProjects
     ]
   where
     extractDataZKPath =
@@ -145,3 +146,13 @@ tests =
       conns <- readConnections $ fixturesPath </> "zuul.conf"
       let expected = [(ConnectionName "gerrit", ConnectionCName "sftests.com")]
       assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conns)
+
+    testGetTenantProjects = do
+      conns <- readConnections $ fixturesPath </> "zuul.conf"
+      json <- loadJSONFixture "system-config"
+      let tenantsConfig = decodeTenantsConfig (ZKSystemConfig json)
+          tenantConfig = getTenantProjects conns tenantsConfig (TenantName "local")
+          tenantConfigAlt = getTenantProjects conns tenantsConfig (TenantName "unknown")
+          expected = Just [CanonicalProjectName (ProviderName "sftests.com", ProjectName "config"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-jobs"), CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-jobs")]
+      assertEqual "Expect tenant projects" expected tenantConfig
+      assertEqual "Expect empty tenant projects" Nothing tenantConfigAlt

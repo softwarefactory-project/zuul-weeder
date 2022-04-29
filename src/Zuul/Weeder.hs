@@ -18,8 +18,10 @@ import GHC.Generics (Generic)
 import Streaming
 import qualified Streaming.Prelude as S
 import System.Environment
+import Zuul.Config (readConnections)
 import Zuul.ConfigLoader
-  ( Config (..),
+  ( CanonicalProjectName,
+    Config (..),
     ConfigLoc (..),
     Job (..),
     JobName (..),
@@ -27,40 +29,63 @@ import Zuul.ConfigLoader
     NodeLabelName (NodeLabelName),
     Nodeset (..),
     NodesetName (..),
+    TenantName (TenantName),
     ZuulConfigElement (..),
   )
 import qualified Zuul.ConfigLoader
+import Zuul.Tenant (decodeTenantsConfig, getTenantProjects)
 import Zuul.ZKDump
 
+data Command
+  = WhatRequire Text Text (Analysis -> ConfigGraph)
+  | WhatDependsOn Text Text (Analysis -> ConfigGraph)
+  | WhatRequireDot (Analysis -> ConfigGraph)
+  | WhatDependsOnDot (Analysis -> ConfigGraph)
+
+-- TODO: Implement a proper command line parser
 main :: IO ()
 main = do
   args <- map pack <$> getArgs
   case args of
-    [path, "what-require", key, name] -> printReachable (unpack path) key name configRequireGraph
-    [path, "what-depends-on", key, name] -> printReachable (unpack path) key name configDependsOnGraph
-    [path, "require-dot"] -> outputDot (unpack path) configRequireGraph
-    [path, "depends-on-dot"] -> outputDot (unpack path) configDependsOnGraph
+    [zkPath, configPath, tenant, "what-require", key, name] -> do
+      let cmd = WhatRequire key name configRequireGraph
+       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+    [zkPath, configPath, tenant, "what-depends-on", key, name] -> do
+      let cmd = WhatDependsOn key name configDependsOnGraph
+       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+    [zkPath, configPath, tenant, "what-require-dot"] -> do
+      let cmd = WhatRequireDot configRequireGraph
+       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+    [zkPath, configPath, tenant, "what-depends-on-dot"] -> do
+      let cmd = WhatDependsOnDot configDependsOnGraph
+       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
     _ -> putStrLn "usage: zuul-weeder path"
 
--- TODO
-tenant :: Tenant
-tenant = Tenant
+runCommand :: FilePath -> FilePath -> TenantName -> Command -> IO ()
+runCommand zkDumpPath configPath tenant command = do
+  config <- loadConfig zkDumpPath
+  tenantProjectsM <- loadTenantProjects zkDumpPath configPath tenant
+  case tenantProjectsM of
+    Nothing -> print $ "Unable to find tenant: " <> show tenant
+    Just tenantProjects -> case command of
+      WhatRequire key name graph -> printReachable config tenantProjects key name graph
+      WhatDependsOn key name graph -> printReachable config tenantProjects key name graph
+      WhatRequireDot graph -> outputDot config tenantProjects graph
+      WhatDependsOnDot graph -> outputDot config tenantProjects graph
 
-outputDot :: FilePath -> (Analysis -> ConfigGraph) -> IO ()
-outputDot path graph = do
-  config <- loadConfig path
-  let x = analyzeConfig (filterTenant tenant) config
+outputDot :: Config -> [CanonicalProjectName] -> (Analysis -> ConfigGraph) -> IO ()
+outputDot config tenantProjects graph = do
+  let x = analyzeConfig (filterTenant tenantProjects) config
   let style = Algebra.Graph.Export.Dot.defaultStyle Data.Text.Display.display
   let dot = Algebra.Graph.Export.Dot.export style (graph x)
   putStrLn $ unpack dot
 
-printReachable :: FilePath -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
-printReachable path key name graph = do
-  config <- loadConfig path
+printReachable :: Config -> [CanonicalProjectName] -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
+printReachable config tenantProjects key name graph = do
   let vertex =
         Data.Maybe.fromMaybe (error "Can't find") $
           findVertex key name config
-      analyzis = analyzeConfig (filterTenant tenant) config
+      analyzis = analyzeConfig (filterTenant tenantProjects) config
       reachables =
         findReachable vertex (graph analyzis)
   forM_ reachables $ \(loc, obj) -> do
@@ -77,6 +102,14 @@ loadConfig =
     . hoist lift
     -- Stream (Of ZKConfig) IO
     . walkConfigNodes
+
+loadTenantProjects :: FilePath -> FilePath -> TenantName -> IO (Maybe [CanonicalProjectName])
+loadTenantProjects dumpPath configPath tenantName = do
+  connections <- readConnections configPath
+  systemConfigE <- readSystemConfig dumpPath
+  case systemConfigE of
+    Left s -> error $ "Unable to read the tenant config from the ZK dump: " <> s
+    Right zsc -> pure $ getTenantProjects connections (decodeTenantsConfig zsc) tenantName
 
 type Vertex = (Zuul.ConfigLoader.ConfigLoc, Zuul.ConfigLoader.ZuulConfigElement)
 
@@ -104,14 +137,13 @@ findVertex _ _ _ = Nothing
 findReachable :: Vertex -> ConfigGraph -> Data.Set.Set Vertex
 findReachable v = Data.Set.fromList . Algebra.Graph.ToGraph.reachable v
 
-data Tenant = Tenant -- TODO, move to a TenantConfig module
-
-filterTenant :: Tenant -> ConfigLoc -> Bool
-filterTenant _ = const True
+filterTenant :: [CanonicalProjectName] -> ConfigLoc -> Bool
+filterTenant tenantProjects (ConfigLoc (project, _, _)) = project `elem` tenantProjects
 
 analyzeConfig :: (ConfigLoc -> Bool) -> Config -> Analysis
 analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
   where
+    -- TODO: We need to handle included/excluded config type (and shadow)
     filterElems :: [(ConfigLoc, a)] -> [(ConfigLoc, a)]
     filterElems = filter (\(cl, _) -> filterConfig cl)
 

@@ -6,9 +6,12 @@ import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import qualified Data.Map
 import qualified Data.Text
 import qualified Data.Vector as V
+import Zuul.Config (ConfigConnections, ConnectionCName (ConnectionCName))
 import Zuul.ConfigLoader
-  ( ConnectionName (ConnectionName),
+  ( CanonicalProjectName (CanonicalProjectName),
+    ConnectionName (ConnectionName),
     ProjectName (ProjectName),
+    ProviderName (ProviderName),
     TenantName (TenantName),
     getObjValue,
     unwrapObject,
@@ -74,3 +77,17 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
         getProjects ptype = case HM.lookup ptype $ unwrapObject cnx of
           Just (Data.Aeson.Array vec) -> ProjectName <$> concatMap (HM.keys . unwrapObject) (V.toList vec)
           _ -> []
+
+getTenantProjects :: ConfigConnections -> TenantsConfig -> TenantName -> Maybe [CanonicalProjectName]
+getTenantProjects connections tenantsConfig tenantName =
+  let tenantConfig = Data.Map.lookup tenantName $ view tenantsConfigL tenantsConfig
+      tenantLayout = Data.Map.toList <$> (view tenantConfigL <$> tenantConfig)
+   in concatMap extractProject <$> tenantLayout
+  where
+    extractProject :: (ConnectionName, TenantConnectionConfig) -> [CanonicalProjectName]
+    extractProject (connectionName, TenantConnectionConfig {..}) =
+      let projects = configProjects <> untrustedProjects
+          providerName = case Data.Map.lookup connectionName connections of
+            Just (ConnectionCName pn) -> ProviderName pn
+            Nothing -> error "Unable to find project connection's provider name"
+       in (\project -> CanonicalProjectName (providerName, project)) <$> projects

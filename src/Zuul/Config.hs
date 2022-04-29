@@ -11,7 +11,9 @@ newtype ConnectionCName = ConnectionCName Data.Text.Text deriving (Show, Eq, Ord
 
 type ConfigSection = (Data.Text.Text, [(Data.Text.Text, Data.Text.Text)])
 
-readConnections :: FilePath -> IO (Map ConnectionName ConnectionCName)
+type ConfigConnections = Map ConnectionName ConnectionCName
+
+readConnections :: FilePath -> IO ConfigConnections
 readConnections fp = do
   iniE <- Data.Ini.readIniFile fp
   case iniE of
