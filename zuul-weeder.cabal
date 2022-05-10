@@ -16,6 +16,7 @@ category:            Development
 build-type:          Simple
 extra-doc-files:     CHANGELOG.md
                      README.md
+extra-source-files:  src/Zuul/UI.css src/Zuul/UI.js
 tested-with:         GHC == 8.10.7
 
 source-repository head
@@ -55,12 +56,20 @@ library
                      , unordered-containers
                      , vector
                      , ini
+                     -- UI
+                     , servant-server
+                     , wai
+                     , warp
+                     , lucid
+                     , servant-lucid
+                     , file-embed
   hs-source-dirs:      src
   exposed-modules:     Zuul.Weeder
                      , Zuul.ZKDump
                      , Zuul.ConfigLoader
                      , Zuul.Tenant
                      , Zuul.Config
+                     , Zuul.UI
 
 executable zuul-weeder
   import:              common-options

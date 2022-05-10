@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedLabels #-}
 
-module Zuul.Weeder (main) where
+module Zuul.Weeder (main, mainWithArgs) where
 
 import qualified Algebra.Graph
 import qualified Algebra.Graph.Export.Dot
@@ -33,6 +33,7 @@ import Zuul.ConfigLoader
   )
 import qualified Zuul.ConfigLoader
 import Zuul.Tenant (TenantProjects, ZuulConfigType (JobT, NodesetT), decodeTenantsConfig, getTenantProjects)
+import qualified Zuul.UI
 import Zuul.ZKDump
 
 data Command
@@ -45,6 +46,10 @@ data Command
 main :: IO ()
 main = do
   args <- map pack <$> getArgs
+  mainWithArgs args
+
+mainWithArgs :: [Text] -> IO ()
+mainWithArgs args =
   case args of
     [zkPath, configPath, tenant, "what-require", key, name] -> do
       let cmd = WhatRequire key name configRequireGraph
@@ -58,6 +63,13 @@ main = do
     [zkPath, configPath, tenant, "what-depends-on-dot"] -> do
       let cmd = WhatDependsOnDot configDependsOnGraph
        in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+    [zkPath, _configPath, "webui"] -> do
+      config <- loadConfig (unpack zkPath)
+      -- TODO: manage tenant, e.g.
+      -- - add tenant info to config object?
+      -- - enable post processing filter?
+      let graph = configRequireGraph $ analyzeConfig (\_ _ -> True) config
+      Zuul.UI.run (toD3Graph graph)
     _ -> putStrLn "usage: zuul-weeder path"
 
 runCommand :: FilePath -> FilePath -> TenantName -> Command -> IO ()
@@ -120,6 +132,24 @@ data Analysis = Analysis
     graphErrors :: [String]
   }
   deriving (Show, Generic)
+
+toD3Graph :: ConfigGraph -> Zuul.UI.D3Graph
+toD3Graph g =
+  Zuul.UI.D3Graph
+    { Zuul.UI.nodes = toNodes <$> Algebra.Graph.vertexList g,
+      Zuul.UI.links = toLinks <$> Algebra.Graph.edgeList g
+    }
+  where
+    toNodes :: Vertex -> Zuul.UI.D3Node
+    toNodes (_, e) = Zuul.UI.D3Node (display e) $ case e of
+      ZJob _ -> 1
+      ZProjectPipeline _ -> 2
+      ZNodeset _ -> 3
+      ZProjectTemplate _ -> 4
+      ZPipeline _ -> 5
+      ZNodeLabel _ -> 6
+    toLinks :: (Vertex, Vertex) -> Zuul.UI.D3Link
+    toLinks ((_, a), (_, b)) = Zuul.UI.D3Link (display a) (display b)
 
 findVertex :: Text -> Text -> Zuul.ConfigLoader.Config -> Maybe Vertex
 findVertex "job" name config = case Data.Map.lookup (JobName name) (configJobs config) of
