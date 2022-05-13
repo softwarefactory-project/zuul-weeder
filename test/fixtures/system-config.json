@@ -27,6 +27,7 @@
                 "max-job-timeout": 10800,
                 "name": "local",
                 "report-build-page": true,
+                "default-parent": "base",
                 "source": {
                     "gerrit": {
                         "config-projects": [

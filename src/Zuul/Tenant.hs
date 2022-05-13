@@ -59,8 +59,9 @@ data TenantConnectionConfig = TenantConnectionConfig
   }
   deriving (Show, Eq, Ord)
 
-newtype TenantConfig = TenantConfig
-  { connections :: Data.Map.Map ConnectionName TenantConnectionConfig
+data TenantConfig = TenantConfig
+  { defaultParent :: Data.Text.Text,
+    connections :: Data.Map.Map ConnectionName TenantConnectionConfig
   }
   deriving (Show, Eq, Ord)
 
@@ -92,15 +93,19 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
 
     decodeTenant :: Data.Aeson.Value -> TenantConfig
     decodeTenant tenant =
-      let source = HM.toList $ unwrapObject $ getObjValue "source" $ unwrapObject tenant
-       in insertTenantConnections (TenantConfig Data.Map.empty) source
+      let tenantObject = unwrapObject tenant
+          source = HM.toList $ unwrapObject $ getObjValue "source" tenantObject
+          defaultParent = case getObjValue "default-parent" tenantObject of
+            Data.Aeson.String txt -> txt
+            _ -> "base"
+       in insertTenantConnections defaultParent (TenantConfig defaultParent Data.Map.empty) source
 
-    insertTenantConnections :: TenantConfig -> [(Data.Text.Text, Data.Aeson.Value)] -> TenantConfig
-    insertTenantConnections tc assocs = case assocs of
+    insertTenantConnections :: Data.Text.Text -> TenantConfig -> [(Data.Text.Text, Data.Aeson.Value)] -> TenantConfig
+    insertTenantConnections defaultParent tc assocs = case assocs of
       [] -> tc
       (cName, cData) : xs ->
         let new = over tenantConfigL (Data.Map.insert (ConnectionName cName) (decodeConnection cData)) tc
-         in insertTenantConnections new xs
+         in insertTenantConnections defaultParent new xs
 
     decodeConnection :: Data.Aeson.Value -> TenantConnectionConfig
     decodeConnection cnx =
