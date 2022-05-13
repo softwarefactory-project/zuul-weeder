@@ -1,16 +1,18 @@
 - project:
     check: &jobs
       jobs:
-        - cabal-test:
+        - run-test-command:
             vars:
-              ghc_version: 8.8
+              test_command:
+                - cabal build -O0 --enable-tests
+                - cabal test  -O0 --test-show-details=direct
             nodeset:
               nodes:
                 - name: container
-                  label: zuul-worker-haskell
+                  label: zuul-worker-haskell-ghc9
         - hlint:
             nodeset:
               nodes:
                 - name: container
-                  label: zuul-worker-haskell
+                  label: zuul-worker-haskell-ghc9
     gate: *jobs

@@ -1,28 +1,23 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedLabels #-}
-
 module Zuul.ConfigLoader where
 
 import Control.Lens ((%=))
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
+import Data.Aeson.Key qualified
+import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
-import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import Data.List (sort)
 import Data.Map (Map, insertWith)
-import Data.Maybe (mapMaybe)
-import qualified Data.Set
+import Data.Maybe (catMaybes, mapMaybe)
+import Data.Set qualified
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Display
-import qualified Data.Text.Lazy.Builder as TB
-import qualified Data.Vector as V
+import Data.Text qualified as T
+import Data.Text.Display qualified
+import Data.Text.Lazy.Builder qualified as TB
+import Data.Vector qualified as V
 import GHC.Generics (Generic)
-import qualified Witch
+import Witch qualified
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
 
 newtype BranchName = BranchName Text deriving (Eq, Ord, Show)
@@ -224,7 +219,7 @@ decodeConfig (project, _branch) zkJSONData =
     decodePipeline va =
       let pipelineName = PipelineName $ getName va
           pipelineTriggers = case getObjValue "trigger" va of
-            Object triggers -> PipelineTrigger . ConnectionName <$> HM.keys triggers
+            Object triggers -> PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggers
             _ -> error $ "Unexpected trigger value in: " <> show va
        in Pipeline {..}
     decodeJob :: Object -> Job
@@ -285,8 +280,8 @@ decodeConfig (project, _branch) zkJSONData =
           pipelinePipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
        in ProjectPipeline {..}
       where
-        decodePPipeline :: (Text, Value) -> Maybe PPipeline
-        decodePPipeline (pipelineName', va') = case va' of
+        decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
+        decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va') = case va' of
           Object inner ->
             let pPipelineName = PipelineName pipelineName'
                 pPipelineJobs = case HM.lookup "jobs" inner of
@@ -320,14 +315,14 @@ decodeConfig (project, _branch) zkJSONData =
     -- Zuul config elements are object with an unique key
     getKey :: Object -> Text
     getKey hm = case take 1 $ HM.keys hm of
-      (keyName : _) -> keyName
+      (keyName : _) -> Data.Aeson.Key.toText keyName
       [] -> error $ "Unable to get Object key on: " <> show hm
 
     getName :: Object -> Text
     getName = getString . getObjValue "name"
 
 decodeAsList :: Text -> (Text -> a) -> Object -> [a]
-decodeAsList k build va = case HM.lookup k va of
+decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
   Just (String x) -> [build x]
   Just (Array xs) -> build . getString <$> sort (V.toList xs)
   Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
@@ -339,7 +334,7 @@ unwrapObject va = case va of
   _ -> error $ "Expecting an Object out of JSON Value: " <> show va
 
 getObjValue :: Text -> Object -> Value
-getObjValue k hm = case HM.lookup k hm of
+getObjValue k hm = case HM.lookup (Data.Aeson.Key.fromText k) hm of
   Just va -> va
   Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object: " <> show (HM.keys hm)
 

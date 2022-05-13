@@ -1,26 +1,21 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE ViewPatterns #-}
-
 module Zuul.Weeder (main, mainWithArgs) where
 
-import qualified Algebra.Graph
-import qualified Algebra.Graph.Export.Dot
-import qualified Algebra.Graph.ToGraph
+import Algebra.Graph qualified
+import Algebra.Graph.Export.Dot qualified
+import Algebra.Graph.ToGraph qualified
 import Control.Lens ((%=))
 import Control.Monad
 import Control.Monad.State (State, execStateT)
-import qualified Data.Map
+import Data.Map qualified as Map
 import Data.Maybe
-import qualified Data.Set
+import Data.Set qualified as Set
 import Data.Text (Text, pack, unpack)
 import Data.Text.Display (display)
-import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import Streaming
-import qualified Streaming.Prelude as S
+import Streaming.Prelude qualified as S
 import System.Environment
-import qualified Text.Pretty.Simple
+import Text.Pretty.Simple qualified
 import Zuul.Config (readConnections)
 import Zuul.ConfigLoader
   ( Config (..),
@@ -35,14 +30,14 @@ import Zuul.ConfigLoader
     TenantResolver,
     ZuulConfigElement (..),
   )
-import qualified Zuul.ConfigLoader
+import Zuul.ConfigLoader qualified
 import Zuul.Tenant
   ( TenantsConfig,
     decodeTenantsConfig,
     tenantResolver,
   )
-import qualified Zuul.Tenant
-import qualified Zuul.UI
+import Zuul.Tenant qualified
+import Zuul.UI qualified
 import Zuul.ZKDump
 
 data Command
@@ -169,23 +164,23 @@ toD3Graph g =
     toLinks ((_, a), (_, b)) = Zuul.UI.D3Link (display a) (display b)
 
 findVertex :: Text -> Text -> Zuul.ConfigLoader.Config -> Maybe Vertex
-findVertex "job" name config = case Data.Map.lookup (JobName name) (configJobs config) of
+findVertex "job" name config = case Map.lookup (JobName name) (configJobs config) of
   Just [(loc, job)] -> Just (loc, ZJob job)
   _ -> Nothing
-findVertex "nodeset" name config = case Data.Map.lookup (NodesetName name) (configNodesets config) of
+findVertex "nodeset" name config = case Map.lookup (NodesetName name) (configNodesets config) of
   Just [(loc, x)] -> Just (loc, ZNodeset x)
   _ -> Nothing
-findVertex "nodelabel" name config = case Data.Map.lookup (NodeLabelName name) (configNodelabels config) of
+findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) (configNodelabels config) of
   Just [(loc, x)] -> Just (loc, ZNodeLabel x)
   _ -> Nothing
 findVertex _ _ _ = Nothing
 
-findReachable :: Vertex -> ConfigGraph -> Data.Set.Set Vertex
-findReachable v = Data.Set.fromList . Algebra.Graph.ToGraph.reachable v
+findReachable :: Vertex -> ConfigGraph -> Set.Set Vertex
+findReachable v = Set.fromList . Algebra.Graph.ToGraph.reachable v
 
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  trace (show baseJobs) $ runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
+  runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
   where
     -- All the default base jobs defined by the tenants
     -- Given:
@@ -193,12 +188,12 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     -- - tenant3 default base job is 'base-minimal'
     -- Then: baseJobs = [(base, [tenant1, tenant2]), (base-minimal, [tenant3])]
     baseJobs :: [(JobName, [TenantName])]
-    baseJobs = Data.Map.toList baseJobsMap
+    baseJobs = Map.toList baseJobsMap
       where
-        baseJobsMap :: Data.Map.Map JobName [TenantName]
-        baseJobsMap = foldr insertTenant mempty (Data.Map.toList tenantsConfig)
+        baseJobsMap :: Map.Map JobName [TenantName]
+        baseJobsMap = foldr insertTenant mempty (Map.toList tenantsConfig)
         insertTenant (tenantName, tenantConfig) =
-          Data.Map.insertWith mappend (Zuul.Tenant.defaultParent tenantConfig) [tenantName]
+          Map.insertWith mappend (Zuul.Tenant.defaultParent tenantConfig) [tenantName]
 
     -- The job list, where the tenant parent job is applied.
     -- Given:
@@ -209,7 +204,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     --            , (loc {tenants = [tenant3]}, job1 {parent = Just base-minimal}) ])
     --   , (job2, [ (loc, [job2]) ]) ]
     allJobs :: Zuul.ConfigLoader.ConfigMap JobName Job
-    allJobs = Data.Map.map (concatMap expandBaseJobs) (configJobs config)
+    allJobs = Map.map (concatMap expandBaseJobs) (configJobs config)
       where
         expandBaseJobs :: (ConfigLoc, Job) -> [(ConfigLoc, Job)]
         expandBaseJobs (loc, job)
@@ -227,8 +222,8 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
 
     go :: State Analysis ()
     go = do
-      goJobs $ concat $ Data.Map.elems allJobs
-      goNodesets $ concat $ Data.Map.elems $ configNodesets config
+      goJobs $ concat $ Map.elems allJobs
+      goNodesets $ concat $ Map.elems $ configNodesets config
 
     -- TODO: implement a lookup function that check matching tenant. Otherwise we might incorrectly link objects between tenants
 
@@ -244,7 +239,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       forM_ jobs $ \(loc, job) -> do
         -- look for nodeset location
         case jobNodeset job of
-          Just (JobNodeset nodeset) -> case Data.Map.lookup nodeset (configNodesets config) of
+          Just (JobNodeset nodeset) -> case Map.lookup nodeset (configNodesets config) of
             Just xs -> forM_ xs $ \(loc', ns) -> feedState ((loc, ZJob job), (loc', ZNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           _ ->
@@ -253,13 +248,13 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         -- look for job parent
         case jobParent job of
           Just parent -> do
-            case Data.Map.lookup parent allJobs of
+            case Map.lookup parent allJobs of
               Just xs -> forM_ xs $ \(loc', pj) -> feedState ((loc, ZJob job), (loc', ZJob pj))
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
         -- look for job dependencies
         forM_ (jobDependencies job) $ \dJob' -> do
-          case Data.Map.lookup dJob' allJobs of
+          case Map.lookup dJob' allJobs of
             Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, ZJob job), (loc', ZJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
 

@@ -2,10 +2,10 @@ module Main (main) where
 
 import Data.Aeson (Value, eitherDecodeFileStrict, object)
 import Data.List (sort)
-import qualified Data.Map (fromList, toList)
+import Data.Map qualified (fromList, toList)
 import Data.Maybe (fromMaybe)
-import qualified Data.Set (fromList)
-import qualified Data.Yaml as Y (decodeFileEither)
+import Data.Set qualified (fromList)
+import Data.Yaml qualified as Y (decodeFileEither)
 import System.FilePath ((</>))
 import Test.Tasty
 import Test.Tasty.HUnit

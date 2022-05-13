@@ -1,15 +1,9 @@
-{-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 
 -- | The web interface for zuul-weeder
 module Zuul.UI where
 
-import qualified Data.Aeson
+import Data.Aeson qualified
 import Data.FileEmbed (embedStringFile)
 import Data.Text (Text)
 import GHC.Generics (Generic)
