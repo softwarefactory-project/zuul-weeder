@@ -10,6 +10,7 @@ import Control.Lens ((%=))
 import Control.Monad
 import Control.Monad.State (State, execStateT)
 import qualified Data.Map
+import Data.Maybe (isNothing)
 import qualified Data.Maybe
 import qualified Data.Set
 import Data.Text (Text, pack, unpack)
@@ -32,7 +33,13 @@ import Zuul.ConfigLoader
     ZuulConfigElement (..),
   )
 import qualified Zuul.ConfigLoader
-import Zuul.Tenant (TenantProjects, ZuulConfigType (JobT, NodesetT), decodeTenantsConfig, getTenantProjects)
+import Zuul.Tenant
+  ( TenantProjects,
+    ZuulConfigType (JobT, NodesetT),
+    decodeTenantsConfig,
+    getTenantDefaultBaseJob,
+    getTenantProjects,
+  )
 import qualified Zuul.UI
 import Zuul.ZKDump
 
@@ -68,35 +75,36 @@ mainWithArgs args =
       -- TODO: manage tenant, e.g.
       -- - add tenant info to config object?
       -- - enable post processing filter?
-      let graph = configRequireGraph $ analyzeConfig (\_ _ -> True) config
+      -- - pass the proper defaultBaseJob in analyseConfig
+      let graph = configRequireGraph $ analyzeConfig (\_ _ -> True) (JobName "") config
       Zuul.UI.run (toD3Graph graph)
     _ -> putStrLn "usage: zuul-weeder path"
 
 runCommand :: FilePath -> FilePath -> TenantName -> Command -> IO ()
 runCommand zkDumpPath configPath tenant command = do
   config <- loadConfig zkDumpPath
-  tenantProjectsM <- loadTenantProjects zkDumpPath configPath tenant
-  case tenantProjectsM of
-    Nothing -> print $ "Unable to find tenant: " <> show tenant
-    Just tenantProjects -> case command of
-      WhatRequire key name graph -> printReachable config tenantProjects key name graph
-      WhatDependsOn key name graph -> printReachable config tenantProjects key name graph
-      WhatRequireDot graph -> outputDot config tenantProjects graph
-      WhatDependsOnDot graph -> outputDot config tenantProjects graph
+  (defaultBaseJobM, tenantProjectsM) <- loadTenantProjects zkDumpPath configPath tenant
+  case (defaultBaseJobM, tenantProjectsM) of
+    (Just defaultBaseJob, Just tenantProjects) -> case command of
+      WhatRequire key name graph -> printReachable config defaultBaseJob tenantProjects key name graph
+      WhatDependsOn key name graph -> printReachable config defaultBaseJob tenantProjects key name graph
+      WhatRequireDot graph -> outputDot config defaultBaseJob tenantProjects graph
+      WhatDependsOnDot graph -> outputDot config defaultBaseJob tenantProjects graph
+    _ -> print $ "Unable to find tenant: " <> show tenant
 
-outputDot :: Config -> TenantProjects -> (Analysis -> ConfigGraph) -> IO ()
-outputDot config tenantProjects graph = do
-  let x = analyzeConfig (filterTenant tenantProjects) config
+outputDot :: Config -> JobName -> TenantProjects -> (Analysis -> ConfigGraph) -> IO ()
+outputDot config defaultBaseJob tenantProjects graph = do
+  let x = analyzeConfig (filterTenant tenantProjects) defaultBaseJob config
   let style = Algebra.Graph.Export.Dot.defaultStyle Data.Text.Display.display
   let dot = Algebra.Graph.Export.Dot.export style (graph x)
   putStrLn $ unpack dot
 
-printReachable :: Config -> TenantProjects -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
-printReachable config tenantProjects key name graph = do
+printReachable :: Config -> JobName -> TenantProjects -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
+printReachable config defaultBaseJob tenantProjects key name graph = do
   let vertex =
         Data.Maybe.fromMaybe (error "Can't find") $
           findVertex key name config
-      analyzis = analyzeConfig (filterTenant tenantProjects) config
+      analyzis = analyzeConfig (filterTenant tenantProjects) defaultBaseJob config
       reachables =
         findReachable vertex (graph analyzis)
   forM_ reachables $ \(loc, obj) -> do
@@ -114,13 +122,16 @@ loadConfig =
     -- Stream (Of ZKConfig) IO
     . walkConfigNodes
 
-loadTenantProjects :: FilePath -> FilePath -> TenantName -> IO (Maybe TenantProjects)
+loadTenantProjects :: FilePath -> FilePath -> TenantName -> IO (Maybe JobName, Maybe TenantProjects)
 loadTenantProjects dumpPath configPath tenantName = do
   connections <- readConnections configPath
   systemConfigE <- readSystemConfig dumpPath
   case systemConfigE of
     Left s -> error $ "Unable to read the tenant config from the ZK dump: " <> s
-    Right zsc -> pure $ getTenantProjects connections (decodeTenantsConfig zsc) tenantName
+    Right zsc ->
+      let tenantConfig = decodeTenantsConfig zsc
+          defaultBaseJob = JobName <$> getTenantDefaultBaseJob tenantConfig tenantName
+       in pure (defaultBaseJob, getTenantProjects connections tenantConfig tenantName)
 
 type Vertex = (Zuul.ConfigLoader.ConfigLoc, Zuul.ConfigLoader.ZuulConfigElement)
 
@@ -174,16 +185,25 @@ filterTenant tenantProjects (ConfigLoc (project, _, _)) itemType =
         [match] -> itemType `elem` snd match
         _ -> error "Unexpected Config location not found"
 
-analyzeConfig :: (ConfigLoc -> ZuulConfigType -> Bool) -> Config -> Analysis
-analyzeConfig filterConfig config = runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
+analyzeConfig :: (ConfigLoc -> ZuulConfigType -> Bool) -> JobName -> Config -> Analysis
+analyzeConfig filterConfig defaultBaseJob config = runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
   where
     -- TODO: We need to handle included/excluded config type (and shadow)
     filterElems :: ZuulConfigType -> [(ConfigLoc, a)] -> [(ConfigLoc, a)]
     filterElems itemType = filter (\(cl, _) -> filterConfig cl itemType)
 
+    setTenantDefaultParent :: [(ConfigLoc, Job)] -> [(ConfigLoc, Job)]
+    setTenantDefaultParent = fmap adaptJob
+      where
+        adaptJob :: (ConfigLoc, Job) -> (ConfigLoc, Job)
+        adaptJob (loc, job) =
+          if isNothing $ jobParent job
+            then (loc, job {jobParent = Just defaultBaseJob})
+            else (loc, job)
+
     go :: State Analysis ()
     go = do
-      goJobs $ filterElems JobT $ concat $ Data.Map.elems $ configJobs config
+      goJobs $ setTenantDefaultParent $ filterElems JobT $ concat $ Data.Map.elems $ configJobs config
       goNodesets $ filterElems NodesetT $ concat $ Data.Map.elems $ configNodesets config
 
     goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()

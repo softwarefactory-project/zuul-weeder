@@ -148,3 +148,8 @@ getTenantProjects connections tenantsConfig tenantName =
               )
           )
             <$> projects
+
+getTenantDefaultBaseJob :: TenantsConfig -> TenantName -> Maybe Data.Text.Text
+getTenantDefaultBaseJob tenantsConfig tenantName =
+  let tenantConfig = Data.Map.lookup tenantName $ view tenantsConfigL tenantsConfig
+   in defaultParent <$> tenantConfig
