@@ -95,8 +95,8 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
     decodeTenant tenant =
       let tenantObject = unwrapObject tenant
           source = HM.toList $ unwrapObject $ getObjValue "source" tenantObject
-          defaultParent = case getObjValue "default-parent" tenantObject of
-            Data.Aeson.String txt -> txt
+          defaultParent = case HM.lookup "default-parent" tenantObject of
+            Just (Data.Aeson.String txt) -> txt
             _ -> "base"
        in insertTenantConnections defaultParent (TenantConfig defaultParent Data.Map.empty) source
 

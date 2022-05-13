@@ -309,7 +309,7 @@ unwrapObject va = case va of
 getObjValue :: Text -> Object -> Value
 getObjValue k hm = case HM.lookup k hm of
   Just va -> va
-  Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object"
+  Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object: " <> show (HM.keys hm)
 
 getString :: Value -> Text
 getString va = case va of

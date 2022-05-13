@@ -197,7 +197,7 @@ analyzeConfig filterConfig defaultBaseJob config = runIdentity $ execStateT go (
       where
         adaptJob :: (ConfigLoc, Job) -> (ConfigLoc, Job)
         adaptJob (loc, job) =
-          if isNothing $ jobParent job
+          if isNothing (jobParent job) && (defaultBaseJob /= jobName job)
             then (loc, job {jobParent = Just defaultBaseJob})
             else (loc, job)
 
