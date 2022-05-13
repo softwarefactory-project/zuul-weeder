@@ -3,6 +3,7 @@ module Main (main) where
 import Data.Aeson (Value, eitherDecodeFileStrict, object)
 import Data.List (sort)
 import qualified Data.Map (fromList, toList)
+import Data.Maybe (fromMaybe)
 import qualified Data.Set (fromList)
 import qualified Data.Yaml as Y (decodeFileEither)
 import System.FilePath ((</>))
@@ -10,30 +11,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Zuul.Config (ConnectionCName (ConnectionCName), readConnections)
 import Zuul.ConfigLoader
-  ( BranchName (BranchName),
-    CanonicalProjectName (CanonicalProjectName),
-    ConnectionName (ConnectionName),
-    Job (Job, jobBranches, jobDependencies, jobName, jobNodeset, jobParent),
-    JobName (JobName),
-    JobNodeset (JobAnonymousNodeset, JobNodeset),
-    NodeLabelName (NodeLabelName),
-    Nodeset (Nodeset, nodesetLabels, nodesetName),
-    NodesetName (NodesetName),
-    PPipeline (PPipeline, pPipelineJobs, pPipelineName),
-    Pipeline (Pipeline, pipelineName, pipelineTriggers),
-    PipelineJob (PJJob, PJName),
-    PipelineName (PipelineName),
-    PipelineTrigger (PipelineTrigger, connectionName),
-    Project (PName, PNameCannonical, TName),
-    ProjectName (ProjectName),
-    ProjectPipeline (ProjectPipeline, pName, pipelinePipelines, pipelineTemplates),
-    ProviderName (ProviderName),
-    TemplateName (TemplateName),
-    TenantName (TenantName),
-    ZuulConfigElement (ZJob, ZNodeset, ZPipeline, ZProjectPipeline, ZProjectTemplate),
-    decodeConfig,
-  )
-import Zuul.Tenant (ProjectNameWithOptions (ProjectNameWithOptions, includedConfigElements, projectName), TenantConfig (..), TenantConnectionConfig (..), TenantsConfig (..), ZuulConfigType (..), decodeTenantsConfig, getTenantProjects)
+import Zuul.Tenant
 import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
 
 main :: IO ()
@@ -137,9 +115,9 @@ tests =
 
     decodeTenants = do
       json <- loadJSONFixture "system-config"
-      let decoded = decodeTenantsConfig (ZKSystemConfig json)
-          expected = [(TenantName "local", TenantConfig {defaultParent = "base", connections = Data.Map.fromList [(ConnectionName "gerrit", TenantConnectionConfig {configProjects = [ProjectNameWithOptions {projectName = ProjectName "config", includedConfigElements = Data.Set.fromList [PipelineT, JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]}], untrustedProjects = [ProjectNameWithOptions {projectName = ProjectName "sf-jobs", includedConfigElements = Data.Set.fromList [JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]}, ProjectNameWithOptions {projectName = ProjectName "zuul-jobs", includedConfigElements = Data.Set.fromList [JobT]}, ProjectNameWithOptions {projectName = ProjectName "zuul-distro-jobs", includedConfigElements = Data.Set.fromList []}]})]})]
-
+      let decoded = fromMaybe (error "oops") $ decodeTenantsConfig (ZKSystemConfig json)
+          expected =
+            [(TenantName "local", TenantConfig {defaultParent = JobName "base", connections = Data.Map.fromList [(ConnectionName "gerrit", TenantConnectionConfig {configProjects = [ProjectNameWithOptions {projectName = ProjectName "config", includedConfigElements = Data.Set.fromList [PipelineT, JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT], configPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]}], untrustedProjects = [ProjectNameWithOptions {projectName = ProjectName "sf-jobs", includedConfigElements = Data.Set.fromList [JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT], configPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]}, ProjectNameWithOptions {projectName = ProjectName "zuul-jobs", includedConfigElements = Data.Set.fromList [JobT], configPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]}, ProjectNameWithOptions {projectName = ProjectName "zuul-distro-jobs", includedConfigElements = Data.Set.fromList [], configPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]}]})]})]
       assertEqual "Expect data extracted from Pipeline Config elements" expected (Data.Map.toList $ tenants decoded)
 
     decodeConnections = do
@@ -150,7 +128,7 @@ tests =
     testGetTenantProjects = do
       conns <- readConnections $ fixturesPath </> "zuul.conf"
       json <- loadJSONFixture "system-config"
-      let tenantsConfig = decodeTenantsConfig (ZKSystemConfig json)
+      let tenantsConfig = fromMaybe (error "oops") $ decodeTenantsConfig (ZKSystemConfig json)
           tenantConfig = getTenantProjects conns tenantsConfig (TenantName "local")
           tenantConfigAlt = getTenantProjects conns tenantsConfig (TenantName "unknown")
           expected = Just [(CanonicalProjectName (ProviderName "sftests.com", ProjectName "config"), [PipelineT, JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]), (CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-jobs"), [JobT, SemaphoreT, ProjectT, ProjectTemplateT, NodesetT, SecretT]), (CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-jobs"), [JobT]), (CanonicalProjectName (ProviderName "sftests.com", ProjectName "zuul-distro-jobs"), [])]

@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedLabels #-}
 
 module Zuul.ConfigLoader where
@@ -13,7 +14,7 @@ import Data.Generics.Labels ()
 import qualified Data.HashMap.Strict as HM (keys, lookup, toList)
 import Data.List (sort)
 import Data.Map (Map, insertWith)
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (mapMaybe)
 import qualified Data.Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -21,6 +22,7 @@ import qualified Data.Text.Display
 import qualified Data.Text.Lazy.Builder as TB
 import qualified Data.Vector as V
 import GHC.Generics (Generic)
+import qualified Witch
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
 
 newtype BranchName = BranchName Text deriving (Eq, Ord, Show)
@@ -116,6 +118,26 @@ data ZuulConfigElement
   | ZNodeLabel NodeLabelName
   deriving (Show, Eq, Ord)
 
+data ZuulConfigType
+  = PipelineT
+  | JobT
+  | SemaphoreT
+  | ProjectT
+  | ProjectTemplateT
+  | NodesetT
+  | SecretT
+  deriving (Show, Eq, Ord, Enum, Bounded)
+
+instance Witch.From ZuulConfigElement ZuulConfigType where
+  from zce = case zce of
+    ZJob _ -> JobT
+    ZProjectPipeline _ -> ProjectT
+    ZNodeset _ -> NodesetT
+    ZProjectTemplate _ -> ProjectTemplateT
+    ZPipeline _ -> PipelineT
+    -- ZNodeLabel is only used for cli input, it is not a real ZCE
+    ZNodeLabel _ -> error "The impossible has happened"
+
 instance Data.Text.Display.Display ZuulConfigElement where
   displayBuilder zce = case zce of
     ZJob job -> Data.Text.Display.displayBuilder $ jobName job
@@ -123,7 +145,7 @@ instance Data.Text.Display.Display ZuulConfigElement where
     ZNodeLabel label -> Data.Text.Display.displayBuilder label
     _ -> TB.fromText "unknown"
 
-newtype ConfigPath = ConfigPath FilePath deriving (Show, Eq, Ord)
+newtype ConfigPath = ConfigPath {getConfigPath :: FilePath} deriving (Show, Eq, Ord)
 
 instance Data.Text.Display.Display ConfigPath where
   displayBuilder (ConfigPath p) = TB.fromText (T.pack p)
@@ -163,8 +185,8 @@ data Config = Config
   }
   deriving (Show, Generic)
 
-updateTopConfig :: ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
-updateTopConfig configLoc ze = case ze of
+updateTopConfig :: TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
+updateTopConfig tenantResolver configLoc ze = case ze of
   ZJob job -> #configJobs %= insertConfig (jobName job) job
   ZNodeset node -> do
     #configNodesets %= insertConfig (nodesetName node) node
@@ -174,8 +196,8 @@ updateTopConfig configLoc ze = case ze of
   ZPipeline pipeline -> #configPipelines %= insertConfig (pipelineName pipeline) pipeline
   ZNodeLabel _ -> pure ()
   where
-    insertConfig :: Ord a => a -> b -> ConfigMap a b -> ConfigMap a b
-    insertConfig k v = Data.Map.insertWith mappend k [(configLoc, v)]
+    tenants = tenantResolver configLoc (Witch.from ze)
+    insertConfig k v = Data.Map.insertWith mappend k [(configLoc {clTenants = tenants}, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
 decodeConfig (project, _branch) zkJSONData =
@@ -260,7 +282,7 @@ decodeConfig (project, _branch) zkJSONData =
               Just _ -> PName $ ProjectName name
               Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
           pipelineTemplates = decodeAsList "templates" TemplateName va
-          pipelinePipelines = Data.Set.fromList $ catMaybes $ decodePPipeline <$> HM.toList va
+          pipelinePipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
        in ProjectPipeline {..}
       where
         decodePPipeline :: (Text, Value) -> Maybe PPipeline
@@ -326,8 +348,10 @@ getString va = case va of
   String str -> str
   _ -> error $ "Expected a String out of JSON value: " <> show va
 
-loadConfig :: Either ConfigError ZKConfig -> StateT Config IO ()
-loadConfig zkcE = do
+type TenantResolver = ConfigLoc -> ZuulConfigType -> [TenantName]
+
+loadConfig :: TenantResolver -> Either ConfigError ZKConfig -> StateT Config IO ()
+loadConfig tenantResolver zkcE = do
   case zkcE of
     Left e -> #configErrors %= (e :)
     Right zkc ->
@@ -339,8 +363,11 @@ loadConfig zkcE = do
               )
           branchName = BranchName $ branch zkc
           configPath = ConfigPath (T.unpack $ filePath zkc)
-          configLoc = ConfigLoc canonicalProjectName branchName configPath [] -- TODO: fill tenant infos
-       in traverse_ (updateTopConfig configLoc) zkcDecoded
+          -- tenants info are set in the updateTopConfig function.
+          -- this is done per element because a tenant may not include everything.
+          tenants = []
+          configLoc = ConfigLoc canonicalProjectName branchName configPath tenants
+       in traverse_ (updateTopConfig tenantResolver configLoc) zkcDecoded
 
 emptyConfig :: Config
 emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty

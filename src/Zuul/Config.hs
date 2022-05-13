@@ -9,6 +9,9 @@ import Zuul.ConfigLoader (ConnectionName (ConnectionName))
 
 newtype ConnectionCName = ConnectionCName Data.Text.Text deriving (Show, Eq, Ord)
 
+-- TODO: rename the legacy name
+type ConnectionsConfig = ConfigConnections
+
 type ConfigSection = (Data.Text.Text, [(Data.Text.Text, Data.Text.Text)])
 
 type ConfigConnections = Map ConnectionName ConnectionCName

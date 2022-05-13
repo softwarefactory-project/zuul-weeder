@@ -1,35 +1,33 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use &&" #-}
 module Zuul.Tenant where
 
 import Control.Lens
 import qualified Data.Aeson
 import qualified Data.HashMap.Strict as HM (lookup, toList)
+import qualified Data.List
 import qualified Data.Map
 import Data.Maybe (isJust)
 import qualified Data.Set
 import qualified Data.Text
 import qualified Data.Vector as V
-import Zuul.Config (ConfigConnections, ConnectionCName (ConnectionCName))
+import Zuul.Config (ConfigConnections, ConnectionCName (ConnectionCName), ConnectionsConfig)
 import Zuul.ConfigLoader
   ( CanonicalProjectName (CanonicalProjectName),
+    ConfigLoc (clPath, clProject),
+    ConfigPath (getConfigPath),
     ConnectionName (ConnectionName),
+    JobName (JobName),
     ProjectName (ProjectName),
     ProviderName (ProviderName),
     TenantName (TenantName),
+    ZuulConfigType (..),
     decodeAsList,
     getObjValue,
     unwrapObject,
   )
 import Zuul.ZKDump (ZKSystemConfig (..))
-
-data ZuulConfigType
-  = PipelineT
-  | JobT
-  | SemaphoreT
-  | ProjectT
-  | ProjectTemplateT
-  | NodesetT
-  | SecretT
-  deriving (Show, Eq, Ord, Enum, Bounded)
 
 allItems :: Data.Set.Set ZuulConfigType
 allItems = Data.Set.fromList [minBound .. maxBound]
@@ -47,7 +45,8 @@ toItemType name = case name of
 
 data ProjectNameWithOptions = ProjectNameWithOptions
   { projectName :: ProjectName,
-    includedConfigElements :: Data.Set.Set ZuulConfigType
+    includedConfigElements :: Data.Set.Set ZuulConfigType,
+    configPaths :: [FilePath]
   }
   deriving (Show, Eq, Ord)
 
@@ -60,7 +59,7 @@ data TenantConnectionConfig = TenantConnectionConfig
   deriving (Show, Eq, Ord)
 
 data TenantConfig = TenantConfig
-  { defaultParent :: Data.Text.Text,
+  { defaultParent :: JobName,
     connections :: Data.Map.Map ConnectionName TenantConnectionConfig
   }
   deriving (Show, Eq, Ord)
@@ -76,13 +75,13 @@ newtype TenantsConfig = TenantsConfig
 tenantsConfigL :: Lens' TenantsConfig (Data.Map.Map TenantName TenantConfig)
 tenantsConfigL = lens tenants (\c s -> c {tenants = s})
 
-decodeTenantsConfig :: ZKSystemConfig -> TenantsConfig
+decodeTenantsConfig :: ZKSystemConfig -> Maybe TenantsConfig
 decodeTenantsConfig (ZKSystemConfig value) = case value of
   Data.Aeson.Object hm ->
     let abide = unwrapObject $ getObjValue "unparsed_abide" hm
         tenants = HM.toList $ unwrapObject $ getObjValue "tenants" abide
-     in insertTenants (TenantsConfig Data.Map.empty) tenants
-  _ -> error $ "Wrong system config format: " <> show value
+     in Just $ insertTenants (TenantsConfig Data.Map.empty) tenants
+  _ -> Nothing
   where
     insertTenants :: TenantsConfig -> [(Data.Text.Text, Data.Aeson.Value)] -> TenantsConfig
     insertTenants tc assocs = case assocs of
@@ -95,12 +94,12 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
     decodeTenant tenant =
       let tenantObject = unwrapObject tenant
           source = HM.toList $ unwrapObject $ getObjValue "source" tenantObject
-          defaultParent = case HM.lookup "default-parent" tenantObject of
+          defaultParent = JobName $ case HM.lookup "default-parent" tenantObject of
             Just (Data.Aeson.String txt) -> txt
             _ -> "base"
        in insertTenantConnections defaultParent (TenantConfig defaultParent Data.Map.empty) source
 
-    insertTenantConnections :: Data.Text.Text -> TenantConfig -> [(Data.Text.Text, Data.Aeson.Value)] -> TenantConfig
+    insertTenantConnections :: JobName -> TenantConfig -> [(Data.Text.Text, Data.Aeson.Value)] -> TenantConfig
     insertTenantConnections defaultParent tc assocs = case assocs of
       [] -> tc
       (cName, cData) : xs ->
@@ -113,9 +112,10 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
           untrustedProjects = getProjects "untrusted-projects"
        in TenantConnectionConfig {..}
       where
+        defaultPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]
         getProjects :: Data.Text.Text -> [ProjectNameWithOptions]
         getProjects ptype = case HM.lookup ptype $ unwrapObject cnx of
-          Just (Data.Aeson.String name) -> [ProjectNameWithOptions (ProjectName name) mempty]
+          Just (Data.Aeson.String name) -> [ProjectNameWithOptions (ProjectName name) mempty defaultPaths]
           Just (Data.Aeson.Array vec) -> getProject <$> concatMap (HM.toList . unwrapObject) (V.toList vec)
           _ -> []
         -- TODO: support https://zuul-ci.org/docs/zuul/latest/tenants.html#attr-tenant.untrusted-projects.%3Cproject-group%3E
@@ -128,7 +128,8 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
                 | isJust $ HM.lookup "include" options = included
                 | isJust $ HM.lookup "exclude" options = Data.Set.difference allItems excluded
                 | otherwise = allItems
-           in ProjectNameWithOptions (ProjectName name) includedElements
+              extraConfigPaths = [] -- TODO: decode attribute
+           in ProjectNameWithOptions (ProjectName name) includedElements (extraConfigPaths <> defaultPaths)
 
 getTenantProjects :: ConfigConnections -> TenantsConfig -> TenantName -> Maybe TenantProjects
 getTenantProjects connections tenantsConfig tenantName =
@@ -149,7 +150,29 @@ getTenantProjects connections tenantsConfig tenantName =
           )
             <$> projects
 
-getTenantDefaultBaseJob :: TenantsConfig -> TenantName -> Maybe Data.Text.Text
+tenantResolver :: TenantsConfig -> ConnectionsConfig -> ConfigLoc -> ZuulConfigType -> [TenantName]
+tenantResolver tenants connections configLoc zct = matches
+  where
+    matches = map fst $ filter (containsProject . snd) $ Data.Map.toList $ view tenantsConfigL tenants
+    containsProject :: TenantConfig -> Bool
+    containsProject tc = any containsProject' $ Data.Map.toList $ view tenantConfigL tc
+    containsProject' :: (ConnectionName, TenantConnectionConfig) -> Bool
+    containsProject' (cn, TenantConnectionConfig {..}) = any matchProject $ configProjects <> untrustedProjects
+      where
+        matchProject :: ProjectNameWithOptions -> Bool
+        matchProject ProjectNameWithOptions {..} =
+          let providerName = case Data.Map.lookup cn connections of
+                Just (ConnectionCName pn) -> ProviderName pn
+                Nothing -> error "Unable to find project connection's provider name"
+           in and
+                [ CanonicalProjectName (providerName, projectName) == clProject configLoc,
+                  zct `Data.Set.member` includedConfigElements,
+                  any matchPath configPaths
+                ]
+        matchPath :: FilePath -> Bool
+        matchPath fp = fp `Data.List.isPrefixOf` getConfigPath (clPath configLoc)
+
+getTenantDefaultBaseJob :: TenantsConfig -> TenantName -> Maybe JobName
 getTenantDefaultBaseJob tenantsConfig tenantName =
   let tenantConfig = Data.Map.lookup tenantName $ view tenantsConfigL tenantsConfig
    in defaultParent <$> tenantConfig
