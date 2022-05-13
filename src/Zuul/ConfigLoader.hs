@@ -125,18 +125,28 @@ instance Data.Text.Display.Display ZuulConfigElement where
 
 newtype ConfigPath = ConfigPath FilePath deriving (Show, Eq, Ord)
 
-newtype ConfigLoc = ConfigLoc (CanonicalProjectName, BranchName, ConfigPath) deriving (Show, Eq, Ord)
+instance Data.Text.Display.Display ConfigPath where
+  displayBuilder (ConfigPath p) = TB.fromText (T.pack p)
+
+data ConfigLoc = ConfigLoc
+  { clProject :: CanonicalProjectName,
+    clBranch :: BranchName,
+    clPath :: ConfigPath,
+    clTenants :: [TenantName]
+  }
+  deriving (Show, Eq, Ord)
 
 instance Data.Text.Display.Display CanonicalProjectName where
   displayBuilder (CanonicalProjectName (_, ProjectName projectName)) = TB.fromText projectName
 
 instance Data.Text.Display.Display ConfigLoc where
-  displayBuilder (ConfigLoc (cpn, bn, ConfigPath cp)) =
-    Data.Text.Display.displayBuilder cpn
+  displayBuilder ConfigLoc {..} =
+    Data.Text.Display.displayBuilder clProject
       <> branchBuilder
-      <> TB.fromText (": " <> T.pack cp)
+      <> TB.fromText ": "
+      <> Data.Text.Display.displayBuilder clPath
     where
-      branchBuilder = case bn of
+      branchBuilder = case clBranch of
         BranchName "master" -> ""
         BranchName n -> TB.fromText $ "[" <> n <> "]"
 
@@ -329,7 +339,7 @@ loadConfig zkcE = do
               )
           branchName = BranchName $ branch zkc
           configPath = ConfigPath (T.unpack $ filePath zkc)
-          configLoc = ConfigLoc (canonicalProjectName, branchName, configPath)
+          configLoc = ConfigLoc canonicalProjectName branchName configPath [] -- TODO: fill tenant infos
        in traverse_ (updateTopConfig configLoc) zkcDecoded
 
 emptyConfig :: Config

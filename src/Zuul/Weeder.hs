@@ -178,7 +178,7 @@ findReachable :: Vertex -> ConfigGraph -> Data.Set.Set Vertex
 findReachable v = Data.Set.fromList . Algebra.Graph.ToGraph.reachable v
 
 filterTenant :: TenantProjects -> ConfigLoc -> ZuulConfigType -> Bool
-filterTenant tenantProjects (ConfigLoc (project, _, _)) itemType =
+filterTenant tenantProjects (ConfigLoc project _ _ _) itemType =
   let matches = filter (\p -> fst p == project) tenantProjects
    in case matches of
         [] -> False
