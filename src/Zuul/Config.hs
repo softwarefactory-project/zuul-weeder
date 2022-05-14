@@ -1,15 +1,13 @@
 module Zuul.Config where
 
+import ZuulWeeder.Prelude
 import Data.HashMap.Strict qualified as HM
 import Data.Ini qualified
-import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (mapMaybe)
-import Data.Text (Text)
-import Data.Text qualified
+import Data.Text qualified as Text
 import Zuul.ConfigLoader (ConnectionName (ConnectionName))
 
-newtype ConnectionCName = ConnectionCName Data.Text.Text deriving (Show, Eq, Ord)
+newtype ConnectionCName = ConnectionCName Text deriving (Show, Eq, Ord)
 
 type ConfigSection = (Text, [(Text, Text)])
 
@@ -20,7 +18,7 @@ readConnections fp = do
   iniE <- Data.Ini.readIniFile fp
   case iniE of
     Right (Data.Ini.Ini sections _) ->
-      let filteredHM = HM.filterWithKey (\k _ -> Data.Text.isPrefixOf "connection " k) sections
+      let filteredHM = HM.filterWithKey (\k _ -> Text.isPrefixOf "connection " k) sections
        in pure $ Map.fromList (mapMaybe getConn (HM.toList filteredHM)) -- catMaybes $ getConn <$> HM.toList filteredHM)
     Left _ -> error "Unable to read Zuul config file"
   where
@@ -38,7 +36,7 @@ readConnections fp = do
                 then Just (getSectionName sectionName, getCannonicalName sectionHM)
                 else Nothing
             _ -> error "Not supported"
-    getSectionName sn = ConnectionName $ Data.Text.drop 11 sn
+    getSectionName sn = ConnectionName $ Text.drop 11 sn
     getServer hm = case HM.lookup "server" hm of
       Just server -> server
       Nothing -> error $ "Unable to find mandatory 'server' key in: " <> show hm

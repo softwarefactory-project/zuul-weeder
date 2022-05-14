@@ -1,16 +1,13 @@
 module Zuul.Tenant where
 
-import Control.Lens ((&), (%~))
+import ZuulWeeder.Prelude
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
 import Data.List qualified
 import Data.Map qualified as Map
-import GHC.Generics (Generic)
-import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Text (Text)
 import Data.Vector qualified as V
 import Zuul.Config (ConnectionCName (ConnectionCName), ConnectionsConfig)
 import Zuul.ConfigLoader
@@ -81,7 +78,7 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
     insertTenants tc assocs = case assocs of
       [] -> tc
       (Data.Aeson.Key.toText -> tName, tData) : xs ->
-        let new = tc & #tenants %~ Map.insert (TenantName tName) (decodeTenant tData)
+        let new = tc & #tenants `over` Map.insert (TenantName tName) (decodeTenant tData)
          in insertTenants new xs
 
     decodeTenant :: Data.Aeson.Value -> TenantConfig
@@ -97,7 +94,7 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
     insertTenantConnections defaultParent tc assocs = case assocs of
       [] -> tc
       (Data.Aeson.Key.toText -> cName, cData) : xs ->
-        let new = tc & #connections %~ Map.insert (ConnectionName cName) (decodeConnection cData)
+        let new = tc & #connections `over` Map.insert (ConnectionName cName) (decodeConnection cData)
          in insertTenantConnections defaultParent new xs
 
     decodeConnection :: Data.Aeson.Value -> TenantConnectionConfig

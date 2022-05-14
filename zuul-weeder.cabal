@@ -80,7 +80,7 @@ library
                      , warp
                      , lucid
                      , servant-lucid
-                     , file-embed
+                     , string-qq
   hs-source-dirs:      src
   exposed-modules:     Zuul.Weeder
                      , Zuul.ZKDump
@@ -88,6 +88,7 @@ library
                      , Zuul.Tenant
                      , Zuul.Config
                      , Zuul.UI
+                     , ZuulWeeder.Prelude
 
 executable zuul-weeder
   import:              common-options

@@ -1,30 +1,21 @@
 module Zuul.ConfigLoader where
 
-import Control.Lens ((&), (.~), (%=))
-import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
-import Data.Foldable (traverse_)
-import Data.Generics.Labels ()
-import Data.List (sort)
-import Data.Map (Map, insertWith)
-import Data.Maybe (mapMaybe)
+import Data.Map (insertWith)
 import Data.Set qualified
-import Data.Text (Text)
-import Data.Text qualified as T
-import Data.Text.Display qualified
+import ZuulWeeder.Prelude
+import Data.Text qualified as Text
 import Data.Text.Lazy.Builder qualified as TB
 import Data.Vector qualified as V
-import GHC.Generics (Generic)
-import Witch qualified
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
 
 newtype BranchName = BranchName Text deriving (Eq, Ord, Show)
 
 newtype JobName = JobName Text
   deriving (Eq, Ord, Show)
-  deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance JobName)
+  deriving (Display) via (ShowInstance JobName)
 
 newtype PipelineName = PipelineName Text deriving (Eq, Ord, Show)
 
@@ -34,11 +25,11 @@ newtype ProjectNameRE = ProjectNameRE Text deriving (Eq, Ord, Show)
 
 newtype NodesetName = NodesetName Text
   deriving (Eq, Ord, Show)
-  deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance NodesetName)
+  deriving (Display) via (ShowInstance NodesetName)
 
 newtype NodeLabelName = NodeLabelName Text
   deriving (Eq, Ord, Show)
-  deriving (Data.Text.Display.Display) via (Data.Text.Display.ShowInstance NodeLabelName)
+  deriving (Display) via (ShowInstance NodeLabelName)
 
 newtype ProviderName = ProviderName Text deriving (Eq, Ord, Show)
 
@@ -48,7 +39,7 @@ newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName) 
 
 newtype ConnectionName = ConnectionName Text deriving (Eq, Ord, Show)
 
-newtype TenantName = TenantName Data.Text.Text deriving (Show, Eq, Ord)
+newtype TenantName = TenantName Text deriving (Show, Eq, Ord)
 
 data Project
   = PName ProjectName
@@ -123,7 +114,7 @@ data ZuulConfigType
   | SecretT
   deriving (Show, Eq, Ord, Enum, Bounded)
 
-instance Witch.From ZuulConfigElement ZuulConfigType where
+instance From ZuulConfigElement ZuulConfigType where
   from zce = case zce of
     ZJob _ -> JobT
     ZProjectPipeline _ -> ProjectT
@@ -133,17 +124,17 @@ instance Witch.From ZuulConfigElement ZuulConfigType where
     -- ZNodeLabel is only used for cli input, it is not a real ZCE
     ZNodeLabel _ -> error "The impossible has happened"
 
-instance Data.Text.Display.Display ZuulConfigElement where
+instance Display ZuulConfigElement where
   displayBuilder zce = case zce of
-    ZJob job -> Data.Text.Display.displayBuilder $ job.name
-    ZNodeset ns -> Data.Text.Display.displayBuilder $ ns.name
-    ZNodeLabel label -> Data.Text.Display.displayBuilder label
+    ZJob job -> displayBuilder $ job.name
+    ZNodeset ns -> displayBuilder $ ns.name
+    ZNodeLabel label -> displayBuilder label
     _ -> TB.fromText "unknown"
 
 newtype ConfigPath = ConfigPath {getConfigPath :: FilePath} deriving (Show, Eq, Ord)
 
-instance Data.Text.Display.Display ConfigPath where
-  displayBuilder (ConfigPath p) = TB.fromText (T.pack p)
+instance Display ConfigPath where
+  displayBuilder (ConfigPath p) = TB.fromText (Text.pack p)
 
 data ConfigLoc = ConfigLoc
   { project :: CanonicalProjectName,
@@ -153,15 +144,15 @@ data ConfigLoc = ConfigLoc
   }
   deriving (Show, Eq, Ord)
 
-instance Data.Text.Display.Display CanonicalProjectName where
+instance Display CanonicalProjectName where
   displayBuilder (CanonicalProjectName (_, ProjectName projectName)) = TB.fromText projectName
 
-instance Data.Text.Display.Display ConfigLoc where
+instance Display ConfigLoc where
   displayBuilder loc =
-    Data.Text.Display.displayBuilder loc.project
+    displayBuilder loc.project
       <> branchBuilder
       <> TB.fromText ": "
-      <> Data.Text.Display.displayBuilder loc.path
+      <> displayBuilder loc.path
     where
       branchBuilder = case loc.branch of
         BranchName "master" -> ""
@@ -191,7 +182,7 @@ updateTopConfig tenantResolver configLoc ze = case ze of
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
   ZNodeLabel _ -> pure ()
   where
-    tenants = tenantResolver configLoc (Witch.from ze)
+    tenants = tenantResolver configLoc (from ze)
     insertConfig k v = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
@@ -272,10 +263,10 @@ decodeConfig (project, _branch) zkJSONData =
     decodeProjectPipeline va =
       let name = case getString <$> HM.lookup "name" va of
             Nothing -> PNameCannonical project
-            Just name' -> case T.uncons name' of
+            Just name' -> case Text.uncons name' of
               Just ('^', _) -> PNameRE $ ProjectNameRE name'
               Just _ -> PName $ ProjectName name'
-              Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name'
+              Nothing -> error $ "Unexpected project name for project pipeline: " <> Text.unpack name'
           templates = decodeAsList "templates" TemplateName va
           pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
        in ProjectPipeline {..}
@@ -306,7 +297,7 @@ decodeConfig (project, _branch) zkJSONData =
     decodeProjectTemplate :: Object -> ProjectPipeline
     decodeProjectTemplate va =
       let template = decodeProjectPipeline va
-       in template & #name .~ (TName . getPName $ template.name)
+       in template & #name `set` (TName . getPName $ template.name)
       where
         getPName :: Project -> TemplateName
         getPName (PName (ProjectName name)) = TemplateName name
@@ -325,7 +316,7 @@ decodeAsList :: Text -> (Text -> a) -> Object -> [a]
 decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
   Just (String x) -> [build x]
   Just (Array xs) -> build . getString <$> sort (V.toList xs)
-  Just _va -> error $ "Unexpected " <> T.unpack k <> " structure: " <> show _va
+  Just _va -> error $ "Unexpected " <> Text.unpack k <> " structure: " <> show _va
   Nothing -> []
 
 unwrapObject :: Value -> Object
@@ -336,7 +327,7 @@ unwrapObject va = case va of
 getObjValue :: Text -> Object -> Value
 getObjValue k hm = case HM.lookup (Data.Aeson.Key.fromText k) hm of
   Just va -> va
-  Nothing -> error $ "Unable to get " <> T.unpack k <> " from Object: " <> show (HM.keys hm)
+  Nothing -> error $ "Unable to get " <> Text.unpack k <> " from Object: " <> show (HM.keys hm)
 
 getString :: Value -> Text
 getString va = case va of
@@ -357,7 +348,7 @@ loadConfig tenantResolver zkcE = do
                 ProjectName $ zkc.project
               )
           branchName = BranchName zkc.branch
-          configPath = ConfigPath (T.unpack $ filePath zkc)
+          configPath = ConfigPath (Text.unpack $ filePath zkc)
           -- tenants info are set in the updateTopConfig function.
           -- this is done per element because a tenant may not include everything.
           tenants = []

@@ -1,17 +1,12 @@
 module Zuul.Weeder (main, mainWithArgs) where
 
+import ZuulWeeder.Prelude
 import Algebra.Graph qualified
 import Algebra.Graph.Export.Dot qualified
 import Algebra.Graph.ToGraph qualified
-import Control.Lens ((%=))
-import Control.Monad
-import Control.Monad.State (State, execStateT)
 import Data.Map qualified as Map
-import Data.Maybe
 import Data.Set qualified as Set
-import Data.Text (Text, pack, unpack)
-import Data.Text.Display (display)
-import GHC.Generics (Generic)
+import Data.Text (pack, unpack)
 import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
@@ -96,7 +91,7 @@ filterTenant tenant = Algebra.Graph.induce (\(loc, _) -> tenant `elem` loc.tenan
 outputDot :: Config -> TenantName -> TenantsConfig -> (Analysis -> ConfigGraph) -> IO ()
 outputDot config tenant tenants graph = do
   let x = analyzeConfig tenants config
-  let style = Algebra.Graph.Export.Dot.defaultStyle Data.Text.Display.display
+  let style = Algebra.Graph.Export.Dot.defaultStyle display
   let g = filterTenant tenant (graph x)
   let dot = Algebra.Graph.Export.Dot.export style g
   putStrLn $ unpack dot
@@ -104,7 +99,7 @@ outputDot config tenant tenants graph = do
 printReachable :: Config -> TenantName -> TenantsConfig -> Text -> Text -> (Analysis -> ConfigGraph) -> IO ()
 printReachable config tenant tenants key name graph = do
   let vertex =
-        Data.Maybe.fromMaybe (error "Can't find") $
+        fromMaybe (error "Can't find") $
           findVertex key name config
       analyzis = analyzeConfig tenants config
       g = filterTenant tenant (graph analyzis)
