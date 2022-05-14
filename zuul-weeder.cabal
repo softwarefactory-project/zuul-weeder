@@ -85,6 +85,7 @@ library
                      , lucid
                      , servant-lucid
                      , string-qq
+                     , http-api-data
   hs-source-dirs:      src
   exposed-modules:     Zuul.ZKDump
                      , Zuul.ConfigLoader

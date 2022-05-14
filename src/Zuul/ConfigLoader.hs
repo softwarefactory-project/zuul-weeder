@@ -11,6 +11,9 @@ import Data.Vector qualified as V
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
 import ZuulWeeder.Prelude
 
+-- | The name of any configuration object, provided by the 'From X ConfigName` instance.
+newtype ConfigName = ConfigName Text deriving (Eq, Ord, Show)
+
 newtype BranchName = BranchName Text deriving (Eq, Ord, Show)
 
 newtype JobName = JobName Text
@@ -67,6 +70,11 @@ data Job = Job
     dependencies :: [JobName]
   }
   deriving (Show, Eq, Ord)
+
+instance From Job ConfigName where
+  from job =
+    let JobName name = job.name
+     in ConfigName name
 
 data PipelineJob
   = PJName JobName

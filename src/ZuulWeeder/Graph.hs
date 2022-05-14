@@ -1,6 +1,7 @@
 module ZuulWeeder.Graph
   ( Analysis (..),
     ConfigGraph,
+    Names,
     Vertex,
     pattern VNodeLabel,
     pattern VJob,
@@ -73,16 +74,20 @@ findReachable v = Set.fromList . Algebra.Graph.ToGraph.reachable v
 filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
 filterTenant tenant = Algebra.Graph.induce (\(loc, _) -> tenant `elem` loc.tenants)
 
+type Names = Map ConfigName [Vertex]
+
 data Analysis = Analysis
   { configRequireGraph :: ConfigGraph,
     configDependsOnGraph :: ConfigGraph,
+    -- | The list of all the configuration names and their location
+    names :: Names,
     graphErrors :: [String]
   }
   deriving (Show, Generic)
 
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty)
+  runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty)
   where
     -- All the default base jobs defined by the tenants
     -- Given:
@@ -140,6 +145,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goJobs jobs = do
       -- TODO: filter using tenant config
       forM_ jobs $ \(loc, job) -> do
+        insertName job (loc, VJob job)
         -- look for nodeset location
         case job.nodeset of
           Just (JobNodeset nodeset) -> case Map.lookup nodeset config.nodesets of
@@ -165,3 +171,6 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     feedState (a, b) = do
       #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
       #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
+
+    insertName k v = do
+      #names %= Map.insertWith mappend (from k) [v]

@@ -3,15 +3,20 @@
 -- | The web interface for zuul-weeder
 module ZuulWeeder.UI where
 
+import Algebra.Graph qualified
 import Data.Aeson qualified
+import Data.Map qualified as Map
 import Data.String.QQ (s)
+import Data.Text qualified as Text
 import Lucid
+import Lucid.Base (makeAttribute)
 import Network.Wai.Handler.Warp as Warp (run)
 import Servant
 import Servant.HTML.Lucid (HTML)
-import ZuulWeeder.Prelude
+import Web.FormUrlEncoded (FromForm)
+import Zuul.ConfigLoader
 import ZuulWeeder.Graph
-import qualified Algebra.Graph
+import ZuulWeeder.Prelude
 
 toD3Graph :: ConfigGraph -> ZuulWeeder.UI.D3Graph
 toD3Graph g =
@@ -57,6 +62,22 @@ instance Data.Aeson.ToJSON D3Link
 
 instance Data.Aeson.ToJSON D3Graph
 
+-- | Return the search result
+search :: SearchForm -> Names -> Html ()
+search req names
+  | Text.null req.query = pure ()
+  | otherwise = case filter matchQuery (Map.toList names) of
+      [] -> div_ "no results :("
+      results -> ul_ do
+        forM_ results $ \result ->
+          li_ $ toHtml (show result)
+  where
+    matchQuery (ConfigName name, _) = req.query `Text.isInfixOf` name
+
+newtype SearchForm = SearchForm {query :: Text} deriving (Eq, Show, Generic)
+
+instance FromForm SearchForm
+
 index :: Html ()
 index =
   doctypehtml_ do
@@ -66,9 +87,23 @@ index =
       style_ css
     body_ do
       with div_ [id_ "header"] "Welcome"
+      searchComponent
       with svg_ [width_ "1000", height_ "800"] mempty
       with (script_ mempty) [src_ "https://d3js.org/d3.v4.min.js"]
+      with (script_ mempty) [src_ "https://unpkg.com/htmx.org@1.7.0/dist/htmx.min.js"]
       script_ d3Script
+  where
+    searchComponent = do
+      input_
+        [ class_ "form-control",
+          type_ "search",
+          name_ "query",
+          placeholder_ "Begin Typing To Search Config...",
+          makeAttribute "hx-post" "/search",
+          makeAttribute "hx-trigger" "keyup changed delay:500ms, search",
+          makeAttribute "hx-target" "#search-results"
+        ]
+      with div_ [id_ "search-results"] mempty
 
 css :: Text
 css =
@@ -164,6 +199,7 @@ function dragended(d) {
 
 type API =
   Get '[HTML] (Html ())
+    :<|> "search" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
     :<|> "data.json" :> Get '[JSON] D3Graph
 
 run :: IO Analysis -> IO ()
@@ -173,7 +209,11 @@ run config = Warp.run port app
     app = serve (Proxy @API) server
 
     server :: Server API
-    server = pure index :<|> d3Route
+    server = pure index :<|> searchRoute :<|> d3Route
+
+    searchRoute req = do
+      analysis <- liftIO config
+      pure (search req analysis.names)
 
     d3Route = do
       analysis <- liftIO config

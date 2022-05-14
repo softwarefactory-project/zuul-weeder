@@ -13,6 +13,7 @@ module ZuulWeeder.Prelude
     forM_,
     runIdentity,
     liftIO,
+    trace,
 
     -- * filepath text
     FilePathT (..),
@@ -50,6 +51,7 @@ module ZuulWeeder.Prelude
 where
 
 import Control.Monad.IO.Class (liftIO)
+import Debug.Trace (trace)
 import Control.Lens ((%=))
 import Control.Lens qualified
 import Control.Monad (forM_)
