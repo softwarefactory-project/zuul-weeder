@@ -138,7 +138,7 @@ data ConfigLoc = ConfigLoc
     path :: ConfigPath,
     tenants :: [TenantName]
   }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
 instance Display CanonicalProjectName where
   displayBuilder (CanonicalProjectName (_, ProjectName projectName)) = TB.fromText projectName

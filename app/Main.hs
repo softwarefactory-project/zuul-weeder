@@ -1,6 +1,6 @@
 module Main where
 
-import qualified Zuul.Weeder (main)
+import ZuulWeeder.Main qualified (main)
 
 main :: IO ()
-main = Zuul.Weeder.main
+main = ZuulWeeder.Main.main

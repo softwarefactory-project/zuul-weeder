@@ -83,13 +83,14 @@ library
                      , servant-lucid
                      , string-qq
   hs-source-dirs:      src
-  exposed-modules:     Zuul.Weeder
-                     , Zuul.ZKDump
+  exposed-modules:     Zuul.ZKDump
                      , Zuul.ConfigLoader
                      , Zuul.Tenant
                      , Zuul.Config
-                     , Zuul.UI
                      , ZuulWeeder.Prelude
+                     , ZuulWeeder.Graph
+                     , ZuulWeeder.Main
+                     , ZuulWeeder.UI
 
 executable zuul-weeder
   import:              common-options

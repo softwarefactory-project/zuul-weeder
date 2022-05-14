@@ -10,6 +10,7 @@ module ZuulWeeder.Prelude
     traverse_,
     sort,
     forM_,
+    runIdentity,
 
     -- * text
     Text,
@@ -41,6 +42,7 @@ where
 import Control.Monad (forM_)
 import Control.Monad.Trans (lift)
 import Data.Generics.Labels ()
+import Data.Functor.Identity (runIdentity)
 import Control.Monad.State (StateT, State, execStateT)
 import Data.Foldable (traverse_)
 import Data.List (sort)

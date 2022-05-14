@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 -- | The web interface for zuul-weeder
-module Zuul.UI where
+module ZuulWeeder.UI where
 
 import ZuulWeeder.Prelude
 import Data.Aeson qualified
