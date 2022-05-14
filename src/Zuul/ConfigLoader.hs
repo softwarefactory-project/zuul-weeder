@@ -5,11 +5,11 @@ import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Map (insertWith)
 import Data.Set qualified
-import ZuulWeeder.Prelude
 import Data.Text qualified as Text
 import Data.Text.Lazy.Builder qualified as TB
 import Data.Vector qualified as V
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
+import ZuulWeeder.Prelude
 
 newtype BranchName = BranchName Text deriving (Eq, Ord, Show)
 
@@ -101,6 +101,8 @@ data ZuulConfigElement
   | ZNodeset Nodeset
   | ZProjectTemplate ProjectPipeline
   | ZPipeline Pipeline
+  | ZQueue Queue
+  | ZSemaphore Semaphore
   deriving (Show, Eq, Ord)
 
 data ZuulConfigType
@@ -111,6 +113,7 @@ data ZuulConfigType
   | ProjectTemplateT
   | NodesetT
   | SecretT
+  | QueueT
   deriving (Show, Eq, Ord, Enum, Bounded)
 
 instance From ZuulConfigElement ZuulConfigType where
@@ -120,6 +123,12 @@ instance From ZuulConfigElement ZuulConfigType where
     ZNodeset _ -> NodesetT
     ZProjectTemplate _ -> ProjectTemplateT
     ZPipeline _ -> PipelineT
+    ZQueue _ -> QueueT
+    ZSemaphore _ -> SemaphoreT
+
+data Queue = Queue {name :: Text, perBranch :: Bool} deriving (Show, Eq, Ord)
+
+data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord)
 
 instance Display ZuulConfigElement where
   displayBuilder zce = case zce of
@@ -176,6 +185,7 @@ updateTopConfig tenantResolver configLoc ze = case ze of
   ZProjectPipeline project -> #projectPipelines %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
+  _ -> error "Not implemented"
   where
     tenants = tenantResolver configLoc (from ze)
     insertConfig k v = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]

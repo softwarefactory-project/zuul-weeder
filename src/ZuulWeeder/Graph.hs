@@ -8,6 +8,8 @@ module ZuulWeeder.Graph
     pattern VNodeset,
     pattern VPipeline,
     pattern VProjectTemplate,
+    pattern VQueue,
+    pattern VSemaphore,
 
     -- * Graph functions
     analyzeConfig,
@@ -53,7 +55,13 @@ pattern VProjectTemplate x = ZuulConfigVertex (ZProjectTemplate x)
 pattern VPipeline :: Zuul.ConfigLoader.Pipeline -> ConfigVertex
 pattern VPipeline x = ZuulConfigVertex (ZPipeline x)
 
-{-# COMPLETE VNodeLabel, VJob, VProjectPipeline, VNodeset, VProjectTemplate, VPipeline #-}
+pattern VQueue :: Zuul.ConfigLoader.Queue -> ConfigVertex
+pattern VQueue x = ZuulConfigVertex (ZQueue x)
+
+pattern VSemaphore :: Zuul.ConfigLoader.Semaphore -> ConfigVertex
+pattern VSemaphore x = ZuulConfigVertex (ZSemaphore x)
+
+{-# COMPLETE VNodeLabel, VJob, VProjectPipeline, VNodeset, VProjectTemplate, VPipeline, VQueue, VSemaphore #-}
 
 type Vertex = (ConfigLoc, ConfigVertex)
 

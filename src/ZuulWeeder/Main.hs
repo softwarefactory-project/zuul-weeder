@@ -134,6 +134,8 @@ toD3Graph g =
       VProjectTemplate _ -> 4
       VPipeline _ -> 5
       VNodeLabel _ -> 6
+      VQueue _ -> 7
+      VSemaphore _ -> 8
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
     toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (display a) (display b)
 
