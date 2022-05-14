@@ -4,6 +4,8 @@ import Algebra.Graph qualified
 import Algebra.Graph.Export.Dot qualified
 import Data.Map qualified as Map
 import Data.Text (pack, unpack)
+import Options.Applicative ((<**>))
+import Options.Applicative qualified as Opts
 import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
@@ -23,60 +25,79 @@ import Zuul.Tenant
     decodeTenantsConfig,
     tenantResolver,
   )
-import ZuulWeeder.UI qualified
 import Zuul.ZKDump
-import ZuulWeeder.Prelude
 import ZuulWeeder.Graph
+import ZuulWeeder.Prelude
+import ZuulWeeder.UI qualified
 
 data Command
-  = WhatRequire Text Text (Analysis -> ConfigGraph)
-  | WhatDependsOn Text Text (Analysis -> ConfigGraph)
-  | WhatRequireDot (Analysis -> ConfigGraph)
-  | WhatDependsOnDot (Analysis -> ConfigGraph)
+  = WhatRequire Text Text TenantName
+  | WhatDependsOn Text Text TenantName
+  | WhatRequireDot TenantName
+  | WhatDependsOnDot TenantName
+  | WebUI
+  | DumpConfig
 
--- TODO: Implement a proper command line parser
+data Args = Args
+  { zkPath :: FilePathT,
+    configPath :: FilePathT,
+    command :: Command
+  }
+
+argsParser :: Opts.Parser Args
+argsParser =
+  Args
+    <$> pathOption "zk-dump" "zkdump location"
+    <*> pathOption "zuul-config" "zuul.conf location"
+    <*> Opts.subparser
+      ( commandParser "what-requires" "List what requires" whatRequireParser
+          <> commandParser "what-depends" "List what depends" whatDependsParser
+          <> commandParser "dot-requires" "Graph what requires" dotRequireParser
+          <> commandParser "dot-depends" "Graph what depends" dotDependsParser
+          <> commandParser "dump-config" "Print the decoded config" (pure DumpConfig)
+          <> commandParser "serve" "Start the web service" (pure WebUI)
+      )
+  where
+    pathOption name help =
+      FilePathT . pack <$> Opts.strOption (Opts.long name <> Opts.metavar "PATH" <> Opts.help help)
+    strOption name =
+      pack <$> Opts.strOption (Opts.long name)
+    commandParser name help p = Opts.command name (Opts.info p (Opts.progDesc help))
+    whatRequireParser =
+      WhatRequire <$> strOption "key" <*> strOption "value" <*> (TenantName <$> strOption "tenant")
+    whatDependsParser =
+      WhatDependsOn <$> strOption "key" <*> strOption "value" <*> (TenantName <$> strOption "tenant")
+    dotRequireParser = WhatRequireDot <$> (TenantName <$> strOption "tenant")
+    dotDependsParser = WhatDependsOnDot <$> (TenantName <$> strOption "tenant")
+
 main :: IO ()
-main = do
-  args <- map pack <$> getArgs
-  mainWithArgs args
+main = getArgs >>= mainWithArgs
 
-mainWithArgs :: [Text] -> IO ()
-mainWithArgs args =
-  case args of
-    [zkPath, configPath, tenant, "what-require", key, name] -> do
-      let cmd = WhatRequire key name configRequireGraph
-       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
-    [zkPath, configPath, tenant, "what-depends-on", key, name] -> do
-      let cmd = WhatDependsOn key name configDependsOnGraph
-       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
-    [zkPath, configPath, tenant, "what-require-dot"] -> do
-      let cmd = WhatRequireDot configRequireGraph
-       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
-    [zkPath, configPath, tenant, "what-depends-on-dot"] -> do
-      let cmd = WhatDependsOnDot configDependsOnGraph
-       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
-    [FilePathT -> zkPath, FilePathT -> configPath, "webui"] -> do
-      (tenants, tr) <- loadSystemConfig zkPath configPath
-      config <- loadConfig tr zkPath
+mainWithArgs :: [String] -> IO ()
+mainWithArgs xs = do
+  args <- Opts.handleParseResult $ Opts.execParserPure Opts.defaultPrefs opts xs
+  mainGo args
+  where
+    opts =
+      Opts.info
+        (argsParser <**> Opts.helper)
+        (Opts.fullDesc <> Opts.progDesc "Zuul weeder")
+
+mainGo :: Args -> IO ()
+mainGo args = do
+  (tenants, tr) <- loadSystemConfig args.zkPath args.configPath
+  config <- loadConfig tr args.zkPath
+
+  case args.command of
+    WhatRequire key name tenant -> printReachable config tenant tenants key name configRequireGraph
+    WhatDependsOn key name tenant -> printReachable config tenant tenants key name configDependsOnGraph
+    WhatRequireDot tenant -> outputDot config tenant tenants configRequireGraph
+    WhatDependsOnDot tenant -> outputDot config tenant tenants configDependsOnGraph
+    DumpConfig -> Text.Pretty.Simple.pPrint config
+    WebUI -> do
       let analysis = analyzeConfig tenants config
       let graph = configRequireGraph analysis
       ZuulWeeder.UI.run (toD3Graph graph)
-    [FilePathT -> zkPath, FilePathT -> configPath, "dump"] -> do
-      (_, tr) <- loadSystemConfig zkPath configPath
-      config <- loadConfig tr zkPath
-      Text.Pretty.Simple.pPrint config
-    _ -> putStrLn "usage: zuul-weeder path"
-
-runCommand :: FilePathT -> FilePathT -> TenantName -> Command -> IO ()
-runCommand zkDumpPath configPath tenant command = do
-  (tenants, tr) <- loadSystemConfig zkDumpPath configPath
-  config <- loadConfig tr zkDumpPath
-
-  case command of
-    WhatRequire key name graph -> printReachable config tenant tenants key name graph
-    WhatDependsOn key name graph -> printReachable config tenant tenants key name graph
-    WhatRequireDot graph -> outputDot config tenant tenants graph
-    WhatDependsOnDot graph -> outputDot config tenant tenants graph
 
 outputDot :: Config -> TenantName -> TenantsConfig -> (Analysis -> ConfigGraph) -> IO ()
 outputDot config tenant tenants graph = do

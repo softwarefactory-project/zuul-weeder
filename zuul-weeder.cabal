@@ -77,6 +77,8 @@ library
                      , ini
                      , witch
                      , pretty-simple
+                     -- Main
+                     , optparse-applicative
                      -- UI
                      , servant-server >= 0.19
                      , warp
