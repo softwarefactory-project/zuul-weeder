@@ -1,6 +1,6 @@
 module Zuul.ConfigLoader where
 
-import Control.Lens ((%=))
+import Control.Lens ((&), (.~), (%=))
 import Control.Monad.State
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
@@ -9,7 +9,7 @@ import Data.Foldable (traverse_)
 import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Map (Map, insertWith)
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Set qualified
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -63,17 +63,17 @@ data JobNodeset
   deriving (Eq, Ord, Show)
 
 data Nodeset = Nodeset
-  { nodesetName :: NodesetName,
-    nodesetLabels :: [NodeLabelName]
+  { name :: NodesetName,
+    labels :: [NodeLabelName]
   }
   deriving (Show, Eq, Ord)
 
 data Job = Job
-  { jobName :: JobName,
-    jobParent :: Maybe JobName,
-    jobNodeset :: Maybe JobNodeset,
-    jobBranches :: [BranchName],
-    jobDependencies :: [JobName]
+  { name :: JobName,
+    parent :: Maybe JobName,
+    nodeset :: Maybe JobNodeset,
+    branches :: [BranchName],
+    dependencies :: [JobName]
   }
   deriving (Show, Eq, Ord)
 
@@ -83,24 +83,24 @@ data PipelineJob
   deriving (Show, Eq, Ord)
 
 data PPipeline = PPipeline
-  { pPipelineName :: PipelineName,
-    pPipelineJobs :: [PipelineJob]
+  { name :: PipelineName,
+    jobs :: [PipelineJob]
   }
   deriving (Show, Eq, Ord)
 
 data ProjectPipeline = ProjectPipeline
-  { pName :: Project,
-    pipelineTemplates :: [TemplateName],
-    pipelinePipelines :: Data.Set.Set PPipeline
+  { name :: Project,
+    templates :: [TemplateName],
+    pipelines :: Data.Set.Set PPipeline
   }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic)
 
 newtype PipelineTrigger = PipelineTrigger {connectionName :: ConnectionName}
   deriving (Show, Ord, Eq)
 
 data Pipeline = Pipeline
-  { pipelineName :: PipelineName,
-    pipelineTriggers :: [PipelineTrigger]
+  { name :: PipelineName,
+    triggers :: [PipelineTrigger]
   }
   deriving (Show, Eq, Ord)
 
@@ -135,8 +135,8 @@ instance Witch.From ZuulConfigElement ZuulConfigType where
 
 instance Data.Text.Display.Display ZuulConfigElement where
   displayBuilder zce = case zce of
-    ZJob job -> Data.Text.Display.displayBuilder $ jobName job
-    ZNodeset ns -> Data.Text.Display.displayBuilder $ nodesetName ns
+    ZJob job -> Data.Text.Display.displayBuilder $ job.name
+    ZNodeset ns -> Data.Text.Display.displayBuilder $ ns.name
     ZNodeLabel label -> Data.Text.Display.displayBuilder label
     _ -> TB.fromText "unknown"
 
@@ -146,10 +146,10 @@ instance Data.Text.Display.Display ConfigPath where
   displayBuilder (ConfigPath p) = TB.fromText (T.pack p)
 
 data ConfigLoc = ConfigLoc
-  { clProject :: CanonicalProjectName,
-    clBranch :: BranchName,
-    clPath :: ConfigPath,
-    clTenants :: [TenantName]
+  { project :: CanonicalProjectName,
+    branch :: BranchName,
+    path :: ConfigPath,
+    tenants :: [TenantName]
   }
   deriving (Show, Eq, Ord)
 
@@ -157,42 +157,42 @@ instance Data.Text.Display.Display CanonicalProjectName where
   displayBuilder (CanonicalProjectName (_, ProjectName projectName)) = TB.fromText projectName
 
 instance Data.Text.Display.Display ConfigLoc where
-  displayBuilder ConfigLoc {..} =
-    Data.Text.Display.displayBuilder clProject
+  displayBuilder loc =
+    Data.Text.Display.displayBuilder loc.project
       <> branchBuilder
       <> TB.fromText ": "
-      <> Data.Text.Display.displayBuilder clPath
+      <> Data.Text.Display.displayBuilder loc.path
     where
-      branchBuilder = case clBranch of
+      branchBuilder = case loc.branch of
         BranchName "master" -> ""
         BranchName n -> TB.fromText $ "[" <> n <> "]"
 
 type ConfigMap a b = Map a [(ConfigLoc, b)]
 
 data Config = Config
-  { configJobs :: ConfigMap JobName Job,
-    configNodesets :: ConfigMap NodesetName Nodeset,
-    configNodelabels :: ConfigMap NodeLabelName NodeLabelName,
-    configProjectPipelines :: ConfigMap Project ProjectPipeline,
-    configProjectTemplates :: ConfigMap Project ProjectPipeline,
-    configPipelines :: ConfigMap PipelineName Pipeline,
+  { jobs :: ConfigMap JobName Job,
+    nodesets :: ConfigMap NodesetName Nodeset,
+    nodeLabels :: ConfigMap NodeLabelName NodeLabelName,
+    projectPipelines :: ConfigMap Project ProjectPipeline,
+    projectTemplates :: ConfigMap Project ProjectPipeline,
+    pipelines :: ConfigMap PipelineName Pipeline,
     configErrors :: [ConfigError]
   }
   deriving (Show, Generic)
 
 updateTopConfig :: TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
 updateTopConfig tenantResolver configLoc ze = case ze of
-  ZJob job -> #configJobs %= insertConfig (jobName job) job
+  ZJob job -> #jobs %= insertConfig job.name job
   ZNodeset node -> do
-    #configNodesets %= insertConfig (nodesetName node) node
-    traverse_ (\v -> #configNodelabels %= insertConfig v v) $ Data.Set.fromList (nodesetLabels node)
-  ZProjectPipeline project -> #configProjectPipelines %= insertConfig (pName project) project
-  ZProjectTemplate template -> #configProjectTemplates %= insertConfig (pName template) template
-  ZPipeline pipeline -> #configPipelines %= insertConfig (pipelineName pipeline) pipeline
+    #nodesets %= insertConfig node.name node
+    traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
+  ZProjectPipeline project -> #projectPipelines %= insertConfig project.name project
+  ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
+  ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
   ZNodeLabel _ -> pure ()
   where
     tenants = tenantResolver configLoc (Witch.from ze)
-    insertConfig k v = Data.Map.insertWith mappend k [(configLoc {clTenants = tenants}, v)]
+    insertConfig k v = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
 decodeConfig (project, _branch) zkJSONData =
@@ -217,18 +217,18 @@ decodeConfig (project, _branch) zkJSONData =
         getE k o = unwrapObject $ getObjValue k o
     decodePipeline :: Object -> Pipeline
     decodePipeline va =
-      let pipelineName = PipelineName $ getName va
-          pipelineTriggers = case getObjValue "trigger" va of
-            Object triggers -> PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggers
+      let name = PipelineName $ getName va
+          triggers = case getObjValue "trigger" va of
+            Object triggers' -> PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggers'
             _ -> error $ "Unexpected trigger value in: " <> show va
        in Pipeline {..}
     decodeJob :: Object -> Job
     decodeJob va =
-      let jobName = JobName $ getName va
-          ( jobParent,
-            jobNodeset,
-            jobBranches,
-            jobDependencies
+      let name = JobName $ getName va
+          ( parent,
+            nodeset,
+            branches,
+            dependencies
             ) = decodeJobContent va
        in Job {..}
     decodeJobContent :: Object -> (Maybe JobName, Maybe JobNodeset, [BranchName], [JobName])
@@ -260,8 +260,8 @@ decodeConfig (project, _branch) zkJSONData =
 
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =
-      let nodesetName = NodesetName . getString $ getObjValue "name" va
-          nodesetLabels = case getObjValue "nodes" va of
+      let name = NodesetName . getString $ getObjValue "name" va
+          labels = case getObjValue "nodes" va of
             Array nodes ->
               NodeLabelName . getString . getObjValue "label"
                 <$> (unwrapObject <$> sort (V.toList nodes))
@@ -270,22 +270,22 @@ decodeConfig (project, _branch) zkJSONData =
 
     decodeProjectPipeline :: Object -> ProjectPipeline
     decodeProjectPipeline va =
-      let pName = case getString <$> HM.lookup "name" va of
+      let name = case getString <$> HM.lookup "name" va of
             Nothing -> PNameCannonical project
-            Just name -> case T.uncons name of
-              Just ('^', _) -> PNameRE $ ProjectNameRE name
-              Just _ -> PName $ ProjectName name
-              Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name
-          pipelineTemplates = decodeAsList "templates" TemplateName va
-          pipelinePipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
+            Just name' -> case T.uncons name' of
+              Just ('^', _) -> PNameRE $ ProjectNameRE name'
+              Just _ -> PName $ ProjectName name'
+              Nothing -> error $ "Unexpected project name for project pipeline: " <> T.unpack name'
+          templates = decodeAsList "templates" TemplateName va
+          pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
        in ProjectPipeline {..}
       where
         decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
         decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va') = case va' of
           Object inner ->
-            let pPipelineName = PipelineName pipelineName'
-                pPipelineJobs = case HM.lookup "jobs" inner of
-                  Just (String name) -> [PJName $ JobName name]
+            let name = PipelineName pipelineName'
+                jobs = case HM.lookup "jobs" inner of
+                  Just (String name') -> [PJName $ JobName name']
                   Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
                   _ -> error $ "Unexpected project pipeline format: " <> show inner
              in Just $ PPipeline {..}
@@ -294,11 +294,11 @@ decodeConfig (project, _branch) zkJSONData =
         decodePPipelineJob jobElem = case jobElem of
           Object jobObj ->
             let key = getKey jobObj
-                jobName = JobName key
-                ( jobParent,
-                  jobNodeset,
-                  jobBranches,
-                  jobDependencies
+                name = JobName key
+                ( parent,
+                  nodeset,
+                  branches,
+                  dependencies
                   ) = decodeJobContent $ unwrapObject $ getObjValue key jobObj
              in PJJob $ Job {..}
           String v -> PJName $ JobName v
@@ -306,7 +306,7 @@ decodeConfig (project, _branch) zkJSONData =
     decodeProjectTemplate :: Object -> ProjectPipeline
     decodeProjectTemplate va =
       let template = decodeProjectPipeline va
-       in template {pName = TName . getPName $ pName template}
+       in template & #name .~ (TName . getPName $ template.name)
       where
         getPName :: Project -> TemplateName
         getPName (PName (ProjectName name)) = TemplateName name
@@ -353,10 +353,10 @@ loadConfig tenantResolver zkcE = do
       let zkcDecoded = decodeConfig (canonicalProjectName, branchName) $ zkJSONData zkc
           canonicalProjectName =
             CanonicalProjectName
-              ( ProviderName $ provider zkc,
-                ProjectName $ project zkc
+              ( ProviderName $ zkc.provider,
+                ProjectName $ zkc.project
               )
-          branchName = BranchName $ branch zkc
+          branchName = BranchName zkc.branch
           configPath = ConfigPath (T.unpack $ filePath zkc)
           -- tenants info are set in the updateTopConfig function.
           -- this is done per element because a tenant may not include everything.

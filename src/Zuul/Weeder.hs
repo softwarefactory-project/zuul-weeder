@@ -91,7 +91,7 @@ runCommand zkDumpPath configPath tenant command = do
     WhatDependsOnDot graph -> outputDot config tenant tenants graph
 
 filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
-filterTenant tenant = Algebra.Graph.induce (\(loc, _) -> tenant `elem` clTenants loc)
+filterTenant tenant = Algebra.Graph.induce (\(loc, _) -> tenant `elem` loc.tenants)
 
 outputDot :: Config -> TenantName -> TenantsConfig -> (Analysis -> ConfigGraph) -> IO ()
 outputDot config tenant tenants graph = do
@@ -164,13 +164,13 @@ toD3Graph g =
     toLinks ((_, a), (_, b)) = Zuul.UI.D3Link (display a) (display b)
 
 findVertex :: Text -> Text -> Zuul.ConfigLoader.Config -> Maybe Vertex
-findVertex "job" name config = case Map.lookup (JobName name) (configJobs config) of
+findVertex "job" name config = case Map.lookup (JobName name) config.jobs of
   Just [(loc, job)] -> Just (loc, ZJob job)
   _ -> Nothing
-findVertex "nodeset" name config = case Map.lookup (NodesetName name) (configNodesets config) of
+findVertex "nodeset" name config = case Map.lookup (NodesetName name) config.nodesets of
   Just [(loc, x)] -> Just (loc, ZNodeset x)
   _ -> Nothing
-findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) (configNodelabels config) of
+findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) config.nodeLabels of
   Just [(loc, x)] -> Just (loc, ZNodeLabel x)
   _ -> Nothing
 findVertex _ _ _ = Nothing
@@ -193,7 +193,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         baseJobsMap :: Map.Map JobName [TenantName]
         baseJobsMap = foldr insertTenant mempty (Map.toList tenantsConfig)
         insertTenant (tenantName, tenantConfig) =
-          Map.insertWith mappend (Zuul.Tenant.defaultParent tenantConfig) [tenantName]
+          Map.insertWith mappend tenantConfig.defaultParent [tenantName]
 
     -- The job list, where the tenant parent job is applied.
     -- Given:
@@ -204,33 +204,33 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     --            , (loc {tenants = [tenant3]}, job1 {parent = Just base-minimal}) ])
     --   , (job2, [ (loc, [job2]) ]) ]
     allJobs :: Zuul.ConfigLoader.ConfigMap JobName Job
-    allJobs = Map.map (concatMap expandBaseJobs) (configJobs config)
+    allJobs = Map.map (concatMap expandBaseJobs) config.jobs
       where
         expandBaseJobs :: (ConfigLoc, Job) -> [(ConfigLoc, Job)]
         expandBaseJobs (loc, job)
           -- When parent is set, we don't touch the job
-          | isJust (jobParent job) = [(loc, job)]
+          | isJust job.parent = [(loc, job)]
           -- Otherwise we set the parent for each tenant
           | otherwise = mapMaybe (setParentJob (loc, job)) baseJobs
         setParentJob :: (ConfigLoc, Job) -> (JobName, [TenantName]) -> Maybe (ConfigLoc, Job)
         setParentJob (loc, job) (parent, tenants)
           -- The default base job is from other tenants
-          | all (`notElem` clTenants loc) tenants = Nothing
+          | all (`notElem` loc.tenants) tenants = Nothing
           -- This job is the base job, we don't set it's parent
-          | jobName job == parent = Just (loc, job)
-          | otherwise = Just (loc {clTenants = tenants}, job {jobParent = Just parent})
+          | job.name == parent = Just (loc, job)
+          | otherwise = Just (loc {tenants = tenants}, job {parent = Just parent})
 
     go :: State Analysis ()
     go = do
       goJobs $ concat $ Map.elems allJobs
-      goNodesets $ concat $ Map.elems $ configNodesets config
+      goNodesets $ concat $ Map.elems config.nodesets
 
     -- TODO: implement a lookup function that check matching tenant. Otherwise we might incorrectly link objects between tenants
 
     goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
     goNodesets nodesets = do
       forM_ nodesets $ \(loc, nodeset) -> do
-        forM_ (nodesetLabels nodeset) $ \label -> do
+        forM_ nodeset.labels $ \label -> do
           feedState ((loc, ZNodeset nodeset), (loc, ZNodeLabel label))
 
     goJobs :: [(ConfigLoc, Job)] -> State Analysis ()
@@ -238,22 +238,22 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       -- TODO: filter using tenant config
       forM_ jobs $ \(loc, job) -> do
         -- look for nodeset location
-        case jobNodeset job of
-          Just (JobNodeset nodeset) -> case Map.lookup nodeset (configNodesets config) of
+        case job.nodeset of
+          Just (JobNodeset nodeset) -> case Map.lookup nodeset config.nodesets of
             Just xs -> forM_ xs $ \(loc', ns) -> feedState ((loc, ZJob job), (loc', ZNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           _ ->
             -- Ignore inlined nodeset
             pure ()
         -- look for job parent
-        case jobParent job of
+        case job.parent of
           Just parent -> do
             case Map.lookup parent allJobs of
               Just xs -> forM_ xs $ \(loc', pj) -> feedState ((loc, ZJob job), (loc', ZJob pj))
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
         -- look for job dependencies
-        forM_ (jobDependencies job) $ \dJob' -> do
+        forM_ job.dependencies $ \dJob' -> do
           case Map.lookup dJob' allJobs of
             Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, ZJob job), (loc', ZJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)

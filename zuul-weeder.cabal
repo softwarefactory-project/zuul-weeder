@@ -48,6 +48,10 @@ common common-options
                      , TypeApplications
                      , TypeOperators
                      , QuasiQuotes
+                     -- For the new record dot syntax
+                     -- , NoFieldSelectors
+                     , DuplicateRecordFields
+                     , OverloadedRecordDot
   default-language:    Haskell2010
 
 library
