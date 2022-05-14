@@ -101,7 +101,6 @@ data ZuulConfigElement
   | ZNodeset Nodeset
   | ZProjectTemplate ProjectPipeline
   | ZPipeline Pipeline
-  | ZNodeLabel NodeLabelName
   deriving (Show, Eq, Ord)
 
 data ZuulConfigType
@@ -121,14 +120,11 @@ instance From ZuulConfigElement ZuulConfigType where
     ZNodeset _ -> NodesetT
     ZProjectTemplate _ -> ProjectTemplateT
     ZPipeline _ -> PipelineT
-    -- ZNodeLabel is only used for cli input, it is not a real ZCE
-    ZNodeLabel _ -> error "The impossible has happened"
 
 instance Display ZuulConfigElement where
   displayBuilder zce = case zce of
     ZJob job -> displayBuilder $ job.name
     ZNodeset ns -> displayBuilder $ ns.name
-    ZNodeLabel label -> displayBuilder label
     _ -> TB.fromText "unknown"
 
 newtype ConfigPath = ConfigPath {getConfigPath :: FilePath} deriving (Show, Eq, Ord)
@@ -180,7 +176,6 @@ updateTopConfig tenantResolver configLoc ze = case ze of
   ZProjectPipeline project -> #projectPipelines %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
-  ZNodeLabel _ -> pure ()
   where
     tenants = tenantResolver configLoc (from ze)
     insertConfig k v = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]

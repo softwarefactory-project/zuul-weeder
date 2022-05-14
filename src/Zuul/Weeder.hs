@@ -1,6 +1,5 @@
 module Zuul.Weeder (main, mainWithArgs) where
 
-import ZuulWeeder.Prelude
 import Algebra.Graph qualified
 import Algebra.Graph.Export.Dot qualified
 import Algebra.Graph.ToGraph qualified
@@ -34,6 +33,7 @@ import Zuul.Tenant
 import Zuul.Tenant qualified
 import Zuul.UI qualified
 import Zuul.ZKDump
+import ZuulWeeder.Prelude
 
 data Command
   = WhatRequire Text Text (Analysis -> ConfigGraph)
@@ -129,7 +129,37 @@ loadSystemConfig dumpPath configPath = do
       (zsc, Zuul.Tenant.tenantResolver zsc connections)
     _ -> error "Invalid tenant config"
 
-type Vertex = (Zuul.ConfigLoader.ConfigLoc, Zuul.ConfigLoader.ZuulConfigElement)
+-- | The graph vertex
+-- Node label names are added to the raw zuul config element so that they can be searched independently.
+data ConfigVertex
+  = ZuulConfigVertex ZuulConfigElement
+  | NodeLabelVertex NodeLabelName
+  deriving (Eq, Ord, Show, Generic)
+
+instance Display ConfigVertex where
+  displayBuilder (NodeLabelVertex p) = displayBuilder p
+  displayBuilder (ZuulConfigVertex p) = displayBuilder p
+
+pattern VNodeLabel :: NodeLabelName -> ConfigVertex
+pattern VNodeLabel x = NodeLabelVertex x
+
+pattern VJob :: Job -> ConfigVertex
+pattern VJob x = ZuulConfigVertex (ZJob x)
+
+pattern VProjectPipeline :: Zuul.ConfigLoader.ProjectPipeline -> ConfigVertex
+pattern VProjectPipeline x = ZuulConfigVertex (ZProjectPipeline x)
+
+pattern VNodeset :: Nodeset -> ConfigVertex
+pattern VNodeset x = ZuulConfigVertex (ZNodeset x)
+
+pattern VProjectTemplate :: Zuul.ConfigLoader.ProjectPipeline -> ConfigVertex
+pattern VProjectTemplate x = ZuulConfigVertex (ZProjectTemplate x)
+
+pattern VPipeline :: Zuul.ConfigLoader.Pipeline -> ConfigVertex
+pattern VPipeline x = ZuulConfigVertex (ZPipeline x)
+{-# COMPLETE VNodeLabel, VJob, VProjectPipeline, VNodeset, VProjectTemplate, VPipeline #-}
+
+type Vertex = (ConfigLoc, ConfigVertex)
 
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
@@ -149,24 +179,24 @@ toD3Graph g =
   where
     toNodes :: Vertex -> Zuul.UI.D3Node
     toNodes (_, e) = Zuul.UI.D3Node (display e) $ case e of
-      ZJob _ -> 1
-      ZProjectPipeline _ -> 2
-      ZNodeset _ -> 3
-      ZProjectTemplate _ -> 4
-      ZPipeline _ -> 5
-      ZNodeLabel _ -> 6
+      VJob _ -> 1
+      VProjectPipeline _ -> 2
+      VNodeset _ -> 3
+      VProjectTemplate _ -> 4
+      VPipeline _ -> 5
+      VNodeLabel _ -> 6
     toLinks :: (Vertex, Vertex) -> Zuul.UI.D3Link
     toLinks ((_, a), (_, b)) = Zuul.UI.D3Link (display a) (display b)
 
 findVertex :: Text -> Text -> Zuul.ConfigLoader.Config -> Maybe Vertex
 findVertex "job" name config = case Map.lookup (JobName name) config.jobs of
-  Just [(loc, job)] -> Just (loc, ZJob job)
+  Just [(loc, job)] -> Just (loc, VJob job)
   _ -> Nothing
 findVertex "nodeset" name config = case Map.lookup (NodesetName name) config.nodesets of
-  Just [(loc, x)] -> Just (loc, ZNodeset x)
+  Just [(loc, x)] -> Just (loc, VNodeset x)
   _ -> Nothing
 findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) config.nodeLabels of
-  Just [(loc, x)] -> Just (loc, ZNodeLabel x)
+  Just [(loc, x)] -> Just (loc, VNodeLabel x)
   _ -> Nothing
 findVertex _ _ _ = Nothing
 
@@ -226,7 +256,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goNodesets nodesets = do
       forM_ nodesets $ \(loc, nodeset) -> do
         forM_ nodeset.labels $ \label -> do
-          feedState ((loc, ZNodeset nodeset), (loc, ZNodeLabel label))
+          feedState ((loc, VNodeset nodeset), (loc, VNodeLabel label))
 
     goJobs :: [(ConfigLoc, Job)] -> State Analysis ()
     goJobs jobs = do
@@ -235,7 +265,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         -- look for nodeset location
         case job.nodeset of
           Just (JobNodeset nodeset) -> case Map.lookup nodeset config.nodesets of
-            Just xs -> forM_ xs $ \(loc', ns) -> feedState ((loc, ZJob job), (loc', ZNodeset ns))
+            Just xs -> forM_ xs $ \(loc', ns) -> feedState ((loc, VJob job), (loc', VNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           _ ->
             -- Ignore inlined nodeset
@@ -244,13 +274,13 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         case job.parent of
           Just parent -> do
             case Map.lookup parent allJobs of
-              Just xs -> forM_ xs $ \(loc', pj) -> feedState ((loc, ZJob job), (loc', ZJob pj))
+              Just xs -> forM_ xs $ \(loc', pj) -> feedState ((loc, VJob job), (loc', VJob pj))
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
         -- look for job dependencies
         forM_ job.dependencies $ \dJob' -> do
           case Map.lookup dJob' allJobs of
-            Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, ZJob job), (loc', ZJob dJob))
+            Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, VJob job), (loc', VJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
 
     feedState :: (Vertex, Vertex) -> State Analysis ()

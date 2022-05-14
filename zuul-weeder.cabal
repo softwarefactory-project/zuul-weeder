@@ -48,6 +48,7 @@ common common-options
                      , TypeApplications
                      , TypeOperators
                      , QuasiQuotes
+                     , PatternSynonyms
                      -- For the new record dot syntax
                      -- , NoFieldSelectors
                      , DuplicateRecordFields
