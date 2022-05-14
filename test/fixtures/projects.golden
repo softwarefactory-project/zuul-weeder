@@ -1,0 +1,96 @@
+[ ZProjectPipeline
+    ( ProjectPipeline
+        { name = PName
+            ( ProjectName "config" )
+        , templates = []
+        , pipelines = fromList
+            [ PPipeline
+                { name = PipelineName "check"
+                , jobs =
+                    [ PJName
+                        ( JobName "config-check" )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "gate"
+                , jobs =
+                    [ PJName
+                        ( JobName "config-check" )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "post"
+                , jobs =
+                    [ PJName
+                        ( JobName "config-update" )
+                    ]
+                }
+            ]
+        }
+    )
+, ZProjectPipeline
+    ( ProjectPipeline
+        { name = PNameCannonical
+            ( CanonicalProjectName
+                ( ProviderName ""
+                , ProjectName ""
+                )
+            )
+        , templates =
+            [ TemplateName "sf-ci-jobs" ]
+        , pipelines = fromList
+            [ PPipeline
+                { name = PipelineName "check"
+                , jobs =
+                    [ PJJob
+                        ( Job
+                            { name = JobName "linters"
+                            , parent = Nothing
+                            , nodeset = Just
+                                ( JobNodeset
+                                    ( NodesetName "linters-pod" )
+                                )
+                            , branches = []
+                            , dependencies = []
+                            }
+                        )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "experimental"
+                , jobs =
+                    [ PJName
+                        ( JobName "sf-rpm-build" )
+                    , PJJob
+                        ( Job
+                            { name = JobName "sf-ci-openshift-integration"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-rpm-build" ]
+                            }
+                        )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "gate"
+                , jobs =
+                    [ PJJob
+                        ( Job
+                            { name = JobName "linters"
+                            , parent = Nothing
+                            , nodeset = Just
+                                ( JobNodeset
+                                    ( NodesetName "linters-pod" )
+                                )
+                            , branches = []
+                            , dependencies = []
+                            }
+                        )
+                    ]
+                }
+            ]
+        }
+    )
+]

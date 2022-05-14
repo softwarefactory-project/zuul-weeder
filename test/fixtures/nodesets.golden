@@ -1,0 +1,11 @@
+[ ZNodeset
+    ( Nodeset
+        { name = NodesetName "nodeset1"
+        , labels =
+            [ NodeLabelName "compute-label"
+            , NodeLabelName "compute-label"
+            , NodeLabelName "controller-label"
+            ]
+        }
+    )
+]

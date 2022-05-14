@@ -1,0 +1,12 @@
+[ ZPipeline
+    ( Pipeline
+        { name = PipelineName "check"
+        , triggers =
+            [ PipelineTrigger
+                { connectionName = ConnectionName "my_gerrit" }
+            , PipelineTrigger
+                { connectionName = ConnectionName "my_gitlab" }
+            ]
+        }
+    )
+]

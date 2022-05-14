@@ -108,9 +108,12 @@ test-suite zuul-weeder-test
   main-is:             Spec.hs
   build-depends:       tasty                      >= 0.11.2   && < 1.5
                      , tasty-hunit                >= 0.10     && < 0.11
+                     , tasty-golden
                      , containers
+                     , text
                      , aeson
                      , filepath
+                     , pretty-simple
                      , yaml
                      , zuul-weeder
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N

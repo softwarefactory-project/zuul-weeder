@@ -1,0 +1,75 @@
+[
+    ( TenantName "local"
+    , TenantConfig
+        { defaultParent = JobName "base"
+        , connections = fromList
+            [
+                ( ConnectionName "gerrit"
+                , TenantConnectionConfig
+                    { configProjects =
+                        [ TenantProject
+                            { projectName = ProjectName "config"
+                            , includedConfigElements = fromList
+                                [ PipelineT
+                                , JobT
+                                , SemaphoreT
+                                , ProjectT
+                                , ProjectTemplateT
+                                , NodesetT
+                                , SecretT
+                                , QueueT
+                                ]
+                            , configPaths =
+                                [ ".zuul.yaml"
+                                , "zuul.yaml"
+                                , ".zuul.d/"
+                                , "zuul.d/"
+                                ]
+                            }
+                        ]
+                    , untrustedProjects =
+                        [ TenantProject
+                            { projectName = ProjectName "sf-jobs"
+                            , includedConfigElements = fromList
+                                [ JobT
+                                , SemaphoreT
+                                , ProjectT
+                                , ProjectTemplateT
+                                , NodesetT
+                                , SecretT
+                                , QueueT
+                                ]
+                            , configPaths =
+                                [ ".zuul.yaml"
+                                , "zuul.yaml"
+                                , ".zuul.d/"
+                                , "zuul.d/"
+                                ]
+                            }
+                        , TenantProject
+                            { projectName = ProjectName "zuul-jobs"
+                            , includedConfigElements = fromList [ JobT ]
+                            , configPaths =
+                                [ ".zuul.yaml"
+                                , "zuul.yaml"
+                                , ".zuul.d/"
+                                , "zuul.d/"
+                                ]
+                            }
+                        , TenantProject
+                            { projectName = ProjectName "zuul-distro-jobs"
+                            , includedConfigElements = fromList []
+                            , configPaths =
+                                [ ".zuul.yaml"
+                                , "zuul.yaml"
+                                , ".zuul.d/"
+                                , "zuul.d/"
+                                ]
+                            }
+                        ]
+                    }
+                )
+            ]
+        }
+    )
+]

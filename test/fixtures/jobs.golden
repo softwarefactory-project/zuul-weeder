@@ -1,0 +1,52 @@
+[ ZJob
+    ( Job
+        { name = JobName "base"
+        , parent = Nothing
+        , nodeset = Just
+            ( JobAnonymousNodeset
+                [ NodeLabelName "pod-centos-7" ]
+            )
+        , branches = []
+        , dependencies = []
+        }
+    )
+, ZJob
+    ( Job
+        { name = JobName "config-check"
+        , parent = Just
+            ( JobName "base" )
+        , nodeset = Just
+            ( JobAnonymousNodeset [] )
+        , branches =
+            [ BranchName "master" ]
+        , dependencies =
+            [ JobName "job1"
+            , JobName "job2"
+            ]
+        }
+    )
+, ZJob
+    ( Job
+        { name = JobName "config-update"
+        , parent = Just
+            ( JobName "base" )
+        , nodeset = Just
+            ( JobAnonymousNodeset [] )
+        , branches =
+            [ BranchName "master" ]
+        , dependencies = []
+        }
+    )
+, ZJob
+    ( Job
+        { name = JobName "wait-for-changes-ahead"
+        , parent = Nothing
+        , nodeset = Just
+            ( JobNodeset
+                ( NodesetName "nodeset1" )
+            )
+        , branches = []
+        , dependencies = []
+        }
+    )
+]

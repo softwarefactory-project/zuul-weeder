@@ -1,0 +1,86 @@
+[ ZProjectTemplate
+    ( ProjectPipeline
+        { name = TName
+            ( TemplateName "sf-ci-jobs" )
+        , templates = []
+        , pipelines = fromList
+            [ PPipeline
+                { name = PipelineName "check"
+                , jobs =
+                    [ PJName
+                        ( JobName "sf-rpm-build" )
+                    , PJJob
+                        ( Job
+                            { name = JobName "sf-ci-functional-minimal"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-rpm-build" ]
+                            }
+                        )
+                    , PJJob
+                        ( Job
+                            { name = JobName "sf-ci-functional-allinone"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-rpm-build" ]
+                            }
+                        )
+                    , PJJob
+                        ( Job
+                            { name = JobName "sf-tenants"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-rpm-build" ]
+                            }
+                        )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "gate"
+                , jobs =
+                    [ PJName
+                        ( JobName "sf-rpm-build" )
+                    , PJJob
+                        ( Job
+                            { name = JobName "sf-ci-functional-minimal"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-rpm-build" ]
+                            }
+                        )
+                    , PJJob
+                        ( Job
+                            { name = JobName "sf-ci-functional-allinone"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-rpm-build" ]
+                            }
+                        )
+                    , PJJob
+                        ( Job
+                            { name = JobName "wait-for-changes-ahead"
+                            , parent = Nothing
+                            , nodeset = Nothing
+                            , branches = []
+                            , dependencies =
+                                [ JobName "sf-ci-functional-allinone"
+                                , JobName "sf-ci-functional-minimal"
+                                ]
+                            }
+                        )
+                    ]
+                }
+            ]
+        }
+    )
+]

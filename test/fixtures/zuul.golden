@@ -1,0 +1,47 @@
+Just
+    [
+        ( CanonicalProjectName
+            ( ProviderName "sftests.com"
+            , ProjectName "config"
+            )
+        ,
+            [ PipelineT
+            , JobT
+            , SemaphoreT
+            , ProjectT
+            , ProjectTemplateT
+            , NodesetT
+            , SecretT
+            , QueueT
+            ]
+        )
+    ,
+        ( CanonicalProjectName
+            ( ProviderName "sftests.com"
+            , ProjectName "sf-jobs"
+            )
+        ,
+            [ JobT
+            , SemaphoreT
+            , ProjectT
+            , ProjectTemplateT
+            , NodesetT
+            , SecretT
+            , QueueT
+            ]
+        )
+    ,
+        ( CanonicalProjectName
+            ( ProviderName "sftests.com"
+            , ProjectName "zuul-jobs"
+            )
+        , [ JobT ]
+        )
+    ,
+        ( CanonicalProjectName
+            ( ProviderName "sftests.com"
+            , ProjectName "zuul-distro-jobs"
+            )
+        , []
+        )
+    ]
