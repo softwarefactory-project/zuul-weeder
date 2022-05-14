@@ -4,7 +4,6 @@ import ZuulWeeder.Prelude
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
-import Data.List qualified
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -13,7 +12,6 @@ import Zuul.Config (ConnectionCName (ConnectionCName), ConnectionsConfig)
 import Zuul.ConfigLoader
   ( CanonicalProjectName (CanonicalProjectName),
     ConfigLoc (..),
-    ConfigPath (getConfigPath),
     ConnectionName (ConnectionName),
     JobName (JobName),
     ProjectName (ProjectName),
@@ -43,7 +41,7 @@ toItemType name = case name of
 data TenantProject = TenantProject
   { projectName :: ProjectName,
     includedConfigElements :: Set.Set ZuulConfigType,
-    configPaths :: [FilePath]
+    configPaths :: [FilePathT]
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -160,8 +158,8 @@ tenantResolver tenantsConfig connections configLoc zct = matches
                   zct `Set.member` includedConfigElements,
                   any matchPath configPaths
                 ]
-        matchPath :: FilePath -> Bool
-        matchPath fp = fp `Data.List.isPrefixOf` getConfigPath configLoc.path
+        matchPath :: FilePathT -> Bool
+        matchPath fp = getPath fp `Text.isPrefixOf` getPath configLoc.path
 
 getTenantDefaultBaseJob :: TenantsConfig -> TenantName -> Maybe JobName
 getTenantDefaultBaseJob tenantsConfig tenantName =

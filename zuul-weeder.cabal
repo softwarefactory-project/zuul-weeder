@@ -49,6 +49,7 @@ common common-options
                      , TypeOperators
                      , QuasiQuotes
                      , PatternSynonyms
+                     , GeneralizedNewtypeDeriving
                      -- For the new record dot syntax
                      -- , NoFieldSelectors
                      , DuplicateRecordFields
@@ -112,7 +113,6 @@ test-suite zuul-weeder-test
                      , containers
                      , text
                      , aeson
-                     , filepath
                      , pretty-simple
                      , yaml
                      , zuul-weeder

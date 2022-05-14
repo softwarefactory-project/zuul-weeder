@@ -14,25 +14,21 @@ module Zuul.ZKDump
 where
 
 import Control.Exception (SomeException, try)
-import Control.Monad (forM_, when)
+import Control.Monad (when)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
-import Control.Monad.Trans (lift)
 import Data.Aeson (Value, eitherDecodeFileStrict)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString
-import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Yaml
 import qualified Network.URI.Encode
 import qualified Streaming.Prelude as S
-import System.Directory (doesDirectoryExist, listDirectory)
-import System.FilePath ((</>))
+import ZuulWeeder.Prelude
 
 data ZKConfig = ZKConfig
   { provider :: Text,
     project :: Text,
     branch :: Text,
-    filePath :: Text,
+    filePath :: FilePathT,
     zkJSONData :: Value
   }
   deriving (Show, Eq)
@@ -42,15 +38,15 @@ newtype ZKSystemConfig = ZKSystemConfig Value deriving (Show, Eq)
 data ConfigError
   = ReadError SomeException
   | DecodeError Data.Yaml.ParseException
-  | InvalidPath FilePath
+  | InvalidPath FilePathT
   deriving (Show)
 
 type ZKConfigStream = S.Stream (S.Of (Either ConfigError ZKConfig)) IO ()
 
-walkConfigNodes :: FilePath -> ZKConfigStream
+walkConfigNodes :: FilePathT -> ZKConfigStream
 walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
   where
-    walkRecursive :: FilePath -> ZKConfigStream
+    walkRecursive :: FilePathT -> ZKConfigStream
     walkRecursive curPath = do
       tree <- lift $ listDirectory curPath
       forM_ tree $ \path -> do
@@ -59,10 +55,10 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
         if isDirectory
           then walkRecursive fullPath
           else do
-            when ("/0000000000/ZKDATA" `Text.isSuffixOf` Text.pack fullPath) $
+            when ("/0000000000/ZKDATA" `Text.isSuffixOf` getPath fullPath) $
               lift (runExceptT (handleConfig fullPath)) >>= S.yield
 
-    handleConfig :: FilePath -> ExceptT ConfigError IO ZKConfig
+    handleConfig :: FilePathT -> ExceptT ConfigError IO ZKConfig
     handleConfig fullPath = do
       zkData <- readZKData fullPath
       zkJSONData <- case Data.Yaml.decodeEither' zkData of
@@ -73,31 +69,31 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
         Just config -> pure config
         Nothing -> throwError $ InvalidPath fullPath
 
-    readZKData :: FilePath -> ExceptT ConfigError IO ByteString
+    readZKData :: FilePathT -> ExceptT ConfigError IO ByteString
     readZKData path = do
-      zkDataE <- lift $ try $ Data.ByteString.readFile path
+      zkDataE <- lift $ try $ readFileBS path
       case zkDataE of
         Left err -> throwError $ ReadError err
         Right content -> pure content
 
-readSystemConfig :: FilePath -> IO (Either String ZKSystemConfig)
+readSystemConfig :: FilePathT -> IO (Either String ZKSystemConfig)
 readSystemConfig dumpPath = do
   configE <- readC
   pure $ ZKSystemConfig <$> configE
   where
     readC :: IO (Either String Value)
-    readC = eitherDecodeFileStrict $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
+    readC = eitherDecodeFileStrict . getPath' $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
 
-mkZKConfig :: Value -> FilePath -> Maybe ZKConfig
+mkZKConfig :: Value -> FilePathT -> Maybe ZKConfig
 mkZKConfig zkJSONData path = do
   [_, _, filePath', _, branch', Network.URI.Encode.decodeText -> providerPath'] <-
     pure $
-      take 6 $ reverse $ Text.split (== '/') (Text.pack path)
+      take 6 $ reverse $ Text.split (== '/') (getPath path)
   (provider, project) <- case Text.breakOn "/" providerPath' of
     (_, "") -> Nothing
     (x, xs) -> Just (x, Text.drop 1 xs)
 
   let branch = Network.URI.Encode.decodeText branch'
-      filePath = Network.URI.Encode.decodeText filePath'
+      filePath = FilePathT $ Network.URI.Encode.decodeText filePath'
 
   Just ZKConfig {..}

@@ -1,6 +1,7 @@
 -- | The project standard library
 module ZuulWeeder.Prelude
   ( module Prelude,
+
     -- * base
     Generic,
     mapMaybe,
@@ -11,6 +12,14 @@ module ZuulWeeder.Prelude
     sort,
     forM_,
     runIdentity,
+
+    -- * filepath text
+    FilePathT (..),
+    (</>),
+    getPath',
+    listDirectory,
+    doesDirectoryExist,
+    readFileBS,
 
     -- * text
     Text,
@@ -35,25 +44,47 @@ module ZuulWeeder.Prelude
     (%=),
 
     -- * text-display
-    module Data.Text.Display
+    module Data.Text.Display,
   )
 where
 
-import Control.Monad (forM_)
-import Control.Monad.Trans (lift)
-import Data.Generics.Labels ()
-import Data.Functor.Identity (runIdentity)
-import Control.Monad.State (StateT, State, execStateT)
-import Data.Foldable (traverse_)
-import Data.List (sort)
-import Data.Function ((&))
 import Control.Lens ((%=))
 import Control.Lens qualified
-import Data.Maybe (fromMaybe, mapMaybe, isJust)
+import Control.Monad (forM_)
+import Control.Monad.State (State, StateT, execStateT)
+import Control.Monad.Trans (lift)
+import Data.ByteString qualified as BS
+import Data.Foldable (traverse_)
+import Data.Function ((&))
+import Data.Functor.Identity (runIdentity)
+import Data.Generics.Labels ()
+import Data.List (sort)
 import Data.Map (Map)
+import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Set (Set)
-import Data.Text (Text)
-import GHC.Generics (Generic)
-
+import Data.String (IsString)
+import Data.Text (Text, pack, unpack)
 import Data.Text.Display
+import GHC.Generics (Generic)
+import System.Directory qualified
+import System.FilePath qualified
 import Witch qualified
+
+newtype FilePathT = FilePathT {getPath :: Text}
+  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid)
+  deriving (Display) via (ShowInstance Text)
+
+getPath' :: FilePathT -> FilePath
+getPath' = unpack . getPath
+
+(</>) :: FilePathT -> FilePathT -> FilePathT
+FilePathT a </> FilePathT b = FilePathT (pack $ unpack a `System.FilePath.combine` unpack b)
+
+listDirectory :: FilePathT -> IO [FilePathT]
+listDirectory (FilePathT fp) = map (FilePathT . pack) <$> System.Directory.listDirectory (unpack fp)
+
+doesDirectoryExist :: FilePathT -> IO Bool
+doesDirectoryExist (FilePathT fp) = System.Directory.doesDirectoryExist (unpack fp)
+
+readFileBS :: FilePathT -> IO BS.ByteString
+readFileBS (FilePathT fp) = BS.readFile (unpack fp)

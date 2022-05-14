@@ -13,9 +13,9 @@ type ConfigSection = (Text, [(Text, Text)])
 
 type ConnectionsConfig = Map ConnectionName ConnectionCName
 
-readConnections :: FilePath -> IO ConnectionsConfig
+readConnections :: FilePathT -> IO ConnectionsConfig
 readConnections fp = do
-  iniE <- Data.Ini.readIniFile fp
+  iniE <- Data.Ini.readIniFile (getPath' fp)
   case iniE of
     Right (Data.Ini.Ini sections _) ->
       let filteredHM = HM.filterWithKey (\k _ -> Text.isPrefixOf "connection " k) sections

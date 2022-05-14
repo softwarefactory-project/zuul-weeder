@@ -45,29 +45,29 @@ mainWithArgs args =
   case args of
     [zkPath, configPath, tenant, "what-require", key, name] -> do
       let cmd = WhatRequire key name configRequireGraph
-       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
     [zkPath, configPath, tenant, "what-depends-on", key, name] -> do
       let cmd = WhatDependsOn key name configDependsOnGraph
-       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
     [zkPath, configPath, tenant, "what-require-dot"] -> do
       let cmd = WhatRequireDot configRequireGraph
-       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
+       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
     [zkPath, configPath, tenant, "what-depends-on-dot"] -> do
       let cmd = WhatDependsOnDot configDependsOnGraph
-       in runCommand (unpack zkPath) (unpack configPath) (TenantName tenant) cmd
-    [unpack -> zkPath, unpack -> configPath, "webui"] -> do
+       in runCommand (FilePathT zkPath) (FilePathT configPath) (TenantName tenant) cmd
+    [FilePathT -> zkPath, FilePathT -> configPath, "webui"] -> do
       (tenants, tr) <- loadSystemConfig zkPath configPath
       config <- loadConfig tr zkPath
       let analysis = analyzeConfig tenants config
       let graph = configRequireGraph analysis
       ZuulWeeder.UI.run (toD3Graph graph)
-    [unpack -> zkPath, unpack -> configPath, "dump"] -> do
+    [FilePathT -> zkPath, FilePathT -> configPath, "dump"] -> do
       (_, tr) <- loadSystemConfig zkPath configPath
       config <- loadConfig tr zkPath
       Text.Pretty.Simple.pPrint config
     _ -> putStrLn "usage: zuul-weeder path"
 
-runCommand :: FilePath -> FilePath -> TenantName -> Command -> IO ()
+runCommand :: FilePathT -> FilePathT -> TenantName -> Command -> IO ()
 runCommand zkDumpPath configPath tenant command = do
   (tenants, tr) <- loadSystemConfig zkDumpPath configPath
   config <- loadConfig tr zkDumpPath
@@ -97,7 +97,7 @@ printReachable config tenant tenants key name graph = do
   forM_ reachables $ \(loc, obj) -> do
     putStrLn $ unpack $ display loc <> " -> " <> display obj
 
-loadConfig :: TenantResolver -> FilePath -> IO Zuul.ConfigLoader.Config
+loadConfig :: TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
 loadConfig tr =
   flip execStateT Zuul.ConfigLoader.emptyConfig
     -- StateT Config IO ()
@@ -109,7 +109,7 @@ loadConfig tr =
     -- Stream (Of ZKConfig) IO
     . walkConfigNodes
 
-loadSystemConfig :: FilePath -> FilePath -> IO (TenantsConfig, TenantResolver)
+loadSystemConfig :: FilePathT -> FilePathT -> IO (TenantsConfig, TenantResolver)
 loadSystemConfig dumpPath configPath = do
   connections <- readConnections configPath
   systemConfigE <- readSystemConfig dumpPath

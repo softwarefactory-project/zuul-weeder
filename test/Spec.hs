@@ -1,12 +1,9 @@
 module Main (main) where
 
 import Data.Aeson (Value, eitherDecodeFileStrict, object)
-import Data.List (sort)
 import Data.Map qualified (toList)
-import Data.Maybe (fromMaybe)
 import Data.Text.Lazy.Encoding qualified as LText
 import Data.Yaml qualified as Y (decodeFileEither)
-import System.FilePath ((</>))
 import Test.Tasty
 import Test.Tasty.Golden (goldenVsString)
 import Test.Tasty.HUnit
@@ -15,33 +12,34 @@ import Zuul.Config (ConnectionCName (ConnectionCName), readConnections)
 import Zuul.ConfigLoader
 import Zuul.Tenant
 import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
+import ZuulWeeder.Prelude
 
 main :: IO ()
 main = defaultMain (testGroup "Tests" [tests])
 
-fixturesPath :: FilePath
+fixturesPath :: FilePathT
 fixturesPath = "test/fixtures"
 
-loadFixture :: FilePath -> IO Value
+loadFixture :: FilePathT -> IO Value
 loadFixture name = do
-  contentE <- Y.decodeFileEither $ fixturesPath </> name <> ".yaml"
+  contentE <- Y.decodeFileEither $ getPath' $ fixturesPath </> name <> ".yaml"
   case contentE of
-    Left _any -> error $ "Unable to decode fixture " <> name
+    Left _any -> error $ "Unable to decode fixture " <> getPath' name
     Right bs -> pure bs
 
-goldenTest :: Show a => TestName -> FilePath -> IO a -> TestTree
-goldenTest name fp action = goldenVsString name (goldenPath fp) do
+goldenTest :: Show a => TestName -> FilePathT -> IO a -> TestTree
+goldenTest name fp action = goldenVsString name (getPath' $ goldenPath fp) do
   res <- action
   pure . LText.encodeUtf8 . pShowNoColor $ res
 
-goldenPath :: String -> FilePath
+goldenPath :: FilePathT -> FilePathT
 goldenPath name = fixturesPath </> name <> ".golden"
 
-loadJSONFixture :: FilePath -> IO Value
+loadJSONFixture :: FilePathT -> IO Value
 loadJSONFixture name = do
-  contentE <- eitherDecodeFileStrict $ fixturesPath </> name <> ".json"
+  contentE <- eitherDecodeFileStrict $ getPath' $ fixturesPath </> name <> ".json"
   case contentE of
-    Left _any -> error $ "Unable to decode fixture " <> name
+    Left _any -> error $ "Unable to decode fixture " <> getPath' name
     Right bs -> pure bs
 
 tests :: TestTree

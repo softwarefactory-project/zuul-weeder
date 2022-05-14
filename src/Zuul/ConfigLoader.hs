@@ -136,15 +136,10 @@ instance Display ZuulConfigElement where
     ZNodeset ns -> displayBuilder $ ns.name
     _ -> TB.fromText "unknown"
 
-newtype ConfigPath = ConfigPath {getConfigPath :: FilePath} deriving (Show, Eq, Ord)
-
-instance Display ConfigPath where
-  displayBuilder (ConfigPath p) = TB.fromText (Text.pack p)
-
 data ConfigLoc = ConfigLoc
   { project :: CanonicalProjectName,
     branch :: BranchName,
-    path :: ConfigPath,
+    path :: FilePathT,
     tenants :: [TenantName]
   }
   deriving (Show, Eq, Ord, Generic)
@@ -353,7 +348,7 @@ loadConfig tenantResolver zkcE = do
                 ProjectName $ zkc.project
               )
           branchName = BranchName zkc.branch
-          configPath = ConfigPath (Text.unpack $ filePath zkc)
+          configPath = zkc.filePath
           -- tenants info are set in the updateTopConfig function.
           -- this is done per element because a tenant may not include everything.
           tenants = []
