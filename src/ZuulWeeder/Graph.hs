@@ -81,13 +81,14 @@ data Analysis = Analysis
     configDependsOnGraph :: ConfigGraph,
     -- | The list of all the configuration names and their location
     names :: Names,
+    config :: Config,
     graphErrors :: [String]
   }
   deriving (Show, Generic)
 
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty)
+  runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty config mempty)
   where
     -- All the default base jobs defined by the tenants
     -- Given:

@@ -121,7 +121,7 @@ index page mainComponent =
       link_ [href_ "/dists/tailwind.css", rel_ "stylesheet"]
     body_ do
       navComponent
-      with div_ [class_ "container", id_ "main"] mainComponent
+      with div_ [class_ "container grid p-4", id_ "main"] mainComponent
       with (script_ mempty) [src_ "https://unpkg.com/htmx.org@1.7.0/dist/htmx.min.js"]
   where
     navComponent =
@@ -143,9 +143,23 @@ index page mainComponent =
           linkClass = "m-4 p-1 text-white rounded hover:text-teal-500" <> navLinkClass <> extra
        in with a_ [href_ path, class_ linkClass]
 
-infoComponent :: Html ()
-infoComponent = do
+infoComponent :: Config -> Html ()
+infoComponent config = do
   h2_ "Config details"
+  with' div_ "grid p-4 place-content-center" do
+   with' div_ "not-prose bg-slate-50 border rounded-xl" do
+    with' table_ "table-auto border-collapse w-80" do
+      thead_ $ with' tr_ "border-b text-left" $ traverse_ (with' th_ "p-1") ["Object", "Count"]
+      with' tbody_ "bg-white" do
+        objectCounts "jobs" config.jobs
+        objectCounts "nodesets" config.nodesets
+        objectCounts "pipelines" config.pipelines
+  where
+    objectCounts :: Text -> Map a b -> Html ()
+    objectCounts n m = do
+      with' tr_ "border-b" do
+        with' td_ "p-1" (toHtml n)
+        with' td_ "p-1" (toHtml $ show $ Map.size m)
 
 aboutComponent :: Html ()
 aboutComponent = do
@@ -195,13 +209,17 @@ run config = Warp.run port app
     server =
       pure (index "/" welcomeComponent)
         :<|> pure (index "/search" searchComponent)
-        :<|> pure (index "/info" infoComponent)
+        :<|> infoRoute
         :<|> pure (index "/about" aboutComponent)
         :<|> searchRoute
         :<|> d3Route
         :<|> staticRoute
 
     staticRoute = Servant.Server.StaticFiles.serveDirectoryWebApp "dists"
+
+    infoRoute = do
+      analysis <- liftIO config
+      pure (index "/info" (infoComponent analysis.config))
 
     searchRoute req = do
       analysis <- liftIO config
