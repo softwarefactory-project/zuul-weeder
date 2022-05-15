@@ -3,17 +3,35 @@
 -- | The web interface for zuul-weeder
 module ZuulWeeder.UI where
 
-import ZuulWeeder.Prelude
 import Data.Aeson qualified
 import Data.String.QQ (s)
 import Lucid
 import Network.Wai.Handler.Warp as Warp (run)
 import Servant
 import Servant.HTML.Lucid (HTML)
+import ZuulWeeder.Prelude
+import ZuulWeeder.Graph
+import qualified Algebra.Graph
 
-type API =
-  Get '[HTML] (Html ())
-    :<|> "data.json" :> Get '[JSON] D3Graph
+toD3Graph :: ConfigGraph -> ZuulWeeder.UI.D3Graph
+toD3Graph g =
+  ZuulWeeder.UI.D3Graph
+    { ZuulWeeder.UI.nodes = toNodes <$> Algebra.Graph.vertexList g,
+      ZuulWeeder.UI.links = toLinks <$> Algebra.Graph.edgeList g
+    }
+  where
+    toNodes :: Vertex -> ZuulWeeder.UI.D3Node
+    toNodes (_, e) = ZuulWeeder.UI.D3Node (display e) $ case e of
+      VJob _ -> 1
+      VProjectPipeline _ -> 2
+      VNodeset _ -> 3
+      VProjectTemplate _ -> 4
+      VPipeline _ -> 5
+      VNodeLabel _ -> 6
+      VQueue _ -> 7
+      VSemaphore _ -> 8
+    toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
+    toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (display a) (display b)
 
 data D3Node = D3Node
   { name :: Text,
@@ -53,7 +71,8 @@ index =
       script_ d3Script
 
 css :: Text
-css = [s|
+css =
+  [s|
 .links line {
   stroke: #999;
   stroke-opacity: 0.6;
@@ -61,7 +80,8 @@ css = [s|
 |]
 
 d3Script :: Text
-d3Script = [s|
+d3Script =
+  [s|
 // Based on https://bl.ocks.org/mbostock/4062045
 var svg = d3.select("svg"),
   width = +svg.attr("width"),
@@ -142,30 +162,20 @@ function dragended(d) {
 }
 |]
 
-d3Graph :: D3Graph
-d3Graph =
-  D3Graph
-    { nodes =
-        [ D3Node "check" 0,
-          D3Node "gate" 0,
-          D3Node "base" 1,
-          D3Node "linters" 1,
-          D3Node "centos" 2
-        ],
-      links =
-        [ D3Link "check" "base",
-          D3Link "gate" "base",
-          D3Link "check" "linters",
-          D3Link "base" "centos",
-          D3Link "linters" "centos"
-        ]
-    }
+type API =
+  Get '[HTML] (Html ())
+    :<|> "data.json" :> Get '[JSON] D3Graph
 
-run :: D3Graph -> IO ()
-run g = Warp.run port app
+run :: IO Analysis -> IO ()
+run config = Warp.run port app
   where
     port = 8080
     app = serve (Proxy @API) server
 
     server :: Server API
-    server = pure index :<|> pure g
+    server = pure index :<|> d3Route
+
+    d3Route = do
+      analysis <- liftIO config
+      let graph = configRequireGraph analysis
+      pure (toD3Graph graph)

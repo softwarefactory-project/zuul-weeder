@@ -12,6 +12,7 @@ module ZuulWeeder.Prelude
     sort,
     forM_,
     runIdentity,
+    liftIO,
 
     -- * filepath text
     FilePathT (..),
@@ -48,6 +49,7 @@ module ZuulWeeder.Prelude
   )
 where
 
+import Control.Monad.IO.Class (liftIO)
 import Control.Lens ((%=))
 import Control.Lens qualified
 import Control.Monad (forM_)

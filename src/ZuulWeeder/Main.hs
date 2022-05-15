@@ -1,6 +1,5 @@
-module ZuulWeeder.Main (main, mainWithArgs) where
+module ZuulWeeder.Main (main, mainWithArgs, demoConfig) where
 
-import Algebra.Graph qualified
 import Algebra.Graph.Export.Dot qualified
 import Data.Map qualified as Map
 import Data.Text (pack, unpack)
@@ -11,20 +10,9 @@ import Streaming.Prelude qualified as S
 import System.Environment
 import Text.Pretty.Simple qualified
 import Zuul.Config (readConnections)
-import Zuul.ConfigLoader
-  ( Config (..),
-    JobName (..),
-    NodeLabelName (NodeLabelName),
-    NodesetName (..),
-    TenantName (TenantName),
-    TenantResolver,
-  )
+import Zuul.ConfigLoader hiding (loadConfig)
 import Zuul.ConfigLoader qualified
 import Zuul.Tenant
-  ( TenantsConfig,
-    decodeTenantsConfig,
-    tenantResolver,
-  )
 import Zuul.ZKDump
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
@@ -96,8 +84,7 @@ mainGo args = do
     DumpConfig -> Text.Pretty.Simple.pPrint config
     WebUI -> do
       let analysis = analyzeConfig tenants config
-      let graph = configRequireGraph analysis
-      ZuulWeeder.UI.run (toD3Graph graph)
+      ZuulWeeder.UI.run (pure analysis)
 
 outputDot :: Config -> TenantName -> TenantsConfig -> (Analysis -> ConfigGraph) -> IO ()
 outputDot config tenant tenants graph = do
@@ -140,26 +127,6 @@ loadSystemConfig dumpPath configPath = do
       (zsc, Zuul.Tenant.tenantResolver zsc connections)
     _ -> error "Invalid tenant config"
 
-toD3Graph :: ConfigGraph -> ZuulWeeder.UI.D3Graph
-toD3Graph g =
-  ZuulWeeder.UI.D3Graph
-    { ZuulWeeder.UI.nodes = toNodes <$> Algebra.Graph.vertexList g,
-      ZuulWeeder.UI.links = toLinks <$> Algebra.Graph.edgeList g
-    }
-  where
-    toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    toNodes (_, e) = ZuulWeeder.UI.D3Node (display e) $ case e of
-      VJob _ -> 1
-      VProjectPipeline _ -> 2
-      VNodeset _ -> 3
-      VProjectTemplate _ -> 4
-      VPipeline _ -> 5
-      VNodeLabel _ -> 6
-      VQueue _ -> 7
-      VSemaphore _ -> 8
-    toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
-    toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (display a) (display b)
-
 findVertex :: Text -> Text -> Zuul.ConfigLoader.Config -> Maybe Vertex
 findVertex "job" name config = case Map.lookup (JobName name) config.jobs of
   Just [(loc, job)] -> Just (loc, VJob job)
@@ -171,3 +138,13 @@ findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) config
   Just [(loc, x)] -> Just (loc, VNodeLabel x)
   _ -> Nothing
 findVertex _ _ _ = Nothing
+
+demoConfig :: IO Analysis
+demoConfig = pure $ analyzeConfig tenants config
+  where
+    tenants = TenantsConfig (Map.fromList [(TenantName "demo", tenantConfig)])
+    tenantConfig = TenantConfig (JobName "base") mempty
+    config = emptyConfig & #jobs `set` Map.fromList [mkJob "base", mkJob "linters"]
+    mkJob (JobName -> n) = (n, [(demoLoc, Job n Nothing Nothing [] [])])
+    demoLoc = ConfigLoc (CanonicalProjectName demoProject) (BranchName "main") ".zuul.yaml" [TenantName "demo"]
+    demoProject = (ProviderName "sftests.com", ProjectName "config")
