@@ -1,6 +1,11 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 -- | The web interface for zuul-weeder
+-- The UI is implemented with
+-- * htmx - https://htmx.org/docs/#introduction
+-- * tailwind - https://tailwindcss.com/docs/utility-first  (use Ctrl-K to search documentation)
+--
+-- After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
 module ZuulWeeder.UI where
 
 import Algebra.Graph qualified
@@ -13,11 +18,13 @@ import Lucid.Base (makeAttribute)
 import Network.Wai.Handler.Warp as Warp (run)
 import Servant
 import Servant.HTML.Lucid (HTML)
+import Servant.Server.StaticFiles qualified
 import Web.FormUrlEncoded (FromForm)
 import Zuul.ConfigLoader
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 
+-- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: ConfigGraph -> ZuulWeeder.UI.D3Graph
 toD3Graph g =
   ZuulWeeder.UI.D3Graph
@@ -63,144 +70,120 @@ instance Data.Aeson.ToJSON D3Link
 instance Data.Aeson.ToJSON D3Graph
 
 -- | Return the search result
-search :: SearchForm -> Names -> Html ()
-search req names
-  | Text.null req.query = pure ()
+searchResults :: Text -> Names -> Html ()
+searchResults (Text.strip -> query) names
+  | Text.null query = pure ()
   | otherwise = case filter matchQuery (Map.toList names) of
       [] -> div_ "no results :("
       results -> ul_ do
         forM_ results $ \result ->
           li_ $ toHtml (show result)
   where
-    matchQuery (ConfigName name, _) = req.query `Text.isInfixOf` name
+    matchQuery (ConfigName name, _) = query `Text.isInfixOf` name
 
 newtype SearchForm = SearchForm {query :: Text} deriving (Eq, Show, Generic)
 
 instance FromForm SearchForm
 
-index :: Html ()
-index =
+with' :: With a => a -> Text -> a
+with' x n = with x [class_ n]
+
+searchComponent :: Html ()
+searchComponent = do
+  with' div_ "grid p-4 place-content-center" do
+    input_
+      [ class_ "form-control",
+        size_ "42",
+        type_ "search",
+        name_ "query",
+        placeholder_ "Begin Typing To Search Config...",
+        hxPost "/search_results",
+        hxTrigger "keyup changed delay:500ms, search",
+        hxTarget "#search-results"
+      ]
+    with div_ [id_ "search-results"] mempty
+
+hxTrigger, hxTarget, hxSwap, hxGet, hxPost, hxBoost :: Text -> Attribute
+hxTrigger = makeAttribute "hx-trigger"
+hxTarget = makeAttribute "hx-target"
+hxSwap = makeAttribute "hx-swap"
+hxGet = makeAttribute "hx-get"
+hxPost = makeAttribute "hx-post"
+hxBoost = makeAttribute "hx-boost"
+
+index :: Text -> Html () -> Html ()
+index page mainComponent =
   doctypehtml_ do
     head_ do
       title_ "Zuul Weeder"
       meta_ [charset_ "utf-8"]
-      style_ css
+      meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1.0"]
+      link_ [href_ "/dists/tailwind.css", rel_ "stylesheet"]
     body_ do
-      with div_ [id_ "header"] "Welcome"
-      searchComponent
-      with svg_ [width_ "1000", height_ "800"] mempty
-      with (script_ mempty) [src_ "https://d3js.org/d3.v4.min.js"]
+      navComponent
+      with div_ [class_ "container", id_ "main"] mainComponent
       with (script_ mempty) [src_ "https://unpkg.com/htmx.org@1.7.0/dist/htmx.min.js"]
-      script_ d3Script
   where
-    searchComponent = do
-      input_
-        [ class_ "form-control",
-          type_ "search",
-          name_ "query",
-          placeholder_ "Begin Typing To Search Config...",
-          makeAttribute "hx-post" "/search",
-          makeAttribute "hx-trigger" "keyup changed delay:500ms, search",
-          makeAttribute "hx-target" "#search-results"
-        ]
-      with div_ [id_ "search-results"] mempty
+    navComponent =
+      with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
+        with' div_ "flex-grow" do
+          with' span_ "font-semibold text-white" do
+            with a_ [href_ "/"] "Zuul Weeder"
+          navLink "/search" "Search"
+          navLink "/info" "Info"
+        div_ do
+          navLink "/about" "About"
+    navLink path =
+      let navLinkClass
+            | path == page || (path == "/search" && page == "/") = " bg-slate-500"
+            | otherwise = ""
+          extra
+            | path == "/about" = " right"
+            | otherwise = ""
+          linkClass = "m-4 p-1 text-white rounded hover:text-teal-500" <> navLinkClass <> extra
+       in with a_ [href_ path, class_ linkClass]
 
-css :: Text
-css =
-  [s|
+infoComponent :: Html ()
+infoComponent = do
+  h2_ "Config details"
+
+aboutComponent :: Html ()
+aboutComponent = do
+  h2_ "Welcome"
+  p_ "Zuul Weeder is a web service to inspect Zuul configuration"
+
+welcomeComponent :: Html ()
+welcomeComponent = do
+  searchComponent
+  style_ css
+  with (script_ mempty) [src_ "https://d3js.org/d3.v4.min.js"]
+  with (script_ mempty) [src_ "/dists/graph.js"]
+  where
+    css :: Text
+    css =
+      [s|
 .links line {
   stroke: #999;
   stroke-opacity: 0.6;
 }
-|]
-
-d3Script :: Text
-d3Script =
-  [s|
-// Based on https://bl.ocks.org/mbostock/4062045
-var svg = d3.select("svg"),
-  width = +svg.attr("width"),
-  height = +svg.attr("height");
-
-var color = d3.scaleOrdinal(d3.schemeCategory20);
-
-var simulation = d3
-  .forceSimulation()
-  .force(
-    "link",
-    d3.forceLink().id((d) => d.name)
-  )
-  .force("charge", d3.forceManyBody().strength(-3))
-  .force("center", d3.forceCenter(width / 2, height / 2));
-
-d3.json("data.json", function (error, graph) {
-  if (error) throw error;
-
-  var link = svg
-    .append("g")
-    .attr("class", "links")
-    .selectAll("line")
-    .data(graph.links)
-    .enter()
-    .append("line")
-    .attr("stroke-width", (d) => 1);
-
-  var node = svg
-    .append("g")
-    .attr("class", "nodes")
-    .selectAll("circle")
-    .data(graph.nodes)
-    .enter()
-    .append("circle")
-    .attr("r", 5)
-    .attr("fill", (d) => color(d.group))
-    .call(
-      d3
-        .drag()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended)
-    );
-
-  node.append("title").text((d) => d.name);
-
-  simulation.nodes(graph.nodes).on("tick", ticked);
-
-  simulation.force("link").links(graph.links);
-
-  function ticked() {
-    link
-      .attr("x1", (d) => d.source.x)
-      .attr("y1", (d) => d.source.y)
-      .attr("x2", (d) => d.target.x)
-      .attr("y2", (d) => d.target.y);
-
-    node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
-  }
-});
-
-function dragstarted(d) {
-  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
-  d.fx = d.x;
-  d.fy = d.y;
-}
-
-function dragged(d) {
-  d.fx = d3.event.x;
-  d.fy = d3.event.y;
-}
-
-function dragended(d) {
-  if (!d3.event.active) simulation.alphaTarget(0);
-  d.fx = null;
-  d.fy = null;
+svg {
+  position: fixed;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  top: 0;
+  z-index: -1;
 }
 |]
 
 type API =
   Get '[HTML] (Html ())
-    :<|> "search" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
+    :<|> "search" :> Get '[HTML] (Html ())
+    :<|> "info" :> Get '[HTML] (Html ())
+    :<|> "about" :> Get '[HTML] (Html ())
+    :<|> "search_results" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
     :<|> "data.json" :> Get '[JSON] D3Graph
+    :<|> "dists" :> Raw
 
 run :: IO Analysis -> IO ()
 run config = Warp.run port app
@@ -209,11 +192,20 @@ run config = Warp.run port app
     app = serve (Proxy @API) server
 
     server :: Server API
-    server = pure index :<|> searchRoute :<|> d3Route
+    server =
+      pure (index "/" welcomeComponent)
+        :<|> pure (index "/search" searchComponent)
+        :<|> pure (index "/info" infoComponent)
+        :<|> pure (index "/about" aboutComponent)
+        :<|> searchRoute
+        :<|> d3Route
+        :<|> staticRoute
+
+    staticRoute = Servant.Server.StaticFiles.serveDirectoryWebApp "dists"
 
     searchRoute req = do
       analysis <- liftIO config
-      pure (search req analysis.names)
+      pure (searchResults req.query analysis.names)
 
     d3Route = do
       analysis <- liftIO config

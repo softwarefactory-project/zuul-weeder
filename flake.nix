@@ -5,9 +5,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
+    tailwind.url = "github:srid/tailwind-haskell";
+    tailwind.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, tailwind }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -52,6 +54,18 @@
             hlint
             pkgs.haskell-language-server
           ];
+        };
+
+        apps.tailwind = let
+          script = pkgs.writers.writeBash "tailwind-run.sh" ''
+            set -xe
+            exec ${
+              tailwind.defaultPackage."x86_64-linux"
+            }/bin/tailwind-run 'src/ZuulWeeder/UI.hs' -o dists/tailwind.css;
+          '';
+        in {
+          type = "app";
+          program = builtins.toString script;
         };
       });
 }
