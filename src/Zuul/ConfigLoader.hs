@@ -134,6 +134,11 @@ instance From ZuulConfigElement ZuulConfigType where
     ZQueue _ -> QueueT
     ZSemaphore _ -> SemaphoreT
 
+instance From ZuulConfigType Text where
+  from zce = case zce of
+    JobT -> "job"
+    _ -> error "Not Implemented (yet)"
+
 data Queue = Queue {name :: Text, perBranch :: Bool} deriving (Show, Eq, Ord)
 
 data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord)

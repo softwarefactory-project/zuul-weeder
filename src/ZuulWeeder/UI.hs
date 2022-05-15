@@ -69,6 +69,18 @@ instance Data.Aeson.ToJSON D3Link
 
 instance Data.Aeson.ToJSON D3Graph
 
+vertexLink :: Int -> ConfigName -> ConfigLoc  -> ConfigVertex -> Html ()
+vertexLink pos (ConfigName name) loc vertex = with a_ [href_ ref] (toHtml (show loc <> show vertex))
+  where
+    ref =
+      Text.intercalate
+        "/"
+        [ "/object",
+          via @VertexType vertex,
+          name,
+          Text.pack (show pos)
+        ]
+
 -- | Return the search result
 searchResults :: Text -> Names -> Html ()
 searchResults (Text.strip -> query) names
@@ -76,8 +88,9 @@ searchResults (Text.strip -> query) names
   | otherwise = case filter matchQuery (Map.toList names) of
       [] -> div_ "no results :("
       results -> ul_ do
-        forM_ results $ \result ->
-          li_ $ toHtml (show result)
+        forM_ results $ \(name, vertexes) ->
+          forM_ (zip [0 ..] vertexes) $ \(pos, (loc, vertex)) ->
+            li_ $ vertexLink pos name loc vertex
   where
     matchQuery (ConfigName name, _) = query `Text.isInfixOf` name
 
@@ -190,12 +203,45 @@ svg {
 }
 |]
 
+objectInfo :: ConfigName -> Int -> Analysis -> Html ()
+objectInfo cn pos analysis = case Map.lookup cn analysis.names of
+  Just (safeGet pos -> Just x) -> do
+    h2_ $ toHtml $ "Object: " <> show x
+    with' div_ "grid grid-cols-2 gap 1 m-4" do
+      div_ do
+        h3_ "Depends-On"
+        div_ "The object depends-on graph.."
+      div_ do
+        h3_ "Requires"
+        div_ "The object requires graph.."
+
+  _ -> h2_ "Unknown object?!"
+
+newtype VertexTypeUrl = VTU VertexType
+
+instance FromHttpApiData VertexTypeUrl where
+  parseUrlPiece txt = case txt of
+    "job" -> pure . VTU . ZuulConfigVertexType $ JobT
+    _ -> Left $ "Unknown obj type: " <> txt
+
+newtype ConfigNameUrl = CNU ConfigName
+
+instance FromHttpApiData ConfigNameUrl where
+  parseUrlPiece = pure . CNU . ConfigName
+
+type ObjectPath =
+  "object" :> Capture "type" VertexTypeUrl
+    :> Capture "name" ConfigNameUrl
+    :> Capture "index" Int
+    :> Get '[HTML] (Html ())
+
 type API =
   Get '[HTML] (Html ())
     :<|> "search" :> Get '[HTML] (Html ())
     :<|> "info" :> Get '[HTML] (Html ())
     :<|> "about" :> Get '[HTML] (Html ())
     :<|> "search_results" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
+    :<|> ObjectPath
     :<|> "data.json" :> Get '[JSON] D3Graph
     :<|> "dists" :> Raw
 
@@ -212,6 +258,7 @@ run config = Warp.run port app
         :<|> infoRoute
         :<|> pure (index "/about" aboutComponent)
         :<|> searchRoute
+        :<|> objectRoute
         :<|> d3Route
         :<|> staticRoute
 
@@ -220,6 +267,10 @@ run config = Warp.run port app
     infoRoute = do
       analysis <- liftIO config
       pure (index "/info" (infoComponent analysis.config))
+
+    objectRoute (VTU _objType) (CNU configName) pos = do
+      analysis <- liftIO config
+      pure (index "/object" (objectInfo configName pos analysis))
 
     searchRoute req = do
       analysis <- liftIO config

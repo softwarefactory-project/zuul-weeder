@@ -33,6 +33,7 @@ module ZuulWeeder.Prelude
     -- * witch
     Witch.From,
     Witch.from,
+    Witch.via,
 
     -- * mtl
     lift,
@@ -43,7 +44,10 @@ module ZuulWeeder.Prelude
     -- * lens
     Control.Lens.over,
     Control.Lens.set,
+    Control.Lens.element,
+    Control.Lens.preview,
     (%=),
+    safeGet,
 
     -- * text-display
     module Data.Text.Display,
@@ -77,6 +81,9 @@ import Witch qualified
 newtype FilePathT = FilePathT {getPath :: Text}
   deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid)
   deriving (Display) via (ShowInstance Text)
+
+safeGet :: Int -> [a] -> Maybe a
+safeGet pos xs = Control.Lens.element pos `Control.Lens.preview` xs
 
 getPath' :: FilePathT -> FilePath
 getPath' = unpack . getPath

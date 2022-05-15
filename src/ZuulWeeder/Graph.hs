@@ -1,6 +1,8 @@
 module ZuulWeeder.Graph
   ( Analysis (..),
     ConfigGraph,
+    ConfigVertex (..),
+    VertexType (..),
     Names,
     Vertex,
     pattern VNodeLabel,
@@ -33,6 +35,21 @@ data ConfigVertex
   = ZuulConfigVertex ZuulConfigElement
   | NodeLabelVertex NodeLabelName
   deriving (Eq, Ord, Show, Generic)
+
+data VertexType
+  = ZuulConfigVertexType ZuulConfigType
+  | NodeLabelVertexType
+  deriving (Eq, Ord, Show)
+
+instance From ConfigVertex VertexType where
+  from cv = case cv of
+    ZuulConfigVertex zce -> ZuulConfigVertexType (from zce)
+    NodeLabelVertex _ -> NodeLabelVertexType
+
+instance From VertexType Text where
+  from vt = case vt of
+    ZuulConfigVertexType zct -> from zct
+    NodeLabelVertexType -> "label"
 
 instance Display ConfigVertex where
   displayBuilder (NodeLabelVertex p) = displayBuilder p
