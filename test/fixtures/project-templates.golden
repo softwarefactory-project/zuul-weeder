@@ -73,8 +73,8 @@
                             , nodeset = Nothing
                             , branches = []
                             , dependencies =
-                                [ JobName "sf-ci-functional-allinone"
-                                , JobName "sf-ci-functional-minimal"
+                                [ JobName "sf-ci-functional-minimal"
+                                , JobName "sf-ci-functional-allinone"
                                 ]
                             }
                         )

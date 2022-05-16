@@ -69,6 +69,7 @@ tests =
                       project = "zuul-jobs",
                       branch = "master",
                       filePath = "zuul.d/haskell-jobs.yaml",
+                      fullPath = path,
                       zkJSONData = obj
                     }
                 )

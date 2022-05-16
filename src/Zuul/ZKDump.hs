@@ -11,7 +11,7 @@ module Zuul.ZKDump
   )
 where
 
-import Control.Exception (SomeException, try)
+import Control.Exception (try)
 import Data.Aeson (Value, eitherDecodeFileStrict)
 import Data.ByteString (ByteString)
 import Data.String.QQ (s)
@@ -28,6 +28,7 @@ data ZKConfig = ZKConfig
     project :: Text,
     branch :: Text,
     filePath :: FilePathT,
+    fullPath :: FilePathT,
     zkJSONData :: Value
   }
   deriving (Show, Eq)
@@ -97,6 +98,7 @@ mkZKConfig zkJSONData path = do
 
   let branch = Network.URI.Encode.decodeText branch'
       filePath = FilePathT $ Network.URI.Encode.decodeText filePath'
+      fullPath = path
 
   Just ZKConfig {..}
 

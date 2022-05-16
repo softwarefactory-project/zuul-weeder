@@ -25,7 +25,8 @@
     final: true
     dependencies:
       - job1
-      - job2
+      - name: job2
+        soft: true
     allowed-projects:
       - config
     description: Validate the config repo.

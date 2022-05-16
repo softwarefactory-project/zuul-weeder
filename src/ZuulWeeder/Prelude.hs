@@ -25,6 +25,10 @@ module ZuulWeeder.Prelude
     when,
     whenM,
 
+    -- * exceptions
+    SomeException,
+    catchAll,
+
     -- * clock
     getSec,
 
@@ -75,6 +79,7 @@ import Data.Either (fromRight)
 import Control.Lens ((%=))
 import Control.Lens qualified
 import Control.Monad (when, forM_)
+import Control.Monad.Catch (catchAll, SomeException)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (State, StateT, execStateT)
 import Control.Monad.Trans.Except (except)

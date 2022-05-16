@@ -350,7 +350,9 @@ type API =
     :<|> "dists" :> Raw
 
 run :: IO Analysis -> IO ()
-run config = Warp.run port app
+run config = do
+  hPutStrLn stderr $ "[+] serving at " <> show port
+  Warp.run port app
   where
     port = 8080
     app = serve (Proxy @API) server

@@ -52,6 +52,7 @@ common common-options
                      , GeneralizedNewtypeDeriving
                      , NegativeLiterals
                      , NamedFieldPuns
+                     , LambdaCase
                      -- For the new record dot syntax
                      -- , NoFieldSelectors
                      , DuplicateRecordFields
@@ -82,6 +83,7 @@ library
                      , pretty-simple
                      , clock
                      , typed-process
+                     , exceptions
                      -- Main
                      , optparse-applicative
                      -- UI

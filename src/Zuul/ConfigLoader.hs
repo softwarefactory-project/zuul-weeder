@@ -267,7 +267,16 @@ decodeConfig (project, _branch) zkJSONData =
         decodeJobBranches :: [BranchName]
         decodeJobBranches = decodeAsList "branches" BranchName va
         decodeJobDependencies :: [JobName]
-        decodeJobDependencies = decodeAsList "dependencies" JobName va
+        decodeJobDependencies = case HM.lookup "dependencies" va of
+          Just (String v) -> [JobName v]
+          Just (Array xs) -> map decodeJobDependency (V.toList xs)
+          Just _ -> error $ "Unexpected job dependencies value: " <> show va
+          Nothing -> []
+        decodeJobDependency :: Value -> JobName
+        decodeJobDependency = \case
+          String v -> JobName v
+          Object (HM.lookup "name" -> Just (String v)) -> JobName v
+          anyOther -> error $ "Unexpected job dependency value: " <> show anyOther
 
     decodeNodeset :: Object -> Nodeset
     decodeNodeset va =
@@ -292,15 +301,24 @@ decodeConfig (project, _branch) zkJSONData =
        in ProjectPipeline {..}
       where
         decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
-        decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va') = case va' of
-          Object inner ->
-            let name = PipelineName pipelineName'
-                jobs = case HM.lookup "jobs" inner of
-                  Just (String name') -> [PJName $ JobName name']
-                  Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
-                  _ -> error $ "Unexpected project pipeline format: " <> show inner
-             in Just $ PPipeline {..}
-          _ -> Nothing
+        decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va')
+          | pipelineName' `elem` ["name", "vars", "description"] = Nothing
+          | pipelineName' == "templates" = Nothing -- TODO: decode templates
+          | pipelineName' == "queue" = Nothing -- TODO: decode project queues
+          | otherwise = case va' of
+              Object inner ->
+                let name = PipelineName pipelineName'
+                    jobs = case HM.lookup "jobs" inner of
+                      -- Just (String name') -> [PJName $ JobName name']
+                      Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
+                      _ -> [] -- pipeline has no jobs
+                      -- TODO: decode pipeline queue
+                    _queue = case HM.lookup "queue" inner of
+                      Just (String queueName) -> Just queueName
+                      Just _ -> error $ "Unexpected queue name: " <> show inner
+                      Nothing -> Nothing
+                 in Just $ PPipeline {..}
+              _ -> error $ "Unexpected pipeline: " <> show va'
         decodePPipelineJob :: Value -> PipelineJob
         decodePPipelineJob jobElem = case jobElem of
           Object jobObj ->
@@ -360,7 +378,7 @@ loadConfig :: TenantResolver -> Either ConfigError ZKConfig -> StateT Config IO 
 loadConfig tenantResolver zkcE = do
   case zkcE of
     Left e -> #configErrors %= (e :)
-    Right zkc ->
+    Right zkc -> flip catchAll (handler zkc.fullPath) do
       let zkcDecoded = decodeConfig (canonicalProjectName, branchName) $ zkJSONData zkc
           canonicalProjectName =
             CanonicalProjectName
@@ -374,6 +392,11 @@ loadConfig tenantResolver zkcE = do
           tenants = []
           configLoc = ConfigLoc canonicalProjectName branchName configPath tenants
        in traverse_ (updateTopConfig tenantResolver configLoc) zkcDecoded
+  where
+    handler :: FilePathT -> SomeException -> StateT Config IO ()
+    handler fp e = do
+      lift $ hPutStrLn stderr $ "Could not decode: " <> getPath' fp <> ": " <> show e
+      error "Aborting"
 
 emptyConfig :: Config
 emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty
