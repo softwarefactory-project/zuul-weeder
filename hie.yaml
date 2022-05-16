@@ -1,0 +1,8 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:zuul-weeder"
+    - path: "./app"
+      component: "exe:zuul-weeder"
+    - path: "./test"
+      component: "test:zuul-weeder-test"
