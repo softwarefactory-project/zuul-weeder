@@ -31,20 +31,23 @@ parseConfig sections = do
     zkSection <- getZkSection
     let getZK k = lookup k zkSection `orDie` ("No " <> k <> " in zookeeper section")
     traverse getZK ["hosts", "tls_key", "tls_cert", "tls_ca"]
-  connections <- Map.fromList <$> traverse getConn (HM.toList connSections)
+  connections <- Map.fromList . catMaybes <$> traverse getConn (HM.toList connSections)
   pure $ ServiceConfig {connections, zookeeper}
   where
     getZkSection = HM.lookup "zookeeper" sections `orDie` "No zookeeper section"
     connSections = HM.filterWithKey (\k _ -> Text.isPrefixOf "connection " k) sections
 
-    getConn :: ConfigSection -> Either Text (ConnectionName, ConnectionCName)
+    getConn :: ConfigSection -> Either Text (Maybe (ConnectionName, ConnectionCName))
     getConn (sectionName, section) =
       let sectionHM = HM.fromList section
        in case HM.lookup "driver" sectionHM of
             Just driver | driver `elem` ["gerrit", "github", "gitlab", "pagure"] -> do
               server <- getCannonicalName sectionHM
-              pure (getSectionName sectionName, server)
-            _ -> Left ("Connection not supported: " <> Text.pack (show section))
+              pure $ Just (getSectionName sectionName, server)
+            Just "git" -> do
+              server <- HM.lookup "baseurl" sectionHM `orDie` "No baseurl"
+              pure $ Just (getSectionName sectionName, ConnectionCName server)
+            _ -> pure Nothing
     getSectionName sn = ConnectionName $ Text.drop 11 sn
     getCannonicalName hm =
       ConnectionCName <$> case HM.lookup "canonical_hostname" hm of
