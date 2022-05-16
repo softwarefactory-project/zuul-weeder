@@ -14,6 +14,7 @@ module ZuulWeeder.Prelude
     runIdentity,
     liftIO,
     trace,
+    elemIndex,
 
     -- * filepath text
     FilePathT (..),
@@ -66,7 +67,7 @@ import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
 -- This import is necessary to bring orphan Lens instance for #labels
 import Data.Generics.Labels ()
-import Data.List (sort)
+import Data.List (elemIndex, sort)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe, isJust, mapMaybe)
 import Data.Set (Set)

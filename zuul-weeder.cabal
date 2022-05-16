@@ -50,6 +50,7 @@ common common-options
                      , QuasiQuotes
                      , PatternSynonyms
                      , GeneralizedNewtypeDeriving
+                     , NegativeLiterals
                      -- For the new record dot syntax
                      -- , NoFieldSelectors
                      , DuplicateRecordFields

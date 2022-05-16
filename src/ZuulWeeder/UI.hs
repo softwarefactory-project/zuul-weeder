@@ -11,6 +11,7 @@ module ZuulWeeder.UI where
 import Algebra.Graph qualified
 import Data.Aeson qualified
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Data.String.QQ (s)
 import Data.Text qualified as Text
 import Lucid
@@ -224,15 +225,20 @@ svg#d3 {
 }
 |]
 
+locUrl :: ConfigLoc -> Text
+locUrl loc = "https://" <> locPath
+  where
+    CanonicalProjectName (ProviderName providerName, ProjectName projectName) = loc.project
+    locPath = Text.intercalate "/" [providerName, projectName, getPath loc.path]
+
 locLink :: ConfigLoc -> Html ()
 locLink loc =
-  with a_ [href_ locUrl, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
+  with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
     with' span_ "px-1" "🔗"
     toHtml locPath
   where
-    CanonicalProjectName (ProviderName providerName, ProjectName projectName) = loc.project
-    locUrl = "https://" <> locPath
-    locPath = Text.intercalate "/" [providerName, projectName, getPath loc.path]
+    url = locUrl loc
+    locPath = Text.drop 8 url
 
 locComponent :: ConfigLoc -> Html ()
 locComponent loc = do
@@ -292,11 +298,28 @@ objectInfo cn pos analysis = case Map.lookup cn analysis.names of
     with' div_ "grid grid-cols-2 gap-1 m-4" do
       div_ do
         h3_ "Depends-On"
-        div_ "The object depends-on graph.."
+        renderVertexes (dependsOn v)
       div_ do
         h3_ "Requires"
-        div_ "The object requires graph.."
+        renderVertexes (required v)
   _ -> h2_ "Unknown object?!"
+  where
+    dependsOn v = Set.toList $ findReachable v analysis.configDependsOnGraph
+    required v = Set.toList $ findReachable v analysis.configRequireGraph
+    renderVertexes :: [Vertex] -> Html ()
+    renderVertexes xs = do
+      ul_ do
+        traverse_ renderVertex xs
+    renderVertex (loc, v) =
+      li_ do
+        vertexLink idx (from v) loc v
+        with a_ [href_ (locUrl loc)] do
+          with' span_ "px-1" "🔗"
+      where
+        idx :: Int
+        idx = case Map.lookup (from v) analysis.names of
+          Just xs -> fromMaybe -1 $ (loc, v) `elemIndex` xs
+          Nothing -> -1
 
 newtype VertexTypeUrl = VTU VertexType
 

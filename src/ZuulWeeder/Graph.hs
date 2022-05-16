@@ -90,7 +90,7 @@ type Vertex = (ConfigLoc, ConfigVertex)
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
 findReachable :: Vertex -> ConfigGraph -> Set.Set Vertex
-findReachable v = Set.fromList . Algebra.Graph.ToGraph.reachable v
+findReachable v = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.reachable v
 
 filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
 filterTenant tenant = Algebra.Graph.induce (\(loc, _) -> tenant `elem` loc.tenants)
