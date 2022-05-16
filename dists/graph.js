@@ -55,6 +55,7 @@ d3.json("data.json", function (error, graph) {
   simulation.force("link").links(graph.links);
 
   function ticked() {
+    // TODO: ensure the node does not go out of bound
     link
       .attr("x1", (d) => d.source.x)
       .attr("y1", (d) => d.source.y)

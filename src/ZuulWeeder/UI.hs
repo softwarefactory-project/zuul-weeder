@@ -29,14 +29,19 @@ import ZuulWeeder.Prelude
 toD3Graph :: ConfigGraph -> ZuulWeeder.UI.D3Graph
 toD3Graph g =
   ZuulWeeder.UI.D3Graph
-    { ZuulWeeder.UI.nodes = toNodes <$> Algebra.Graph.vertexList g,
-      ZuulWeeder.UI.links = toLinks <$> Algebra.Graph.edgeList g
+    { ZuulWeeder.UI.nodes = toNodes <$> vertexes,
+      ZuulWeeder.UI.links = toLinks <$> edges
     }
   where
+    (edges, _) = splitAt 100 $ Algebra.Graph.edgeList g
+    vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    toNodes (_, e) = ZuulWeeder.UI.D3Node (display e) $ vertexGroup e
+    -- TODO: encode the config loc so that duplicate names are correctly connected
+    toNode :: ConfigVertex -> Text
+    toNode = display
+    toNodes (_, e) = ZuulWeeder.UI.D3Node (toNode e) $ vertexGroup e
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
-    toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (display a) (display b)
+    toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (toNode a) (toNode b)
 
 vertexGroup :: ConfigVertex -> Int
 vertexGroup x = case x of

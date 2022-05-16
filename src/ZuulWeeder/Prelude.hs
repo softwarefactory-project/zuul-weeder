@@ -24,6 +24,7 @@ module ZuulWeeder.Prelude
     Int64,
     when,
     whenM,
+    nub,
 
     -- * exceptions
     SomeException,
@@ -92,7 +93,7 @@ import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
 -- This import is necessary to bring orphan Lens instance for #labels
 import Data.Generics.Labels ()
-import Data.List (elemIndex, sort)
+import Data.List (elemIndex, sort, nub)
 import Data.Map (Map)
 import Data.Maybe (fromMaybe, isJust, mapMaybe, catMaybes)
 import Data.Set (Set)
