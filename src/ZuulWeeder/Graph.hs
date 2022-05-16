@@ -36,6 +36,10 @@ data ConfigVertex
   | NodeLabelVertex NodeLabelName
   deriving (Eq, Ord, Show, Generic)
 
+instance From ConfigVertex ConfigName where
+  from (ZuulConfigVertex zce) = from zce
+  from (NodeLabelVertex (NodeLabelName n)) = ConfigName n
+
 data VertexType
   = ZuulConfigVertexType ZuulConfigType
   | NodeLabelVertexType

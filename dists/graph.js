@@ -4,6 +4,7 @@ var width = 800,
     height = 500;
 var svg = d3.select("#main").append("svg")
     .attr("viewBox", "0 0 " + width + " " + height)
+    .attr("id", "d3")
     .attr("width", width)
     .attr("height", height);
 

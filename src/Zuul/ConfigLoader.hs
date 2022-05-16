@@ -113,6 +113,11 @@ data ZuulConfigElement
   | ZSemaphore Semaphore
   deriving (Show, Eq, Ord)
 
+instance From ZuulConfigElement ConfigName where
+  from zce = case zce of
+    ZJob job -> from job
+    _ -> error "TODO configName from instance"
+
 data ZuulConfigType
   = PipelineT
   | JobT

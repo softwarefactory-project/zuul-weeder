@@ -33,17 +33,32 @@ toD3Graph g =
     }
   where
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    toNodes (_, e) = ZuulWeeder.UI.D3Node (display e) $ case e of
-      VJob _ -> 1
-      VProjectPipeline _ -> 2
-      VNodeset _ -> 3
-      VProjectTemplate _ -> 4
-      VPipeline _ -> 5
-      VNodeLabel _ -> 6
-      VQueue _ -> 7
-      VSemaphore _ -> 8
+    toNodes (_, e) = ZuulWeeder.UI.D3Node (display e) $ vertexGroup e
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
     toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (display a) (display b)
+
+vertexGroup :: ConfigVertex -> Int
+vertexGroup x = case x of
+  VJob _ -> 1
+  VProjectPipeline _ -> 2
+  VNodeset _ -> 3
+  VProjectTemplate _ -> 4
+  VPipeline _ -> 5
+  VNodeLabel _ -> 6
+  VQueue _ -> 7
+  VSemaphore _ -> 8
+
+d3Color :: Int -> Text
+d3Color x = case x of
+  1 -> "#1f77b4"
+  2 -> "#aec6e8"
+  3 -> "#ff7f0e"
+  4 -> "#ffbb78"
+  5 -> "#2ca02c"
+  6 -> "#98df8a"
+  7 -> "#d62728"
+  8 -> "#ff9896"
+  _ -> "pink"
 
 data D3Node = D3Node
   { name :: Text,
@@ -69,8 +84,8 @@ instance Data.Aeson.ToJSON D3Link
 
 instance Data.Aeson.ToJSON D3Graph
 
-vertexLink :: Int -> ConfigName -> ConfigLoc  -> ConfigVertex -> Html ()
-vertexLink pos (ConfigName name) loc vertex = with a_ [href_ ref] (toHtml (show loc <> show vertex))
+vertexLink :: Int -> ConfigName -> ConfigLoc -> ConfigVertex -> Html ()
+vertexLink pos (ConfigName name) _loc vertex = with a_ [href_ ref] (vertexName vertex)
   where
     ref =
       Text.intercalate
@@ -90,9 +105,15 @@ searchResults (Text.strip -> query) names
       results -> ul_ do
         forM_ results $ \(name, vertexes) ->
           forM_ (zip [0 ..] vertexes) $ \(pos, (loc, vertex)) ->
-            li_ $ vertexLink pos name loc vertex
+            with' li_ "bg-white/75" $ vertexLink pos name loc vertex
   where
     matchQuery (ConfigName name, _) = query `Text.isInfixOf` name
+
+mkTooltip :: Text -> Html ()
+mkTooltip n =
+  with div_ [id_ "tooltip-default", role_ "tooltip", class_ "inline-block absolute invisible z-10 py-2 px-3 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-0 transition-opacity duration-300 tooltip dark:bg-gray-700"] do
+    toHtml n
+    with div_ [class_ "tooltip-arrow", makeAttribute "data-popper-arrow" mempty] mempty
 
 newtype SearchForm = SearchForm {query :: Text} deriving (Eq, Show, Generic)
 
@@ -160,13 +181,13 @@ infoComponent :: Config -> Html ()
 infoComponent config = do
   h2_ "Config details"
   with' div_ "grid p-4 place-content-center" do
-   with' div_ "not-prose bg-slate-50 border rounded-xl" do
-    with' table_ "table-auto border-collapse w-80" do
-      thead_ $ with' tr_ "border-b text-left" $ traverse_ (with' th_ "p-1") ["Object", "Count"]
-      with' tbody_ "bg-white" do
-        objectCounts "jobs" config.jobs
-        objectCounts "nodesets" config.nodesets
-        objectCounts "pipelines" config.pipelines
+    with' div_ "not-prose bg-slate-50 border rounded-xl" do
+      with' table_ "table-auto border-collapse w-80" do
+        thead_ $ with' tr_ "border-b text-left" $ traverse_ (with' th_ "p-1") ["Object", "Count"]
+        with' tbody_ "bg-white" do
+          objectCounts "jobs" config.jobs
+          objectCounts "nodesets" config.nodesets
+          objectCounts "pipelines" config.pipelines
   where
     objectCounts :: Text -> Map a b -> Html ()
     objectCounts n m = do
@@ -193,7 +214,7 @@ welcomeComponent = do
   stroke: #999;
   stroke-opacity: 0.6;
 }
-svg {
+svg#d3 {
   position: fixed;
   height: 100%;
   width: 100%;
@@ -203,18 +224,78 @@ svg {
 }
 |]
 
+locLink :: ConfigLoc -> Html ()
+locLink loc =
+  with a_ [href_ locUrl, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
+    with' span_ "px-1" "🔗"
+    toHtml locPath
+  where
+    CanonicalProjectName (ProviderName providerName, ProjectName projectName) = loc.project
+    locUrl = "https://" <> locPath
+    locPath = Text.intercalate "/" [providerName, projectName, getPath loc.path]
+
+locComponent :: ConfigLoc -> Html ()
+locComponent loc = do
+  locLink loc
+  traverse_ tenantBox loc.tenants
+  where
+    tenantBox (TenantName tenant) = with' span_ "rounded bg-slate-200 text-slate-700 p-1" (toHtml tenant)
+
+dl :: Html () -> [(Text, Html ())] -> Html ()
+dl title xs =
+  with' div_ "bg-white shadow overflow-hidden sm:rounded-lg" do
+    with' div_ "px-4 py-5 sm:px-6" do
+      with' h3_ "text-lg leading-6 font-medium text-gray-900" title
+    with' div_ "border-t border-gray-200" do
+      dl_ (traverse_ go (zip [0 ..] xs))
+  where
+    go :: (Int, (Text, Html ())) -> Html ()
+    go (pos, (k, v)) =
+      with' div_ (bgColor <> " px-1 py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6") do
+        with' dt_ "text-sm font-medium text-gray-500" (toHtml k)
+        with' dd_ "mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2" v
+      where
+        bgColor
+          | even pos = "bg-gray-50"
+          | otherwise = "bg-white"
+
+vertexComponent :: Vertex -> Html ()
+vertexComponent v@(_, cv) =
+  dl (vertexSource v) $ vertexAttributes cv
+  where
+    vertexAttributes (ZuulConfigVertex _) = []
+    vertexAttributes (NodeLabelVertex _) = []
+
+vertexSource :: Vertex -> Html ()
+vertexSource (loc, v) = span_ do
+  vertexName v
+  locComponent loc
+
+vertexIcon :: ConfigVertex -> Html ()
+vertexIcon cv = with span_ [style_ ("color: " <> (d3Color . vertexGroup $ cv))] $
+  toHtml @Text $ case cv of
+    VJob _ -> "⚙"
+    VProjectPipeline _ -> "🎛"
+    _ -> "X"
+
+vertexName :: ConfigVertex -> Html ()
+vertexName cv = span_ do
+  vertexIcon cv
+  toHtml n
+  where
+    ConfigName n = from cv
+
 objectInfo :: ConfigName -> Int -> Analysis -> Html ()
 objectInfo cn pos analysis = case Map.lookup cn analysis.names of
-  Just (safeGet pos -> Just x) -> do
-    h2_ $ toHtml $ "Object: " <> show x
-    with' div_ "grid grid-cols-2 gap 1 m-4" do
+  Just (safeGet pos -> Just v) -> do
+    h2_ $ vertexComponent v
+    with' div_ "grid grid-cols-2 gap-1 m-4" do
       div_ do
         h3_ "Depends-On"
         div_ "The object depends-on graph.."
       div_ do
         h3_ "Requires"
         div_ "The object requires graph.."
-
   _ -> h2_ "Unknown object?!"
 
 newtype VertexTypeUrl = VTU VertexType
