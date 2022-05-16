@@ -36,6 +36,8 @@
             };
         };
 
+        python = pkgs.python310.withPackages (ps: with ps; [ kazoo ]);
+
         haskellPackages =
           pkgs.haskell.packages.ghc922.override haskellOverrides;
         zuulWeederPackage = haskellPackages.callCabal2nix packageName self { };
@@ -48,6 +50,7 @@
           packages = p: [ zuulWeederPackage ];
 
           buildInputs = with haskellPackages; [
+            python
             ghcid
             ormolu
             cabal-install

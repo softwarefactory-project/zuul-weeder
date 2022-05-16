@@ -1,7 +1,4 @@
---- This is expected to run on a dump done via
---- python3 /var/log/zuul/zk-dump.py --cert /etc/zuul/ssl/zookeeper.crt --key /etc/zuul/ssl/zookeeper.key --ca /etc/zuul/ssl/zk-ca.pem managesf.sftests.com:2281 --decompress /var/log/zuul/zk-dump
---- then
---- S.print $ walk "/var/log/zuul/zk-dump"
+{-# LANGUAGE QuasiQuotes #-}
 
 module Zuul.ZKDump
   ( walkConfigNodes,
@@ -10,18 +7,20 @@ module Zuul.ZKDump
     ZKConfig (..),
     ConfigError (..),
     ZKSystemConfig (..),
+    dumpZKConfig,
   )
 where
 
 import Control.Exception (SomeException, try)
-import Control.Monad (when)
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Data.Aeson (Value, eitherDecodeFileStrict)
 import Data.ByteString (ByteString)
-import qualified Data.Text as Text
-import qualified Data.Yaml
-import qualified Network.URI.Encode
-import qualified Streaming.Prelude as S
+import Data.String.QQ (s)
+import Data.Text qualified as Text
+import Data.Yaml qualified
+import Network.URI.Encode qualified
+import Streaming.Prelude qualified as S
+import System.Directory qualified
+import System.Process.Typed qualified
 import ZuulWeeder.Prelude
 
 data ZKConfig = ZKConfig
@@ -76,13 +75,16 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
         Left err -> throwError $ ReadError err
         Right content -> pure content
 
-readSystemConfig :: FilePathT -> IO (Either String ZKSystemConfig)
-readSystemConfig dumpPath = do
-  configE <- readC
-  pure $ ZKSystemConfig <$> configE
+readSystemConfig :: FilePathT -> ExceptT Text IO ZKSystemConfig
+readSystemConfig dumpPath =
+  ZKSystemConfig <$> readC
   where
-    readC :: IO (Either String Value)
-    readC = eitherDecodeFileStrict . getPath' $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
+    readC :: ExceptT Text IO Value
+    readC = do
+      ve <- lift $ eitherDecodeFileStrict . getPath' $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
+      case ve of
+        Left e -> throwError (Text.pack e)
+        Right x -> pure x
 
 mkZKConfig :: Value -> FilePathT -> Maybe ZKConfig
 mkZKConfig zkJSONData path = do
@@ -97,3 +99,43 @@ mkZKConfig zkJSONData path = do
       filePath = FilePathT $ Network.URI.Encode.decodeText filePath'
 
   Just ZKConfig {..}
+
+dumpScript :: System.Process.Typed.StreamSpec 'System.Process.Typed.STInput ()
+dumpScript =
+  System.Process.Typed.byteStringInput
+    [s|
+import zlib, sys, os, kazoo.client
+
+def getTree(path):
+    try:
+        data, _ = client.get(path)
+        data = zlib.decompress(data)
+    except Exception:
+        pass
+    os.makedirs(root + path)
+    with open(root + path + '/ZKDATA', 'wb') as f:
+        f.write(data)
+    for child in client.get_children(path):
+        getTree(path + '/' + child)
+
+[root, host, key, cert, ca] = sys.argv[1:]
+client = kazoo.client.KazooClient(host, use_ssl=True, keyfile=key, certfile=cert, ca=ca)
+client.start()
+getTree("/zuul/config/cache")
+getTree("/zuul/system/conf")
+|]
+
+dumpZKConfig :: FilePathT -> [Text] -> ExceptT Text IO ()
+dumpZKConfig dataDir zkConf = do
+  exitCode <- lift $ do
+    whenM (doesDirectoryExist dataDir) $ do
+      hPutStrLn stderr $ "[+] Removing " <> getPath' dataDir
+      System.Directory.removeDirectoryRecursive $ getPath' dataDir
+    hPutStrLn stderr $ "[+] Dumping with " <> show zkConf
+    System.Process.Typed.runProcess process
+  case exitCode of
+    System.Process.Typed.ExitSuccess -> pure ()
+    System.Process.Typed.ExitFailure _ -> throwError "dumpZKConfig failed!"
+  where
+    args = "-" : getPath' dataDir : map Text.unpack zkConf
+    process = System.Process.Typed.setStdin dumpScript $ System.Process.Typed.proc "python" args

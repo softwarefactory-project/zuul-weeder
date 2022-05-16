@@ -8,8 +8,8 @@ import Test.Tasty
 import Test.Tasty.Golden (goldenVsString)
 import Test.Tasty.HUnit
 import Text.Pretty.Simple (pShowNoColor)
-import Zuul.Config (ConnectionCName (ConnectionCName), readConnections)
 import Zuul.ConfigLoader
+import Zuul.ServiceConfig
 import Zuul.Tenant
 import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
 import ZuulWeeder.Prelude
@@ -53,7 +53,7 @@ tests =
       goldenTest "Decode Project templates config" "project-templates" decodeProjectTemplatesConfig,
       goldenTest "Decode Pipeline config" "pipelines" decodePipelineConfig,
       goldenTest "Decode Tenant config" "system-config" decodeTenants,
-      testCase "Decode Connections config" decodeConnections,
+      testCase "Decode Connections config" decodeServiceConfig,
       goldenTest "Get Tenant projects" "zuul" testGetTenantProjects
     ]
   where
@@ -88,7 +88,6 @@ tests =
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
       pure $ sort decoded
 
-
     decodeProjectTemplatesConfig = do
       json <- loadFixture "project-templates"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
@@ -104,16 +103,17 @@ tests =
       let decoded = fromMaybe (error "oops") $ decodeTenantsConfig (ZKSystemConfig json)
       pure $ Data.Map.toList decoded.tenants
 
-    decodeConnections = do
-      conns <- readConnections $ fixturesPath </> "zuul.conf"
+    decodeServiceConfig = do
+      conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))
       let expected = [(ConnectionName "gerrit", ConnectionCName "sftests.com")]
-      assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conns)
+      assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conf.connections)
+      assertEqual "Expect zk conf" ["localhost", "key.pem", "cert.pem", "ca.pem"] conf.zookeeper
 
     testGetTenantProjects = do
-      conns <- readConnections $ fixturesPath </> "zuul.conf"
+      conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))
       json <- loadJSONFixture "system-config"
       let tenantsConfig = fromMaybe (error "oops") $ decodeTenantsConfig (ZKSystemConfig json)
-          tenantConfig = getTenantProjects conns tenantsConfig (TenantName "local")
-          tenantConfigAlt = getTenantProjects conns tenantsConfig (TenantName "unknown")
+          tenantConfig = getTenantProjects conf tenantsConfig (TenantName "local")
+          tenantConfigAlt = getTenantProjects conf tenantsConfig (TenantName "unknown")
       assertEqual "Expect empty tenant projects" Nothing tenantConfigAlt
       pure tenantConfig

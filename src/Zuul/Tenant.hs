@@ -1,6 +1,5 @@
 module Zuul.Tenant where
 
-import ZuulWeeder.Prelude
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
@@ -8,7 +7,6 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Vector qualified as V
-import Zuul.Config (ConnectionCName (ConnectionCName), ConnectionsConfig)
 import Zuul.ConfigLoader
   ( CanonicalProjectName (CanonicalProjectName),
     ConfigLoc (..),
@@ -22,7 +20,9 @@ import Zuul.ConfigLoader
     getObjValue,
     unwrapObject,
   )
+import Zuul.ServiceConfig (ConnectionCName (ConnectionCName), ServiceConfig (..))
 import Zuul.ZKDump (ZKSystemConfig (..))
+import ZuulWeeder.Prelude
 
 allItems :: Set.Set ZuulConfigType
 allItems = Set.fromList [minBound .. maxBound]
@@ -120,8 +120,8 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
               extraConfigPaths = [] -- TODO: decode attribute
            in TenantProject (ProjectName name) includedElements (extraConfigPaths <> defaultPaths)
 
-getTenantProjects :: ConnectionsConfig -> TenantsConfig -> TenantName -> Maybe TenantProjects
-getTenantProjects connections tenantsConfig tenantName =
+getTenantProjects :: ServiceConfig -> TenantsConfig -> TenantName -> Maybe TenantProjects
+getTenantProjects serviceConfig tenantsConfig tenantName =
   let tenantConfig = Map.lookup tenantName $ tenantsConfig.tenants
       tenantLayout = Map.toList <$> ((.connections) <$> tenantConfig)
    in concatMap extractProject <$> tenantLayout
@@ -129,7 +129,7 @@ getTenantProjects connections tenantsConfig tenantName =
     extractProject :: (ConnectionName, TenantConnectionConfig) -> TenantProjects
     extractProject (connectionName, TenantConnectionConfig {..}) =
       let projects = configProjects <> untrustedProjects
-          providerName = case Map.lookup connectionName connections of
+          providerName = case Map.lookup connectionName serviceConfig.connections of
             Just (ConnectionCName pn) -> ProviderName pn
             Nothing -> error "Unable to find project connection's provider name"
        in ( \TenantProject {..} ->
@@ -139,8 +139,8 @@ getTenantProjects connections tenantsConfig tenantName =
           )
             <$> projects
 
-tenantResolver :: TenantsConfig -> ConnectionsConfig -> ConfigLoc -> ZuulConfigType -> [TenantName]
-tenantResolver tenantsConfig connections configLoc zct = matches
+tenantResolver :: ServiceConfig -> TenantsConfig -> ConfigLoc -> ZuulConfigType -> [TenantName]
+tenantResolver serviceConfig tenantsConfig configLoc zct = matches
   where
     matches = map fst $ filter (containsProject . snd) $ Map.toList $ tenantsConfig.tenants
     containsProject :: TenantConfig -> Bool
@@ -150,7 +150,7 @@ tenantResolver tenantsConfig connections configLoc zct = matches
       where
         matchProject :: TenantProject -> Bool
         matchProject TenantProject {..} =
-          let providerName = case Map.lookup cn connections of
+          let providerName = case Map.lookup cn serviceConfig.connections of
                 Just (ConnectionCName pn) -> ProviderName pn
                 Nothing -> error "Unable to find project connection's provider name"
            in and

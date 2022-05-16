@@ -4,9 +4,11 @@ module ZuulWeeder.Prelude
 
     -- * base
     Generic,
+    catMaybes,
     mapMaybe,
     isJust,
     fromMaybe,
+    fromRight,
     (&),
     traverse_,
     sort,
@@ -15,6 +17,16 @@ module ZuulWeeder.Prelude
     liftIO,
     trace,
     elemIndex,
+    hPutStrLn,
+    stderr,
+    orDie,
+    fromEither,
+    Int64,
+    when,
+    whenM,
+
+    -- * clock
+    getSec,
 
     -- * filepath text
     FilePathT (..),
@@ -41,6 +53,10 @@ module ZuulWeeder.Prelude
     State,
     execStateT,
     StateT,
+    ExceptT,
+    runExceptT,
+    throwError,
+    except,
 
     -- * lens
     Control.Lens.over,
@@ -55,21 +71,25 @@ module ZuulWeeder.Prelude
   )
 where
 
+import Data.Either (fromRight)
 import Control.Lens ((%=))
 import Control.Lens qualified
-import Control.Monad (forM_)
+import Control.Monad (when, forM_)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (State, StateT, execStateT)
+import Control.Monad.Trans.Except (except)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Trans (lift)
 import Data.ByteString qualified as BS
 import Data.Foldable (traverse_)
+import Data.Int (Int64)
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
 -- This import is necessary to bring orphan Lens instance for #labels
 import Data.Generics.Labels ()
 import Data.List (elemIndex, sort)
 import Data.Map (Map)
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, mapMaybe, catMaybes)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text (Text, pack, unpack)
@@ -79,10 +99,17 @@ import GHC.Generics (Generic)
 import System.Directory qualified
 import System.FilePath qualified
 import Witch qualified
+import System.IO (hPutStrLn, stderr)
+import qualified System.Clock
 
 newtype FilePathT = FilePathT {getPath :: Text}
   deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid)
   deriving (Display) via (ShowInstance Text)
+
+whenM :: Monad m => m Bool -> m () -> m ()
+whenM test action = do
+  res <- test
+  when res action
 
 safeGet :: Int -> [a] -> Maybe a
 safeGet pos xs = Control.Lens.element pos `Control.Lens.preview` xs
@@ -101,3 +128,18 @@ doesDirectoryExist (FilePathT fp) = System.Directory.doesDirectoryExist (unpack 
 
 readFileBS :: FilePathT -> IO BS.ByteString
 readFileBS (FilePathT fp) = BS.readFile (unpack fp)
+
+getSec :: IO Int64
+getSec = do
+  System.Clock.TimeSpec sec _ <- System.Clock.getTime System.Clock.Monotonic
+  pure sec
+
+-- | From https://www.haskellforall.com/2021/05/the-trick-to-avoid-deeply-nested-error.html
+orDie :: Maybe a -> b -> Either b a
+Just a `orDie` _ = Right a
+Nothing `orDie` err = Left err
+
+fromEither :: Show a => Either a b -> b
+fromEither e = case e of
+  Left x -> error (show x)
+  Right x -> x

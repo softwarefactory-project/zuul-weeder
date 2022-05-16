@@ -51,6 +51,7 @@ common common-options
                      , PatternSynonyms
                      , GeneralizedNewtypeDeriving
                      , NegativeLiterals
+                     , NamedFieldPuns
                      -- For the new record dot syntax
                      -- , NoFieldSelectors
                      , DuplicateRecordFields
@@ -62,6 +63,7 @@ library
   build-depends:       aeson >= 2
                      , algebraic-graphs
                      , mtl
+                     , transformers
                      , lens
                      , generic-lens
                      , text
@@ -78,6 +80,8 @@ library
                      , ini
                      , witch
                      , pretty-simple
+                     , clock
+                     , typed-process
                      -- Main
                      , optparse-applicative
                      -- UI
@@ -91,7 +95,7 @@ library
   exposed-modules:     Zuul.ZKDump
                      , Zuul.ConfigLoader
                      , Zuul.Tenant
-                     , Zuul.Config
+                     , Zuul.ServiceConfig
                      , ZuulWeeder.Prelude
                      , ZuulWeeder.Graph
                      , ZuulWeeder.Main
