@@ -190,7 +190,9 @@ updateTopConfig tenantResolver configLoc ze = case ze of
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
-  ZProjectPipeline project -> #projectPipelines %= insertConfig project.name project
+  ZProjectPipeline project ->
+    -- TODO: add PJJob to the list of jobs?
+    #projectPipelines %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
   _ -> error "Not implemented"

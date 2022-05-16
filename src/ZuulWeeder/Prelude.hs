@@ -54,17 +54,17 @@ module ZuulWeeder.Prelude
   )
 where
 
-import Control.Monad.IO.Class (liftIO)
-import Debug.Trace (trace)
 import Control.Lens ((%=))
 import Control.Lens qualified
 import Control.Monad (forM_)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (State, StateT, execStateT)
 import Control.Monad.Trans (lift)
 import Data.ByteString qualified as BS
 import Data.Foldable (traverse_)
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
+-- This import is necessary to bring orphan Lens instance for #labels
 import Data.Generics.Labels ()
 import Data.List (sort)
 import Data.Map (Map)
@@ -73,6 +73,7 @@ import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Display
+import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import System.Directory qualified
 import System.FilePath qualified

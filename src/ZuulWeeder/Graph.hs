@@ -136,13 +136,16 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           -- When parent is set, we don't touch the job
           | isJust job.parent = [(loc, job)]
           -- Otherwise we set the parent for each tenant
-          | otherwise = mapMaybe (setParentJob (loc, job)) baseJobs
+          | otherwise = case mapMaybe (setParentJob (loc, job)) baseJobs of
+              [] -> error "This job is not attached to any tenant?!"
+              xs -> xs
         setParentJob :: (ConfigLoc, Job) -> (JobName, [TenantName]) -> Maybe (ConfigLoc, Job)
         setParentJob (loc, job) (parent, tenants)
           -- The default base job is from other tenants
           | all (`notElem` loc.tenants) tenants = Nothing
           -- This job is the base job, we don't set it's parent
           | job.name == parent = Just (loc, job)
+          -- We create a new job with the parent set to the list of tenants defining it
           | otherwise = Just (loc & (#tenants `set` tenants), job {parent = Just parent})
 
     go :: State Analysis ()
@@ -167,7 +170,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         -- look for nodeset location
         case job.nodeset of
           Just (JobNodeset nodeset) -> case Map.lookup nodeset config.nodesets of
-            Just xs -> forM_ xs $ \(loc', ns) -> feedState ((loc, VJob job), (loc', VNodeset ns))
+            Just xs ->
+              -- TODO: filter the nodeset that are in the same tenant (and same branch?)
+              forM_ xs $ \(loc', ns) -> feedState ((loc, VJob job), (loc', VNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           _ ->
             -- Ignore inlined nodeset
@@ -176,13 +181,18 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         case job.parent of
           Just parent -> do
             case Map.lookup parent allJobs of
-              Just xs -> forM_ xs $ \(loc', pj) -> feedState ((loc, VJob job), (loc', VJob pj))
+              Just xs ->
+                -- TODO: only keep the jobs that are in the same tenant as the parent
+                forM_ xs $ \(loc', pj) -> feedState ((loc, VJob job), (loc', VJob pj))
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
         -- look for job dependencies
         forM_ job.dependencies $ \dJob' -> do
           case Map.lookup dJob' allJobs of
-            Just xs -> forM_ xs $ \(loc', dJob) -> feedState ((loc, VJob job), (loc', VJob dJob))
+            Just xs ->
+              -- TODO: only keep the jobs that are in the same tenant
+              -- TODO: look in priority for PJJob defined in the same loc
+              forM_ xs $ \(loc', dJob) -> feedState ((loc, VJob job), (loc', VJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
 
     feedState :: (Vertex, Vertex) -> State Analysis ()
