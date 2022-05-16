@@ -61,7 +61,7 @@
             set -xe
             exec ${
               tailwind.defaultPackage."x86_64-linux"
-            }/bin/tailwind-run 'src/ZuulWeeder/UI.hs' -o dists/tailwind.css;
+            }/bin/tailwind-run -w 'src/ZuulWeeder/UI.hs' -o dists/tailwind.css;
           '';
         in {
           type = "app";
