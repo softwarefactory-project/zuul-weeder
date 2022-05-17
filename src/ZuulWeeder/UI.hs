@@ -33,15 +33,21 @@ toD3Graph g =
       ZuulWeeder.UI.links = toLinks <$> edges
     }
   where
-    (edges, _) = splitAt 100 $ Algebra.Graph.edgeList g
+    (edges, _) = splitAt 150 $ Algebra.Graph.edgeList g
+    -- edges = Algebra.Graph.edgeList g
     vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
     -- TODO: encode the config loc so that duplicate names are correctly connected
+    toNodes v@(_, e) = ZuulWeeder.UI.D3Node (toNode e) (nodeID v) $ vertexGroup e
+
     toNode :: ConfigVertex -> Text
     toNode = display
-    toNodes (_, e) = ZuulWeeder.UI.D3Node (toNode e) $ vertexGroup e
+
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
-    toLinks ((_, a), (_, b)) = ZuulWeeder.UI.D3Link (toNode a) (toNode b)
+    toLinks (a, b) = ZuulWeeder.UI.D3Link (nodeID a) (nodeID b)
+
+    nodeID :: Vertex -> Int
+    nodeID = hash
 
 vertexGroup :: ConfigVertex -> Int
 vertexGroup x = case x of
@@ -68,13 +74,14 @@ d3Color x = case x of
 
 data D3Node = D3Node
   { name :: Text,
+    id :: Int,
     group :: Int
   }
-  deriving (Generic, Show)
+  deriving (Generic, Eq, Show)
 
 data D3Link = D3Link
-  { source :: Text,
-    target :: Text
+  { source :: Int,
+    target :: Int
   }
   deriving (Generic, Show)
 

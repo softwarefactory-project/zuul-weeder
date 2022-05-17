@@ -39,6 +39,8 @@ common common-options
                      , ViewPatterns
                      , DeriveGeneric
                      , DerivingVia
+                     , DeriveAnyClass
+                     , DerivingStrategies
                      , FlexibleContexts
                      , MultiParamTypeClasses
                      , OverloadedLabels
@@ -84,6 +86,7 @@ library
                      , clock
                      , typed-process
                      , exceptions
+                     , hashable
                      -- Main
                      , optparse-applicative
                      -- UI

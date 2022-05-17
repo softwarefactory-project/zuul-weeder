@@ -34,7 +34,7 @@ import ZuulWeeder.Prelude
 data ConfigVertex
   = ZuulConfigVertex ZuulConfigElement
   | NodeLabelVertex NodeLabelName
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Eq, Ord, Show, Generic, Hashable)
 
 instance From ConfigVertex ConfigName where
   from (ZuulConfigVertex zce) = from zce

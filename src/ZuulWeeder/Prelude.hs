@@ -26,6 +26,10 @@ module ZuulWeeder.Prelude
     whenM,
     nub,
 
+    -- * hashable
+    Hashable,
+    hash,
+
     -- * exceptions
     SomeException,
     catchAll,
@@ -76,40 +80,41 @@ module ZuulWeeder.Prelude
   )
 where
 
-import Data.Either (fromRight)
 import Control.Lens ((%=))
 import Control.Lens qualified
-import Control.Monad (when, forM_)
-import Control.Monad.Catch (catchAll, SomeException)
+import Control.Monad (forM_, when)
+import Control.Monad.Catch (SomeException, catchAll)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (State, StateT, execStateT)
-import Control.Monad.Trans.Except (except)
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Except (except)
 import Data.ByteString qualified as BS
+import Data.Either (fromRight)
 import Data.Foldable (traverse_)
-import Data.Int (Int64)
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
 -- This import is necessary to bring orphan Lens instance for #labels
 import Data.Generics.Labels ()
-import Data.List (elemIndex, sort, nub)
+import Data.Hashable (Hashable, hash)
+import Data.Int (Int64)
+import Data.List (elemIndex, nub, sort)
 import Data.Map (Map)
-import Data.Maybe (fromMaybe, isJust, mapMaybe, catMaybes)
+import Data.Maybe (catMaybes, fromMaybe, isJust, mapMaybe)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text (Text, pack, unpack)
 import Data.Text.Display
 import Debug.Trace (trace)
 import GHC.Generics (Generic)
+import System.Clock qualified
 import System.Directory qualified
 import System.FilePath qualified
-import Witch qualified
 import System.IO (hPutStrLn, stderr)
-import qualified System.Clock
+import Witch qualified
 
 newtype FilePathT = FilePathT {getPath :: Text}
-  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid)
+  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Hashable)
   deriving (Display) via (ShowInstance Text)
 
 whenM :: Monad m => m Bool -> m () -> m ()
