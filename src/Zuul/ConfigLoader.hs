@@ -62,6 +62,11 @@ data Nodeset = Nodeset
   }
   deriving (Show, Eq, Ord)
 
+instance From Nodeset ConfigName where
+  from ns =
+    let (NodesetName name) = ns.name
+     in ConfigName name
+
 data Job = Job
   { name :: JobName,
     parent :: Maybe JobName,
@@ -75,6 +80,14 @@ instance From Job ConfigName where
   from job =
     let JobName name = job.name
      in ConfigName name
+
+instance From ProjectPipeline ConfigName where
+  from pp = ConfigName $ case pp.name of
+    PName (ProjectName name) -> name
+    TName (TemplateName name) -> name
+    PNameRE (ProjectNameRE name) -> name
+    PNameCannonical (CanonicalProjectName (providerName, projectName)) ->
+      from $ show providerName <> "/" <> show projectName
 
 data PipelineJob
   = PJName JobName
@@ -103,6 +116,21 @@ data Pipeline = Pipeline
   }
   deriving (Show, Eq, Ord)
 
+instance From Pipeline ConfigName where
+  from p =
+    let (PipelineName name) = p.name
+     in ConfigName name
+
+data Queue = Queue {name :: Text, perBranch :: Bool} deriving (Show, Eq, Ord)
+
+instance From Queue ConfigName where
+  from q = ConfigName q.name
+
+data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord)
+
+instance From Semaphore ConfigName where
+  from s = ConfigName s.name
+
 data ZuulConfigElement
   = ZJob Job
   | ZProjectPipeline ProjectPipeline
@@ -116,7 +144,12 @@ data ZuulConfigElement
 instance From ZuulConfigElement ConfigName where
   from zce = case zce of
     ZJob job -> from job
-    _ -> error "TODO configName from instance"
+    ZProjectPipeline pp -> from pp
+    ZNodeset ns -> from ns
+    ZProjectTemplate pt -> from pt
+    ZPipeline p -> from p
+    ZQueue q -> from q
+    ZSemaphore s -> from s
 
 data ZuulConfigType
   = PipelineT
@@ -141,12 +174,14 @@ instance From ZuulConfigElement ZuulConfigType where
 
 instance From ZuulConfigType Text where
   from zce = case zce of
+    PipelineT -> "pipeline"
     JobT -> "job"
-    _ -> error "Not Implemented (yet)"
-
-data Queue = Queue {name :: Text, perBranch :: Bool} deriving (Show, Eq, Ord)
-
-data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord)
+    SemaphoreT -> "semaphore"
+    ProjectT -> "project-pipeline"
+    ProjectTemplateT -> "project-template"
+    NodesetT -> "nodeset"
+    SecretT -> "secret"
+    QueueT -> "queue"
 
 instance Display ZuulConfigElement where
   displayBuilder zce = case zce of
