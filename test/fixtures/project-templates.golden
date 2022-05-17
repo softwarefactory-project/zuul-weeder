@@ -1,8 +1,6 @@
 [ ZProjectTemplate
-    ( ProjectPipeline
-        { name = TName
-            ( TemplateName "sf-ci-jobs" )
-        , templates = []
+    ( ProjectTemplate
+        { name = ProjectTemplateName "sf-ci-jobs"
         , pipelines = fromList
             [ PPipeline
                 { name = PipelineName "check"

@@ -40,7 +40,7 @@ data VertexName
   | VNodeset NodesetName
   | VNodeLabel NodeLabelName
   | VProjectPipeline Project
-  | VProjectTemplate Project
+  | VProjectTemplate ProjectTemplateName
   | VPipeline PipelineName
   deriving (Eq, Ord, Show, Generic, Hashable)
 
@@ -51,7 +51,7 @@ vertexTypeName = \case
   VNodeset _ -> "nodeset"
   VNodeLabel _ -> "label"
   VProjectPipeline _ -> "todo-project-pipeline"
-  VProjectTemplate _ -> "todo-project-template"
+  VProjectTemplate _ -> "project-template"
   VPipeline _ -> "pipeline"
 
 instance From VertexName Text where
@@ -60,7 +60,7 @@ instance From VertexName Text where
     VNodeset (NodesetName n) -> n
     VNodeLabel (NodeLabelName n) -> n
     VProjectPipeline _ -> "todo-pp"
-    VProjectTemplate _ -> "todo-pt"
+    VProjectTemplate (ProjectTemplateName n) -> n
     VPipeline (PipelineName n) -> n
 
 instance From Job VertexName where

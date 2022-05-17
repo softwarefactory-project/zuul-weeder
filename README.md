@@ -19,3 +19,9 @@ ghcid -W --test "ZuulWeeder.UI.run ZuulWeeder.Main.demoConfig"
 ```
 
 After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
+
+Accept golden test change with:
+
+```
+cabal test --test-option=--accept
+```

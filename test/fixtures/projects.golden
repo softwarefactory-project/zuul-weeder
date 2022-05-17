@@ -37,7 +37,7 @@
                 )
             )
         , templates =
-            [ TemplateName "sf-ci-jobs" ]
+            [ ProjectTemplateName "sf-ci-jobs" ]
         , pipelines = fromList
             [ PPipeline
                 { name = PipelineName "check"

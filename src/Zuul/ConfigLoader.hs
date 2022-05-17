@@ -46,7 +46,7 @@ newtype ProviderName = ProviderName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
-newtype TemplateName = TemplateName Text
+newtype ProjectTemplateName = ProjectTemplateName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
@@ -64,7 +64,6 @@ newtype TenantName = TenantName {getName :: Text}
 
 data Project
   = PName ProjectName
-  | TName TemplateName
   | PNameRE ProjectNameRE
   | PNameCannonical CanonicalProjectName
   deriving (Eq, Ord, Show, Generic, Hashable)
@@ -102,7 +101,13 @@ data PPipeline = PPipeline
 
 data ProjectPipeline = ProjectPipeline
   { name :: Project,
-    templates :: [TemplateName],
+    templates :: [ProjectTemplateName],
+    pipelines :: Data.Set.Set PPipeline
+  }
+  deriving (Show, Eq, Ord, Generic, Hashable)
+
+data ProjectTemplate = ProjectTemplate
+  { name :: ProjectTemplateName,
     pipelines :: Data.Set.Set PPipeline
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
@@ -125,7 +130,7 @@ data ZuulConfigElement
   = ZJob Job
   | ZProjectPipeline ProjectPipeline
   | ZNodeset Nodeset
-  | ZProjectTemplate ProjectPipeline
+  | ZProjectTemplate ProjectTemplate
   | ZPipeline Pipeline
   | ZQueue Queue
   | ZSemaphore Semaphore
@@ -198,7 +203,7 @@ data Config = Config
     nodesets :: ConfigMap NodesetName Nodeset,
     nodeLabels :: ConfigMap NodeLabelName NodeLabelName,
     projectPipelines :: ConfigMap Project ProjectPipeline,
-    projectTemplates :: ConfigMap Project ProjectPipeline,
+    projectTemplates :: ConfigMap ProjectTemplateName ProjectTemplate,
     pipelines :: ConfigMap PipelineName Pipeline,
     configErrors :: [ConfigError]
   }
@@ -243,6 +248,7 @@ decodeConfig (project, _branch) zkJSONData =
       where
         getE :: Text -> Object -> Object
         getE k o = unwrapObject $ getObjValue k o
+
     decodePipeline :: Object -> Pipeline
     decodePipeline va =
       let name = PipelineName $ getName va
@@ -250,6 +256,7 @@ decodeConfig (project, _branch) zkJSONData =
             Object triggers' -> PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggers'
             _ -> error $ "Unexpected trigger value in: " <> show va
        in Pipeline {..}
+
     decodeJob :: Object -> Job
     decodeJob va =
       let name = JobName $ getName va
@@ -259,6 +266,7 @@ decodeConfig (project, _branch) zkJSONData =
             dependencies
             ) = decodeJobContent va
        in Job {..}
+
     decodeJobContent :: Object -> (Maybe JobName, Maybe JobNodeset, [BranchName], [JobName])
     decodeJobContent va =
       let jobParent = case HM.lookup "parent" va of
@@ -313,29 +321,30 @@ decodeConfig (project, _branch) zkJSONData =
               Just ('^', _) -> PNameRE $ ProjectNameRE name'
               Just _ -> PName $ ProjectName name'
               Nothing -> error $ "Unexpected project name for project pipeline: " <> Text.unpack name'
-          templates = decodeAsList "templates" TemplateName va
+          templates = decodeAsList "templates" ProjectTemplateName va
           pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
        in ProjectPipeline {..}
+
+    decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
+    decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va')
+      | pipelineName' `elem` ["name", "vars", "description"] = Nothing
+      | pipelineName' == "templates" = Nothing -- TODO: decode templates
+      | pipelineName' == "queue" = Nothing -- TODO: decode project queues
+      | otherwise = case va' of
+          Object inner ->
+            let name = PipelineName pipelineName'
+                jobs = case HM.lookup "jobs" inner of
+                  -- Just (String name') -> [PJName $ JobName name']
+                  Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
+                  _ -> [] -- pipeline has no jobs
+                  -- TODO: decode pipeline queue
+                _queue = case HM.lookup "queue" inner of
+                  Just (String queueName) -> Just queueName
+                  Just _ -> error $ "Unexpected queue name: " <> show inner
+                  Nothing -> Nothing
+             in Just $ PPipeline {..}
+          _ -> error $ "Unexpected pipeline: " <> show va'
       where
-        decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
-        decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va')
-          | pipelineName' `elem` ["name", "vars", "description"] = Nothing
-          | pipelineName' == "templates" = Nothing -- TODO: decode templates
-          | pipelineName' == "queue" = Nothing -- TODO: decode project queues
-          | otherwise = case va' of
-              Object inner ->
-                let name = PipelineName pipelineName'
-                    jobs = case HM.lookup "jobs" inner of
-                      -- Just (String name') -> [PJName $ JobName name']
-                      Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
-                      _ -> [] -- pipeline has no jobs
-                      -- TODO: decode pipeline queue
-                    _queue = case HM.lookup "queue" inner of
-                      Just (String queueName) -> Just queueName
-                      Just _ -> error $ "Unexpected queue name: " <> show inner
-                      Nothing -> Nothing
-                 in Just $ PPipeline {..}
-              _ -> error $ "Unexpected pipeline: " <> show va'
         decodePPipelineJob :: Value -> PipelineJob
         decodePPipelineJob jobElem = case jobElem of
           Object jobObj ->
@@ -349,14 +358,14 @@ decodeConfig (project, _branch) zkJSONData =
              in PJJob $ Job {..}
           String v -> PJName $ JobName v
           _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
-    decodeProjectTemplate :: Object -> ProjectPipeline
+
+    decodeProjectTemplate :: Object -> ProjectTemplate
     decodeProjectTemplate va =
-      let template = decodeProjectPipeline va
-       in template & #name `set` (TName . getPName $ template.name)
-      where
-        getPName :: Project -> TemplateName
-        getPName (PName (ProjectName name)) = TemplateName name
-        getPName _va = error $ "Unexpected template name: " <> show _va
+      case getString <$> HM.lookup "name" va of
+        Nothing -> error "Un-named project template"
+        Just (ProjectTemplateName -> name) ->
+          let pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
+           in ProjectTemplate {..}
 
     -- Zuul config elements are object with an unique key
     getKey :: Object -> Text
