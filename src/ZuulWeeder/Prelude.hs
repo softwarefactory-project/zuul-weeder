@@ -72,6 +72,7 @@ module ZuulWeeder.Prelude
     Control.Lens.set,
     Control.Lens.element,
     Control.Lens.preview,
+    Control.Lens.use,
     (%=),
     safeGet,
 

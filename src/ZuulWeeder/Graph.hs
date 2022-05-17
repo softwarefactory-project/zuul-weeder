@@ -159,7 +159,14 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       goProjectPipelines $ concat $ Map.elems config.projectPipelines
     -- look for semaphore, secret, ...
 
-    -- TODO: implement a lookup function that check matching tenant. Otherwise we might incorrectly link objects between tenants
+    lookupTenant :: Ord a => [TenantName] -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
+    lookupTenant tenants key cm = filterTenants =<< Map.lookup key cm
+      where
+        filterTenants xs = case filter (matchingTenant . fst) xs of
+          [] -> Nothing
+          xs' -> Just xs'
+        matchingTenant :: ConfigLoc -> Bool
+        matchingTenant loc = any (`elem` loc.tenants) tenants
 
     goProjectPipelines :: [(ConfigLoc, ProjectPipeline)] -> State Analysis ()
     goProjectPipelines pPipelines = do
@@ -167,16 +174,15 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       forM_ pPipelines $ \(loc, pPipeline) -> do
         -- TODO: handle templates
         forM_ pPipeline.pipelines $ \pipeline -> do
-          case Map.lookup pipeline.name config.pipelines of
+          case lookupTenant loc.tenants pipeline.name config.pipelines of
             Just xs ->
-              -- TODO: filter using tenant config
               forM_ xs $ \(loc', pipeline') -> do
                 feedState ((loc, VProjectPipeline pPipeline), (loc', VPipeline pipeline'))
             Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
           forM_ pipeline.jobs $ \pJob -> do
             case pJob of
               pj@(PJName jobName) -> do
-                case Map.lookup jobName config.jobs of
+                case lookupTenant loc.tenants jobName config.jobs of
                   Just xs -> do
                     -- TODO: filter using tenant config
                     forM_ xs $ \(loc'', job) -> do
@@ -203,9 +209,8 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         insertName job (loc, VJob job)
         -- look for nodeset location
         case job.nodeset of
-          Just (JobNodeset nodeset) -> case Map.lookup nodeset config.nodesets of
+          Just (JobNodeset nodeset) -> case lookupTenant loc.tenants nodeset config.nodesets of
             Just xs ->
-              -- TODO: filter the nodeset that are in the same tenant (and same branch?)
               forM_ xs $ \(loc', ns) -> feedState ((loc, VJob job), (loc', VNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           Just (JobAnonymousNodeset nodeLabels) -> do
@@ -216,17 +221,15 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         -- look for job parent
         case job.parent of
           Just parent -> do
-            case Map.lookup parent allJobs of
+            case lookupTenant loc.tenants parent allJobs of
               Just xs ->
-                -- TODO: only keep the jobs that are in the same tenant as the parent
                 forM_ xs $ \(loc', pj) -> feedState ((loc, VJob job), (loc', VJob pj))
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
         -- look for job dependencies
         forM_ job.dependencies $ \dJob' -> do
-          case Map.lookup dJob' allJobs of
+          case lookupTenant loc.tenants dJob' allJobs of
             Just xs ->
-              -- TODO: only keep the jobs that are in the same tenant
               -- TODO: look in priority for PJJob defined in the same loc
               forM_ xs $ \(loc', dJob) -> feedState ((loc, VJob job), (loc', VJob dJob))
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
