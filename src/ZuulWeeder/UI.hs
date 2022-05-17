@@ -26,14 +26,19 @@ import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 
 -- | The data.json for the d3 graph (see dists/graph.js)
-toD3Graph :: ConfigGraph -> ZuulWeeder.UI.D3Graph
-toD3Graph g =
+toD3Graph :: Maybe TenantName -> ConfigGraph -> ZuulWeeder.UI.D3Graph
+toD3Graph tenant g =
   ZuulWeeder.UI.D3Graph
     { ZuulWeeder.UI.nodes = toNodes <$> vertexes,
       ZuulWeeder.UI.links = toLinks <$> edges
     }
   where
-    (edges, _) = splitAt 500 $ Algebra.Graph.edgeList g
+    -- Keep the edges whose both vertex are in the current tenant
+    keepTenant (a, b) = case tenant of
+      Just t -> t `elem` a.tenants && t `elem` b.tenants
+      Nothing -> True
+
+    (edges, _) = splitAt 500 $ filter keepTenant $ Algebra.Graph.edgeList g
     -- edges = Algebra.Graph.edgeList g
     vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
@@ -119,20 +124,21 @@ vertexLink v = with a_ [href_ ref] $ do
           Text.intercalate "," (getName <$> v.tenants)
         ]
 
-
 -- | Return the search result
-searchResults :: Text -> Set Vertex -> Html ()
-searchResults (Text.strip -> query) vertices
+searchResults :: Maybe TenantName -> Text -> Set Vertex -> Html ()
+searchResults tenant (Text.strip -> query) vertices
   | Text.null query = pure ()
   | otherwise = case filter matchQuery (Set.toList vertices) of
       [] -> div_ "no results :("
       results -> ul_ do
-          forM_ results $ \vertex ->
-            -- TODO: group jobs that have the same name, but different in tenant, and add a badge to differentiate name
-            with' li_ "bg-white/75" $ vertexLink vertex
+        forM_ results $ \vertex ->
+          -- TODO: group jobs that have the same name, but different in tenant, and add a badge to differentiate name
+          with' li_ "bg-white/75" $ vertexLink vertex
   where
-    matchQuery v = query `Text.isInfixOf` from v.name
-
+    matchTenant = case tenant of
+      Just tenant' -> \v -> tenant' `elem` v.tenants
+      Nothing -> const True
+    matchQuery v = query `Text.isInfixOf` from v.name && matchTenant v
 
 mkTooltip :: Text -> Html ()
 mkTooltip n =
@@ -170,8 +176,8 @@ hxGet = makeAttribute "hx-get"
 hxPost = makeAttribute "hx-post"
 hxBoost = makeAttribute "hx-boost"
 
-index :: Text -> Html () -> Html ()
-index page mainComponent =
+index :: Maybe TenantName -> Text -> Html () -> Html ()
+index tenantName page mainComponent =
   doctypehtml_ do
     head_ do
       title_ "Zuul Weeder"
@@ -183,11 +189,15 @@ index page mainComponent =
       with div_ [class_ "container grid p-4", id_ "main"] mainComponent
       with (script_ mempty) [src_ "/dists/htmx.min.js"]
   where
+    baseUrl = case tenantName of
+      Just (TenantName name) -> "/tenant/" <> name
+      Nothing -> ""
+
     navComponent =
       with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
         with' div_ "flex-grow" do
           with' span_ "font-semibold text-white" do
-            with a_ [href_ "/"] "Zuul Weeder"
+            with a_ [href_ (baseUrl <> "/")] "Zuul Weeder"
           navLink "/search" "Search"
           navLink "/info" "Info"
         div_ do
@@ -200,10 +210,10 @@ index page mainComponent =
             | path == "/about" = " right"
             | otherwise = ""
           linkClass = "m-4 p-1 text-white rounded hover:text-teal-500" <> navLinkClass <> extra
-       in with a_ [href_ path, class_ linkClass]
+       in with a_ [href_ (baseUrl <> path), class_ linkClass]
 
-infoComponent :: Config -> Html ()
-infoComponent config = do
+infoComponent :: Maybe TenantName -> Config -> Html ()
+infoComponent _tenant config = do
   h2_ "Config details"
   with' div_ "grid p-4 place-content-center" do
     with' div_ "not-prose bg-slate-50 border rounded-xl" do
@@ -216,6 +226,7 @@ infoComponent config = do
   where
     objectCounts :: Text -> Map a b -> Html ()
     objectCounts n m = do
+      -- TODO: filter tenant
       with' tr_ "border-b" do
         with' td_ "p-1" (toHtml n)
         with' td_ "p-1" (toHtml $ show $ Map.size m)
@@ -291,8 +302,8 @@ dl title xs =
           | even pos = "bg-gray-50"
           | otherwise = "bg-white"
 
-objectInfo :: Vertex -> Analysis -> Html ()
-objectInfo v analysis = do
+objectInfo :: Maybe TenantName -> Vertex -> Analysis -> Html ()
+objectInfo tenant v analysis = do
   h2_ do
     vertexTypeIcon v.name
     toHtml (from v.name :: Text)
@@ -306,8 +317,11 @@ objectInfo v analysis = do
       h3_ "Requires"
       renderVertexes required
   where
+    tenants = case tenant of
+      Just x -> [x]
+      Nothing -> v.tenants
     forTenant :: ConfigLoc -> Bool
-    forTenant loc = any (`elem` loc.tenants) v.tenants
+    forTenant loc = any (`elem` loc.tenants) tenants
     getLocs :: Maybe [(ConfigLoc, a)] -> [ConfigLoc]
     getLocs = filter forTenant . maybe [] (fmap fst)
     configComponents :: [ConfigLoc]
@@ -349,15 +363,21 @@ type ObjectPath =
     :> Capture "tenants" TenantsUrl
     :> Get '[HTML] (Html ())
 
-type API =
+type BaseAPI =
   Get '[HTML] (Html ())
+    :<|> "about" :> Get '[HTML] (Html ())
     :<|> "search" :> Get '[HTML] (Html ())
     :<|> "info" :> Get '[HTML] (Html ())
-    :<|> "about" :> Get '[HTML] (Html ())
     :<|> "search_results" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
     :<|> "object" :> ObjectPath
     :<|> "data.json" :> Get '[JSON] D3Graph
-    :<|> "dists" :> Raw
+
+type TenantAPI = "tenant" :> Capture "tenant" Text :> BaseAPI
+
+type StaticAPI =
+  "dists" :> Raw
+
+type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 
 run :: IO Analysis -> IO ()
 run config = do
@@ -365,34 +385,36 @@ run config = do
   Warp.run port app
   where
     port = 8080
-    app = serve (Proxy @API) server
+    app = serve (Proxy @API) rootServer
 
-    server :: Server API
-    server =
-      pure (index "/" welcomeComponent)
-        :<|> pure (index "/search" searchComponent)
-        :<|> infoRoute
-        :<|> pure (index "/about" aboutComponent)
-        :<|> searchRoute
-        :<|> objectRoute
-        :<|> d3Route
-        :<|> staticRoute
+    rootServer :: Server API
+    rootServer =
+      Servant.Server.StaticFiles.serveDirectoryWebApp "dists"
+        :<|> server Nothing
+        :<|> server . Just . TenantName
 
-    staticRoute = Servant.Server.StaticFiles.serveDirectoryWebApp "dists"
+    server tenant =
+      pure (index tenant "/" welcomeComponent)
+        :<|> pure (index tenant "/about" aboutComponent)
+        :<|> pure (index tenant "/search" searchComponent)
+        :<|> infoRoute tenant
+        :<|> searchRoute tenant
+        :<|> objectRoute tenant
+        :<|> d3Route tenant
 
-    infoRoute = do
+    infoRoute tenant = do
       analysis <- liftIO config
-      pure (index "/info" (infoComponent analysis.config))
+      pure (index tenant "/info" (infoComponent tenant analysis.config))
 
-    objectRoute (VTU vertexType) (CNU name) (TNU tenants) = do
+    objectRoute tenant (VTU mkName) (CNU name) (TNU tenants) = do
       analysis <- liftIO config
-      pure (index "/object" (objectInfo (Vertex tenants $ vertexType name) analysis))
+      pure (index tenant "/object" (objectInfo tenant (Vertex tenants (mkName name)) analysis))
 
-    searchRoute req = do
+    searchRoute tenant req = do
       analysis <- liftIO config
-      pure (searchResults req.query analysis.vertices)
+      pure (searchResults tenant req.query analysis.vertices)
 
-    d3Route = do
+    d3Route tenant = do
       analysis <- liftIO config
       let graph = configRequireGraph analysis
-      pure (toD3Graph graph)
+      pure (toD3Graph tenant graph)
