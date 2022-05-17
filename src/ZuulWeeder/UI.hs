@@ -56,7 +56,7 @@ toD3Graph tenant g =
 vertexGroup :: VertexName -> Int
 vertexGroup = \case
   VJob _ -> 1
-  VProjectPipeline _ -> 2
+  VProject _ -> 2
   VNodeset _ -> 3
   VProjectTemplate _ -> 4
   VPipeline _ -> 5
@@ -66,7 +66,7 @@ vertexGroup = \case
 d3Color :: VertexName -> Text
 d3Color = \case
   VJob _ -> "#1f77b4"
-  VProjectPipeline _ -> "#aec6e8"
+  VProject _ -> "#aec6e8"
   VNodeset _ -> "#ff7f0e"
   VProjectTemplate _ -> "#ffbb78"
   VPipeline _ -> "#2ca02c"
@@ -76,7 +76,7 @@ vertexTypeIcon :: VertexName -> Html ()
 vertexTypeIcon vn = with span_ [style_ ("color: " <> d3Color vn)] $
   toHtml @Text $ case vn of
     VJob _ -> "⚙"
-    VProjectPipeline _ -> "P"
+    VProject _ -> "P"
     VNodeset _ -> "N"
     VProjectTemplate _ -> "🎛"
     VPipeline _ -> "P"

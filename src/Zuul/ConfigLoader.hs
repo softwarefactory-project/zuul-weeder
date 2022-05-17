@@ -62,12 +62,6 @@ newtype TenantName = TenantName {getName :: Text}
   deriving (Show, Eq, Ord, Generic)
   deriving newtype (Hashable)
 
-data Project
-  = PName ProjectName
-  | PNameRE ProjectNameRE
-  | PNameCannonical CanonicalProjectName
-  deriving (Eq, Ord, Show, Generic, Hashable)
-
 data JobNodeset
   = JobNodeset NodesetName
   | JobAnonymousNodeset [NodeLabelName]
@@ -99,8 +93,8 @@ data PPipeline = PPipeline
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
-data ProjectPipeline = ProjectPipeline
-  { name :: Project,
+data Project = Project
+  { name :: ProjectName,
     templates :: [ProjectTemplateName],
     pipelines :: Data.Set.Set PPipeline
   }
@@ -128,7 +122,7 @@ data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord, G
 
 data ZuulConfigElement
   = ZJob Job
-  | ZProjectPipeline ProjectPipeline
+  | ZProject Project
   | ZNodeset Nodeset
   | ZProjectTemplate ProjectTemplate
   | ZPipeline Pipeline
@@ -150,7 +144,7 @@ data ZuulConfigType
 instance From ZuulConfigElement ZuulConfigType where
   from zce = case zce of
     ZJob _ -> JobT
-    ZProjectPipeline _ -> ProjectT
+    ZProject _ -> ProjectT
     ZNodeset _ -> NodesetT
     ZProjectTemplate _ -> ProjectTemplateT
     ZPipeline _ -> PipelineT
@@ -202,7 +196,7 @@ data Config = Config
   { jobs :: ConfigMap JobName Job,
     nodesets :: ConfigMap NodesetName Nodeset,
     nodeLabels :: ConfigMap NodeLabelName NodeLabelName,
-    projectPipelines :: ConfigMap Project ProjectPipeline,
+    projects :: ConfigMap ProjectName Project,
     projectTemplates :: ConfigMap ProjectTemplateName ProjectTemplate,
     pipelines :: ConfigMap PipelineName Pipeline,
     configErrors :: [ConfigError]
@@ -215,9 +209,9 @@ updateTopConfig tenantResolver configLoc ze = case ze of
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
-  ZProjectPipeline project ->
+  ZProject project ->
     -- TODO: add PJJob to the list of jobs?
-    #projectPipelines %= insertConfig project.name project
+    #projects %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
   _ -> error "Not implemented"
@@ -228,7 +222,7 @@ updateTopConfig tenantResolver configLoc ze = case ze of
       | otherwise = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
-decodeConfig (project, _branch) zkJSONData =
+decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName projectName), _branch) zkJSONData =
   let rootObjs = case zkJSONData of
         Array vec -> V.toList vec
         _ -> error $ "Unexpected root data structure on: " <> show rootObjs
@@ -240,7 +234,7 @@ decodeConfig (project, _branch) zkJSONData =
        in case getKey obj of
             "job" -> Just . ZJob . decodeJob $ getE "job" obj
             "nodeset" -> Just . ZNodeset . decodeNodeset $ getE "nodeset" obj
-            "project" -> Just . ZProjectPipeline . decodeProjectPipeline $ getE "project" obj
+            "project" -> Just . ZProject . decodeProject $ getE "project" obj
             -- We use the same decoder as for "project" as the structure is slightly the same
             "project-template" -> Just . ZProjectTemplate . decodeProjectTemplate $ getE "project-template" obj
             "pipeline" -> Just . ZPipeline . decodePipeline $ getE "pipeline" obj
@@ -313,17 +307,15 @@ decodeConfig (project, _branch) zkJSONData =
             _va -> error $ "Unexpected nodeset nodes structure: " <> show _va
        in Nodeset {..}
 
-    decodeProjectPipeline :: Object -> ProjectPipeline
-    decodeProjectPipeline va =
+    decodeProject :: Object -> Project
+    decodeProject va =
       let name = case getString <$> HM.lookup "name" va of
-            Nothing -> PNameCannonical project
-            Just name' -> case Text.uncons name' of
-              Just ('^', _) -> PNameRE $ ProjectNameRE name'
-              Just _ -> PName $ ProjectName name'
-              Nothing -> error $ "Unexpected project name for project pipeline: " <> Text.unpack name'
+            -- project name default to the name of the project where the config is found
+            Nothing -> ProjectName (providerName <> "/" <> projectName)
+            Just name' -> ProjectName name'
           templates = decodeAsList "templates" ProjectTemplateName va
           pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
-       in ProjectPipeline {..}
+       in Project {..}
 
     decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
     decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va')

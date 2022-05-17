@@ -1,41 +1,6 @@
-[ ZProjectPipeline
-    ( ProjectPipeline
-        { name = PName
-            ( ProjectName "config" )
-        , templates = []
-        , pipelines = fromList
-            [ PPipeline
-                { name = PipelineName "check"
-                , jobs =
-                    [ PJName
-                        ( JobName "config-check" )
-                    ]
-                }
-            , PPipeline
-                { name = PipelineName "gate"
-                , jobs =
-                    [ PJName
-                        ( JobName "config-check" )
-                    ]
-                }
-            , PPipeline
-                { name = PipelineName "post"
-                , jobs =
-                    [ PJName
-                        ( JobName "config-update" )
-                    ]
-                }
-            ]
-        }
-    )
-, ZProjectPipeline
-    ( ProjectPipeline
-        { name = PNameCannonical
-            ( CanonicalProjectName
-                ( ProviderName ""
-                , ProjectName ""
-                )
-            )
+[ ZProject
+    ( Project
+        { name = ProjectName "/"
         , templates =
             [ ProjectTemplateName "sf-ci-jobs" ]
         , pipelines = fromList
@@ -88,6 +53,35 @@
                             , dependencies = []
                             }
                         )
+                    ]
+                }
+            ]
+        }
+    )
+, ZProject
+    ( Project
+        { name = ProjectName "config"
+        , templates = []
+        , pipelines = fromList
+            [ PPipeline
+                { name = PipelineName "check"
+                , jobs =
+                    [ PJName
+                        ( JobName "config-check" )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "gate"
+                , jobs =
+                    [ PJName
+                        ( JobName "config-check" )
+                    ]
+                }
+            , PPipeline
+                { name = PipelineName "post"
+                , jobs =
+                    [ PJName
+                        ( JobName "config-update" )
                     ]
                 }
             ]

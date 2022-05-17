@@ -39,7 +39,7 @@ data VertexName
   = VJob JobName
   | VNodeset NodesetName
   | VNodeLabel NodeLabelName
-  | VProjectPipeline Project
+  | VProject ProjectName
   | VProjectTemplate ProjectTemplateName
   | VPipeline PipelineName
   deriving (Eq, Ord, Show, Generic, Hashable)
@@ -50,7 +50,7 @@ vertexTypeName = \case
   VJob _ -> "job"
   VNodeset _ -> "nodeset"
   VNodeLabel _ -> "label"
-  VProjectPipeline _ -> "todo-project-pipeline"
+  VProject _ -> "project"
   VProjectTemplate _ -> "project-template"
   VPipeline _ -> "pipeline"
 
@@ -59,15 +59,15 @@ instance From VertexName Text where
     VJob (JobName n) -> n
     VNodeset (NodesetName n) -> n
     VNodeLabel (NodeLabelName n) -> n
-    VProjectPipeline _ -> "todo-pp"
+    VProject (ProjectName n) -> n
     VProjectTemplate (ProjectTemplateName n) -> n
     VPipeline (PipelineName n) -> n
 
 instance From Job VertexName where
   from job = VJob job.name
 
-instance From ProjectPipeline VertexName where
-  from pp = VProjectPipeline pp.name
+instance From Project VertexName where
+  from pp = VProject pp.name
 
 instance From Pipeline VertexName where
   from p = VPipeline p.name
@@ -147,7 +147,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     go = do
       goJobs $ concat $ Map.elems allJobs
       goNodesets $ concat $ Map.elems config.nodesets
-      goProjectPipelines $ concat $ Map.elems config.projectPipelines
+      goProjectPipelines $ concat $ Map.elems config.projects
     -- look for semaphore, secret, ...
 
     lookupTenant :: Ord a => [TenantName] -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
@@ -159,7 +159,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         matchingTenant :: ConfigLoc -> Bool
         matchingTenant loc = any (`elem` loc.tenants) tenants
 
-    goProjectPipelines :: [(ConfigLoc, ProjectPipeline)] -> State Analysis ()
+    goProjectPipelines :: [(ConfigLoc, Project)] -> State Analysis ()
     goProjectPipelines pPipelines = do
       -- TODO: filter using tenant config
       forM_ pPipelines $ \(loc, pPipeline) -> do
