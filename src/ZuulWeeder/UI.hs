@@ -60,6 +60,7 @@ vertexGroup x = case x of
   VQueue _ -> 7
   VSemaphore _ -> 8
 
+-- Keep in sync with graph.js getColor function
 d3Color :: Int -> Text
 d3Color x = case x of
   1 -> "#1f77b4"

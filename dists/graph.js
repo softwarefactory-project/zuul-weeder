@@ -24,6 +24,18 @@ var simulation = d3
   .force("charge", d3.forceManyBody().strength(-5))
   .force("center", d3.forceCenter(width / 2, height / 2));
 
+const getColor = group => {switch (group) {
+  case 1: return "#1f77b4";
+  case 2: return "#aec6e8";
+  case 3: return "#ff7f0e";
+  case 4: return "#ffbb78";
+  case 5: return "#2ca02c";
+  case 6: return "#98df8a";
+  case 7: return "#d62728";
+  case 8: return "#ff9896";
+  case _: return "pink";
+}}
+
 d3.json("data.json", function (error, graph) {
   if (error) throw error;
 
@@ -44,7 +56,7 @@ d3.json("data.json", function (error, graph) {
     .enter()
     .append("circle")
     .attr("r", radius)
-    .attr("fill", (d) => color(d.group))
+    .attr("fill", (d) => getColor(d.group))
     .call(
       d3
         .drag()
