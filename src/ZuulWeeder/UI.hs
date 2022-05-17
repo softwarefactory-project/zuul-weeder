@@ -170,7 +170,7 @@ index page mainComponent =
     body_ do
       navComponent
       with div_ [class_ "container grid p-4", id_ "main"] mainComponent
-      with (script_ mempty) [src_ "https://unpkg.com/htmx.org@1.7.0/dist/htmx.min.js"]
+      with (script_ mempty) [src_ "/dists/htmx.min.js"]
   where
     navComponent =
       with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
@@ -218,7 +218,7 @@ welcomeComponent :: Html ()
 welcomeComponent = do
   searchComponent
   style_ css
-  with (script_ mempty) [src_ "https://d3js.org/d3.v4.min.js"]
+  with (script_ mempty) [src_ "/dists/d3.v4.min.js"]
   with (script_ mempty) [src_ "/dists/graph.js"]
   where
     css :: Text
