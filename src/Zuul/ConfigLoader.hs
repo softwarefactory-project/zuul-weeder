@@ -34,6 +34,11 @@ newtype NodeLabelName = NodeLabelName Text
   deriving (Eq, Ord, Show)
   deriving (Display) via (ShowInstance NodeLabelName)
 
+instance From NodeLabelName ConfigName where
+  from nls =
+    let (NodeLabelName name) = nls
+     in ConfigName name
+
 newtype ProviderName = ProviderName Text deriving (Eq, Ord, Show)
 
 newtype TemplateName = TemplateName Text deriving (Eq, Ord, Show)

@@ -163,7 +163,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
     goNodesets nodesets = do
       forM_ nodesets $ \(loc, nodeset) -> do
+        insertName nodeset (loc, VNodeset nodeset)
         forM_ nodeset.labels $ \label -> do
+          insertName label (loc, VNodeLabel label)
           feedState ((loc, VNodeset nodeset), (loc, VNodeLabel label))
 
     goJobs :: [(ConfigLoc, Job)] -> State Analysis ()
@@ -180,6 +182,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           Just (JobAnonymousNodeset nodeLabels) -> do
             forM_ nodeLabels $ \nodeLabel -> do
+              insertName nodeLabel (loc, VNodeLabel nodeLabel)
               feedState ((loc, VJob job), (loc, VNodeLabel nodeLabel))
           _ -> pure ()
         -- look for job parent

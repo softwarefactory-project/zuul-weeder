@@ -331,6 +331,8 @@ newtype VertexTypeUrl = VTU VertexType
 instance FromHttpApiData VertexTypeUrl where
   parseUrlPiece txt = case txt of
     "job" -> pure . VTU . ZuulConfigVertexType $ JobT
+    "nodeset" -> pure . VTU . ZuulConfigVertexType $ NodesetT
+    "label" -> pure $ VTU NodeLabelVertexType
     _ -> Left $ "Unknown obj type: " <> txt
 
 newtype ConfigNameUrl = CNU ConfigName
