@@ -178,9 +178,10 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
               -- TODO: filter the nodeset that are in the same tenant (and same branch?)
               forM_ xs $ \(loc', ns) -> feedState ((loc, VJob job), (loc', VNodeset ns))
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
-          _ ->
-            -- Ignore inlined nodeset
-            pure ()
+          Just (JobAnonymousNodeset nodeLabels) -> do
+            forM_ nodeLabels $ \nodeLabel -> do
+              feedState ((loc, VJob job), (loc, VNodeLabel nodeLabel))
+          _ -> pure ()
         -- look for job parent
         case job.parent of
           Just parent -> do
