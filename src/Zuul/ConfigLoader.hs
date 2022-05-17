@@ -11,11 +11,6 @@ import Data.Vector qualified as V
 import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
 import ZuulWeeder.Prelude
 
--- | The name of any configuration object, provided by the 'From X ConfigName` instance.
-newtype ConfigName = ConfigName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
 newtype BranchName = BranchName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
@@ -47,11 +42,6 @@ newtype NodeLabelName = NodeLabelName Text
   deriving newtype (Hashable)
   deriving (Display) via (ShowInstance NodeLabelName)
 
-instance From NodeLabelName ConfigName where
-  from nls =
-    let (NodeLabelName name) = nls
-     in ConfigName name
-
 newtype ProviderName = ProviderName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
@@ -68,7 +58,7 @@ newtype ConnectionName = ConnectionName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
-newtype TenantName = TenantName Text
+newtype TenantName = TenantName {getName :: Text}
   deriving (Show, Eq, Ord, Generic)
   deriving newtype (Hashable)
 
@@ -90,11 +80,6 @@ data Nodeset = Nodeset
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
-instance From Nodeset ConfigName where
-  from ns =
-    let (NodesetName name) = ns.name
-     in ConfigName name
-
 data Job = Job
   { name :: JobName,
     parent :: Maybe JobName,
@@ -103,19 +88,6 @@ data Job = Job
     dependencies :: [JobName]
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
-
-instance From Job ConfigName where
-  from job =
-    let JobName name = job.name
-     in ConfigName name
-
-instance From ProjectPipeline ConfigName where
-  from pp = ConfigName $ case pp.name of
-    PName (ProjectName name) -> name
-    TName (TemplateName name) -> name
-    PNameRE (ProjectNameRE name) -> name
-    PNameCannonical (CanonicalProjectName (providerName, projectName)) ->
-      from $ show providerName <> "/" <> show projectName
 
 data PipelineJob
   = PJName JobName
@@ -145,20 +117,9 @@ data Pipeline = Pipeline
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
-instance From Pipeline ConfigName where
-  from p =
-    let (PipelineName name) = p.name
-     in ConfigName name
-
 data Queue = Queue {name :: Text, perBranch :: Bool} deriving (Show, Eq, Ord, Generic, Hashable)
 
-instance From Queue ConfigName where
-  from q = ConfigName q.name
-
 data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord, Generic, Hashable)
-
-instance From Semaphore ConfigName where
-  from s = ConfigName s.name
 
 data ZuulConfigElement
   = ZJob Job
@@ -170,16 +131,6 @@ data ZuulConfigElement
   | ZSemaphore Semaphore
   deriving (Show, Eq, Ord, Generic, Hashable)
 
-instance From ZuulConfigElement ConfigName where
-  from zce = case zce of
-    ZJob job -> from job
-    ZProjectPipeline pp -> from pp
-    ZNodeset ns -> from ns
-    ZProjectTemplate pt -> from pt
-    ZPipeline p -> from p
-    ZQueue q -> from q
-    ZSemaphore s -> from s
-
 data ZuulConfigType
   = PipelineT
   | JobT
@@ -189,7 +140,7 @@ data ZuulConfigType
   | NodesetT
   | SecretT
   | QueueT
-  deriving (Show, Eq, Ord, Enum, Bounded)
+  deriving (Show, Eq, Ord, Enum, Bounded, Generic, Hashable)
 
 instance From ZuulConfigElement ZuulConfigType where
   from zce = case zce of
@@ -216,9 +167,7 @@ instance Display ZuulConfigElement where
   displayBuilder zce = case zce of
     ZJob job -> displayBuilder $ job.name
     ZNodeset ns -> displayBuilder $ ns.name
-    _ ->
-      let ConfigName n = from zce
-       in TB.fromText n
+    _ -> error "display instance todo"
 
 data ConfigLoc = ConfigLoc
   { project :: CanonicalProjectName,

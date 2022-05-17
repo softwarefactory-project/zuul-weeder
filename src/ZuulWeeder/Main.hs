@@ -177,8 +177,8 @@ printReachable cl tenant key name graph = do
       analyzis = analyzeConfig tenants config
       g = filterTenant tenant (graph analyzis)
       reachables = findReachable vertex g
-  forM_ reachables $ \(loc, obj) -> do
-    putStrLn $ unpack $ display loc <> " -> " <> display obj
+  forM_ reachables $ \obj -> do
+    putStrLn $ Text.unpack $ display obj
 
 loadConfig :: TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
 loadConfig tr =
@@ -194,13 +194,13 @@ loadConfig tr =
 
 findVertex :: Text -> Text -> Zuul.ConfigLoader.Config -> Maybe Vertex
 findVertex "job" name config = case Map.lookup (JobName name) config.jobs of
-  Just [(loc, job)] -> Just (loc, VJob job)
+  Just [(loc, job)] -> Just (mkVertex loc job)
   _ -> Nothing
 findVertex "nodeset" name config = case Map.lookup (NodesetName name) config.nodesets of
-  Just [(loc, x)] -> Just (loc, VNodeset x)
+  Just [(loc, x)] -> Just (mkVertex loc x)
   _ -> Nothing
 findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) config.nodeLabels of
-  Just [(loc, x)] -> Just (loc, VNodeLabel x)
+  Just [(loc, x)] -> Just (mkVertex loc x)
   _ -> Nothing
 findVertex _ _ _ = Nothing
 

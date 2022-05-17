@@ -1,23 +1,15 @@
 module ZuulWeeder.Graph
   ( Analysis (..),
     ConfigGraph,
-    ConfigVertex (..),
-    VertexType (..),
-    Names,
-    Vertex,
-    pattern VNodeLabel,
-    pattern VJob,
-    pattern VProjectPipeline,
-    pattern VNodeset,
-    pattern VPipeline,
-    pattern VProjectTemplate,
-    pattern VQueue,
-    pattern VSemaphore,
+    Vertex (..),
+    VertexName (..),
+    vertexTypeName,
 
     -- * Graph functions
     analyzeConfig,
     findReachable,
     filterTenant,
+    mkVertex,
   )
 where
 
@@ -25,67 +17,69 @@ import Algebra.Graph qualified
 import Algebra.Graph.ToGraph qualified
 import Data.Map qualified as Map
 import Data.Set qualified as Set
+import Data.Text qualified as Text
+import Data.Text.Lazy.Builder qualified as TB
 import Zuul.ConfigLoader
 import Zuul.Tenant
 import ZuulWeeder.Prelude
 
 -- | The graph vertex
--- Node label names are added to the raw zuul config element so that they can be searched independently.
-data ConfigVertex
-  = ZuulConfigVertex ZuulConfigElement
-  | NodeLabelVertex NodeLabelName
+data Vertex = Vertex
+  { tenants :: [TenantName],
+    name :: VertexName
+  }
   deriving (Eq, Ord, Show, Generic, Hashable)
 
-instance From ConfigVertex ConfigName where
-  from (ZuulConfigVertex zce) = from zce
-  from (NodeLabelVertex (NodeLabelName n)) = ConfigName n
+instance Display Vertex where
+  displayBuilder v =
+    TB.fromText (Text.pack . show $ v.name)
 
-data VertexType
-  = ZuulConfigVertexType ZuulConfigType
-  | NodeLabelVertexType
-  deriving (Eq, Ord, Show)
+-- | A Vertex can be a raw zuul config element, or a custom element added through analysis
+data VertexName
+  = VJob JobName
+  | VNodeset NodesetName
+  | VNodeLabel NodeLabelName
+  | VProjectPipeline Project
+  | VProjectTemplate Project
+  | VPipeline PipelineName
+  deriving (Eq, Ord, Show, Generic, Hashable)
 
-instance From ConfigVertex VertexType where
-  from cv = case cv of
-    ZuulConfigVertex zce -> ZuulConfigVertexType (from zce)
-    NodeLabelVertex _ -> NodeLabelVertexType
+-- | A text representation of a vertex type, useful for /object url piece
+vertexTypeName :: VertexName -> Text
+vertexTypeName = \case
+  VJob _ -> "job"
+  VNodeset _ -> "nodeset"
+  VNodeLabel _ -> "label"
+  VProjectPipeline _ -> "todo-project-pipeline"
+  VProjectTemplate _ -> "todo-project-template"
+  VPipeline _ -> "pipeline"
 
-instance From VertexType Text where
-  from vt = case vt of
-    ZuulConfigVertexType zct -> from zct
-    NodeLabelVertexType -> "label"
+instance From VertexName Text where
+  from = \case
+    VJob (JobName n) -> n
+    VNodeset (NodesetName n) -> n
+    VNodeLabel (NodeLabelName n) -> n
+    VProjectPipeline _ -> "todo-pp"
+    VProjectTemplate _ -> "todo-pt"
+    VPipeline (PipelineName n) -> n
 
-instance Display ConfigVertex where
-  displayBuilder (NodeLabelVertex p) = displayBuilder p
-  displayBuilder (ZuulConfigVertex p) = displayBuilder p
+instance From Job VertexName where
+  from job = VJob job.name
 
-pattern VNodeLabel :: NodeLabelName -> ConfigVertex
-pattern VNodeLabel x = NodeLabelVertex x
+instance From ProjectPipeline VertexName where
+  from pp = VProjectPipeline pp.name
 
-pattern VJob :: Job -> ConfigVertex
-pattern VJob x = ZuulConfigVertex (ZJob x)
+instance From Pipeline VertexName where
+  from p = VPipeline p.name
 
-pattern VProjectPipeline :: Zuul.ConfigLoader.ProjectPipeline -> ConfigVertex
-pattern VProjectPipeline x = ZuulConfigVertex (ZProjectPipeline x)
+instance From Nodeset VertexName where
+  from p = VNodeset p.name
 
-pattern VNodeset :: Nodeset -> ConfigVertex
-pattern VNodeset x = ZuulConfigVertex (ZNodeset x)
+instance From NodeLabelName VertexName where
+  from = VNodeLabel
 
-pattern VProjectTemplate :: Zuul.ConfigLoader.ProjectPipeline -> ConfigVertex
-pattern VProjectTemplate x = ZuulConfigVertex (ZProjectTemplate x)
-
-pattern VPipeline :: Zuul.ConfigLoader.Pipeline -> ConfigVertex
-pattern VPipeline x = ZuulConfigVertex (ZPipeline x)
-
-pattern VQueue :: Zuul.ConfigLoader.Queue -> ConfigVertex
-pattern VQueue x = ZuulConfigVertex (ZQueue x)
-
-pattern VSemaphore :: Zuul.ConfigLoader.Semaphore -> ConfigVertex
-pattern VSemaphore x = ZuulConfigVertex (ZSemaphore x)
-
-{-# COMPLETE VNodeLabel, VJob, VProjectPipeline, VNodeset, VProjectTemplate, VPipeline, VQueue, VSemaphore #-}
-
-type Vertex = (ConfigLoc, ConfigVertex)
+mkVertex :: From a VertexName => ConfigLoc -> a -> Vertex
+mkVertex loc x = Vertex loc.tenants (from x)
 
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
@@ -93,15 +87,12 @@ findReachable :: Vertex -> ConfigGraph -> Set.Set Vertex
 findReachable v = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.reachable v
 
 filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
-filterTenant tenant = Algebra.Graph.induce (\(loc, _) -> tenant `elem` loc.tenants)
-
-type Names = Map ConfigName [Vertex]
+filterTenant tenant = Algebra.Graph.induce $ \vertex -> tenant `elem` vertex.tenants
 
 data Analysis = Analysis
   { configRequireGraph :: ConfigGraph,
     configDependsOnGraph :: ConfigGraph,
-    -- | The list of all the configuration names and their location
-    names :: Names,
+    vertices :: Set Vertex,
     config :: Config,
     graphErrors :: [String]
   }
@@ -109,7 +100,7 @@ data Analysis = Analysis
 
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity $ execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty config mempty)
+  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty config mempty))
   where
     -- All the default base jobs defined by the tenants
     -- Given:
@@ -172,12 +163,13 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goProjectPipelines pPipelines = do
       -- TODO: filter using tenant config
       forM_ pPipelines $ \(loc, pPipeline) -> do
+        let src = mkVertex loc pPipeline
         -- TODO: handle templates
         forM_ pPipeline.pipelines $ \pipeline -> do
           case lookupTenant loc.tenants pipeline.name config.pipelines of
             Just xs ->
               forM_ xs $ \(loc', pipeline') -> do
-                feedState ((loc, VProjectPipeline pPipeline), (loc', VPipeline pipeline'))
+                feedState (src, mkVertex loc' pipeline')
             Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
           forM_ pipeline.jobs $ \pJob -> do
             case pJob of
@@ -186,7 +178,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
                   Just xs -> do
                     -- TODO: filter using tenant config
                     forM_ xs $ \(loc'', job) -> do
-                      feedState ((loc, VProjectPipeline pPipeline), (loc'', VJob job))
+                      feedState (src, mkVertex loc'' job)
                   Nothing -> #graphErrors %= (("Can't find : " <> show pj) :)
               PJJob _job -> do
                 -- TODO: handle inline job
@@ -197,41 +189,47 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
     goNodesets nodesets = do
       forM_ nodesets $ \(loc, nodeset) -> do
-        insertName nodeset (loc, VNodeset nodeset)
+        let src = mkVertex loc nodeset
+        insertName src
         forM_ nodeset.labels $ \label -> do
-          insertName label (loc, VNodeLabel label)
-          feedState ((loc, VNodeset nodeset), (loc, VNodeLabel label))
+          let dst = mkVertex loc label
+          insertName dst
+          feedState (src, dst)
 
     goJobs :: [(ConfigLoc, Job)] -> State Analysis ()
     goJobs jobs = do
       -- TODO: filter using tenant config
       forM_ jobs $ \(loc, job) -> do
-        insertName job (loc, VJob job)
+        let src = mkVertex loc job
+        insertName src
         -- look for nodeset location
         case job.nodeset of
           Just (JobNodeset nodeset) -> case lookupTenant loc.tenants nodeset config.nodesets of
             Just xs ->
-              forM_ xs $ \(loc', ns) -> feedState ((loc, VJob job), (loc', VNodeset ns))
+              forM_ xs $ \(loc', ns) -> feedState (src, mkVertex loc' ns)
             Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
           Just (JobAnonymousNodeset nodeLabels) -> do
             forM_ nodeLabels $ \nodeLabel -> do
-              insertName nodeLabel (loc, VNodeLabel nodeLabel)
-              feedState ((loc, VJob job), (loc, VNodeLabel nodeLabel))
+              let dst = mkVertex loc nodeLabel
+              insertName dst
+              feedState (src, dst)
           _ -> pure ()
+
         -- look for job parent
         case job.parent of
           Just parent -> do
             case lookupTenant loc.tenants parent allJobs of
               Just xs ->
-                forM_ xs $ \(loc', pj) -> feedState ((loc, VJob job), (loc', VJob pj))
+                forM_ xs $ \(loc', pj) -> feedState (src, mkVertex loc' pj)
               Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
           Nothing -> pure ()
+
         -- look for job dependencies
         forM_ job.dependencies $ \dJob' -> do
           case lookupTenant loc.tenants dJob' allJobs of
             Just xs ->
               -- TODO: look in priority for PJJob defined in the same loc
-              forM_ xs $ \(loc', dJob) -> feedState ((loc, VJob job), (loc', VJob dJob))
+              forM_ xs $ \(loc', dJob) -> feedState (src, mkVertex loc' dJob)
             Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
 
     feedState :: (Vertex, Vertex) -> State Analysis ()
@@ -239,5 +237,5 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
       #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
 
-    insertName k v = do
-      #names %= Map.insertWith mappend (from k) [v]
+    insertName v = do
+      #vertices %= Set.insert v

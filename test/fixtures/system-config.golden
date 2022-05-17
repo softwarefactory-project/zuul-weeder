@@ -1,5 +1,6 @@
 [
-    ( TenantName "local"
+    ( TenantName
+        { getName = "local" }
     , TenantConfig
         { defaultParent = JobName "base"
         , connections = fromList

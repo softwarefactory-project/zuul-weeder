@@ -33,6 +33,7 @@ const getColor = group => {switch (group) {
   case 6: return "#98df8a";
   case 7: return "#d62728";
   case 8: return "#ff9896";
+  case 9: return "#ffeeaa";
   case _: return "pink";
 }}
 

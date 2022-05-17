@@ -37,11 +37,10 @@ toD3Graph g =
     -- edges = Algebra.Graph.edgeList g
     vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    -- TODO: encode the config loc so that duplicate names are correctly connected
-    toNodes v@(_, e) = ZuulWeeder.UI.D3Node (toNode e) (nodeID v) $ vertexGroup e
+    toNodes v = ZuulWeeder.UI.D3Node (toNode v) (nodeID v) $ vertexGroup v.name
 
-    toNode :: ConfigVertex -> Text
-    toNode = display
+    toNode :: Vertex -> Text
+    toNode v = from v.name
 
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
     toLinks (a, b) = ZuulWeeder.UI.D3Link (nodeID a) (nodeID b)
@@ -49,29 +48,34 @@ toD3Graph g =
     nodeID :: Vertex -> Int
     nodeID = hash
 
-vertexGroup :: ConfigVertex -> Int
-vertexGroup x = case x of
+vertexGroup :: VertexName -> Int
+vertexGroup = \case
   VJob _ -> 1
   VProjectPipeline _ -> 2
   VNodeset _ -> 3
   VProjectTemplate _ -> 4
   VPipeline _ -> 5
   VNodeLabel _ -> 6
-  VQueue _ -> 7
-  VSemaphore _ -> 8
 
 -- Keep in sync with graph.js getColor function
-d3Color :: Int -> Text
-d3Color x = case x of
-  1 -> "#1f77b4"
-  2 -> "#aec6e8"
-  3 -> "#ff7f0e"
-  4 -> "#ffbb78"
-  5 -> "#2ca02c"
-  6 -> "#98df8a"
-  7 -> "#d62728"
-  8 -> "#ff9896"
-  _ -> "pink"
+d3Color :: VertexName -> Text
+d3Color = \case
+  VJob _ -> "#1f77b4"
+  VProjectPipeline _ -> "#aec6e8"
+  VNodeset _ -> "#ff7f0e"
+  VProjectTemplate _ -> "#ffbb78"
+  VPipeline _ -> "#2ca02c"
+  VNodeLabel _ -> "#98df8a"
+
+vertexTypeIcon :: VertexName -> Html ()
+vertexTypeIcon vn = with span_ [style_ ("color: " <> d3Color vn)] $
+  toHtml @Text $ case vn of
+    VJob _ -> "⚙"
+    VProjectPipeline _ -> "P"
+    VNodeset _ -> "N"
+    VProjectTemplate _ -> "🎛"
+    VPipeline _ -> "P"
+    VNodeLabel _ -> "L"
 
 data D3Node = D3Node
   { name :: Text,
@@ -98,30 +102,37 @@ instance Data.Aeson.ToJSON D3Link
 
 instance Data.Aeson.ToJSON D3Graph
 
-vertexLink :: Int -> ConfigName -> ConfigLoc -> ConfigVertex -> Html ()
-vertexLink pos (ConfigName name) _loc vertex = with a_ [href_ ref] (vertexName vertex)
+vertexLink :: Vertex -> Html ()
+vertexLink v = with a_ [href_ ref] $ do
+  vertexTypeIcon v.name
+  toHtml name
   where
+    name = from v.name
     ref =
       Text.intercalate
         "/"
         [ "/object",
-          via @VertexType vertex,
+          vertexTypeName v.name,
+          -- TODO: url encode name
           name,
-          Text.pack (show pos)
+          -- TODO: base64 url encode tenant list
+          Text.intercalate "," (getName <$> v.tenants)
         ]
 
+
 -- | Return the search result
-searchResults :: Text -> Names -> Html ()
-searchResults (Text.strip -> query) names
+searchResults :: Text -> Set Vertex -> Html ()
+searchResults (Text.strip -> query) vertices
   | Text.null query = pure ()
-  | otherwise = case filter matchQuery (Map.toList names) of
+  | otherwise = case filter matchQuery (Set.toList vertices) of
       [] -> div_ "no results :("
       results -> ul_ do
-        forM_ results $ \(name, vertexes) ->
-          forM_ (zip [0 ..] vertexes) $ \(pos, (loc, vertex)) ->
-            with' li_ "bg-white/75" $ vertexLink pos name loc vertex
+          forM_ results $ \vertex ->
+            -- TODO: group jobs that have the same name, but different in tenant, and add a badge to differentiate name
+            with' li_ "bg-white/75" $ vertexLink vertex
   where
-    matchQuery (ConfigName name, _) = query `Text.isInfixOf` name
+    matchQuery v = query `Text.isInfixOf` from v.name
+
 
 mkTooltip :: Text -> Html ()
 mkTooltip n =
@@ -251,6 +262,7 @@ locLink loc =
     with' span_ "px-1" "🔗"
     toHtml locPath
   where
+    -- TODO: render valid link based on config connection
     url = locUrl loc
     locPath = Text.drop 8 url
 
@@ -279,80 +291,62 @@ dl title xs =
           | even pos = "bg-gray-50"
           | otherwise = "bg-white"
 
-vertexComponent :: Vertex -> Html ()
-vertexComponent v@(_, cv) =
-  dl (vertexSource v) $ vertexAttributes cv
+objectInfo :: Vertex -> Analysis -> Html ()
+objectInfo v analysis = do
+  h2_ do
+    vertexTypeIcon v.name
+    toHtml (from v.name :: Text)
+  ul_ do
+    traverse_ (li_ . locLink) configComponents
+  with' div_ "grid grid-cols-2 gap-1 m-4" do
+    div_ do
+      h3_ "Depends-On"
+      renderVertexes dependsOn
+    div_ do
+      h3_ "Requires"
+      renderVertexes required
   where
-    vertexAttributes (ZuulConfigVertex _) = []
-    vertexAttributes (NodeLabelVertex _) = []
-
-vertexSource :: Vertex -> Html ()
-vertexSource (loc, v) = span_ do
-  vertexName v
-  locComponent loc
-
-vertexIcon :: ConfigVertex -> Html ()
-vertexIcon cv = with span_ [style_ ("color: " <> (d3Color . vertexGroup $ cv))] $
-  toHtml @Text $ case cv of
-    VJob _ -> "⚙"
-    VProjectPipeline _ -> "🎛"
-    _ -> "X"
-
-vertexName :: ConfigVertex -> Html ()
-vertexName cv = span_ do
-  vertexIcon cv
-  toHtml n
-  where
-    ConfigName n = from cv
-
-objectInfo :: ConfigName -> Int -> Analysis -> Html ()
-objectInfo cn pos analysis = case Map.lookup cn analysis.names of
-  Just (safeGet pos -> Just v) -> do
-    h2_ $ vertexComponent v
-    with' div_ "grid grid-cols-2 gap-1 m-4" do
-      div_ do
-        h3_ "Depends-On"
-        renderVertexes (dependsOn v)
-      div_ do
-        h3_ "Requires"
-        renderVertexes (required v)
-  _ -> h2_ "Unknown object?!"
-  where
-    dependsOn v = Set.toList $ findReachable v analysis.configDependsOnGraph
-    required v = Set.toList $ findReachable v analysis.configRequireGraph
+    forTenant :: ConfigLoc -> Bool
+    forTenant loc = any (`elem` loc.tenants) v.tenants
+    getLocs :: Maybe [(ConfigLoc, a)] -> [ConfigLoc]
+    getLocs = filter forTenant . maybe [] (fmap fst)
+    configComponents :: [ConfigLoc]
+    configComponents = case v.name of
+      VJob name -> getLocs $ Map.lookup name analysis.config.jobs
+      _ -> error "Config lookup not implemented"
+    dependsOn = Set.toList $ findReachable v analysis.configDependsOnGraph
+    required = Set.toList $ findReachable v analysis.configRequireGraph
     renderVertexes :: [Vertex] -> Html ()
     renderVertexes xs = do
       ul_ do
         traverse_ renderVertex xs
-    renderVertex (loc, v) =
+    renderVertex v' =
       li_ do
-        vertexLink idx (from v) loc v
-        with a_ [href_ (locUrl loc)] do
-          with' span_ "px-1" "🔗"
-      where
-        idx :: Int
-        idx = case Map.lookup (from v) analysis.names of
-          Just xs -> fromMaybe -1 $ (loc, v) `elemIndex` xs
-          Nothing -> -1
+        vertexLink v'
 
-newtype VertexTypeUrl = VTU VertexType
+newtype VertexTypeUrl = VTU (Text -> VertexName)
 
 instance FromHttpApiData VertexTypeUrl where
   parseUrlPiece txt = case txt of
-    "job" -> pure . VTU . ZuulConfigVertexType $ JobT
-    "nodeset" -> pure . VTU . ZuulConfigVertexType $ NodesetT
-    "label" -> pure $ VTU NodeLabelVertexType
+    "job" -> pure . VTU $ VJob . JobName
+    "nodeset" -> pure . VTU $ VNodeset . NodesetName
+    "label" -> pure $ VTU $ VNodeLabel . NodeLabelName
     _ -> Left $ "Unknown obj type: " <> txt
 
-newtype ConfigNameUrl = CNU ConfigName
+newtype ConfigNameUrl = CNU Text
 
 instance FromHttpApiData ConfigNameUrl where
-  parseUrlPiece = pure . CNU . ConfigName
+  parseUrlPiece = pure . CNU
+
+newtype TenantsUrl = TNU [TenantName]
+
+instance FromHttpApiData TenantsUrl where
+  parseUrlPiece piece = pure . TNU $ TenantName <$> Text.split (== ',') piece
 
 type ObjectPath =
-  "object" :> Capture "type" VertexTypeUrl
+  Capture "type" VertexTypeUrl
     :> Capture "name" ConfigNameUrl
-    :> Capture "index" Int
+    :> Capture "tenants" TenantsUrl
     :> Get '[HTML] (Html ())
 
 type API =
@@ -361,7 +355,7 @@ type API =
     :<|> "info" :> Get '[HTML] (Html ())
     :<|> "about" :> Get '[HTML] (Html ())
     :<|> "search_results" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
-    :<|> ObjectPath
+    :<|> "object" :> ObjectPath
     :<|> "data.json" :> Get '[JSON] D3Graph
     :<|> "dists" :> Raw
 
@@ -390,13 +384,13 @@ run config = do
       analysis <- liftIO config
       pure (index "/info" (infoComponent analysis.config))
 
-    objectRoute (VTU _objType) (CNU configName) pos = do
+    objectRoute (VTU vertexType) (CNU name) (TNU tenants) = do
       analysis <- liftIO config
-      pure (index "/object" (objectInfo configName pos analysis))
+      pure (index "/object" (objectInfo (Vertex tenants $ vertexType name) analysis))
 
     searchRoute req = do
       analysis <- liftIO config
-      pure (searchResults req.query analysis.names)
+      pure (searchResults req.query analysis.vertices)
 
     d3Route = do
       analysis <- liftIO config
