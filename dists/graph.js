@@ -1,22 +1,27 @@
 // The config graph for the welcome page
 // Based on https://bl.ocks.org/mbostock/4062045
-var width = 800,
-    height = 500;
-var svg = d3.select("#main").append("svg")
-    .attr("viewBox", "0 0 " + width + " " + height)
-    .attr("id", "d3")
-    .attr("width", width)
-    .attr("height", height);
+const  radius = 4,
+       headerSize = 32,
+       minX = radius,
+       minY = headerSize + radius;
+
+function setSize() {
+  // Set and update global value on changes
+  width = window.innerWidth;
+  height = window.innerHeight;
+  maxX = width - radius;
+  maxY = height - radius;
+}
+
+setSize(); window.addEventListener('resize', setSize);
+var svg = d3.select("#main").append("svg").attr("id", "d3");
 
 var color = d3.scaleOrdinal(d3.schemeCategory20);
 
 var simulation = d3
   .forceSimulation()
-  .force(
-    "link",
-    d3.forceLink().id((d) => d.id)
-  )
-  .force("charge", d3.forceManyBody().strength(-10))
+  .force("link", d3.forceLink().id((d) => d.id))
+  .force("charge", d3.forceManyBody().strength(-5))
   .force("center", d3.forceCenter(width / 2, height / 2));
 
 d3.json("data.json", function (error, graph) {
@@ -38,7 +43,7 @@ d3.json("data.json", function (error, graph) {
     .data(graph.nodes)
     .enter()
     .append("circle")
-    .attr("r", 5)
+    .attr("r", radius)
     .attr("fill", (d) => color(d.group))
     .call(
       d3
@@ -54,15 +59,18 @@ d3.json("data.json", function (error, graph) {
 
   simulation.force("link").links(graph.links);
 
+  const clampX = x => Math.max(minX, Math.min(x, maxX));
+  const clampY = y => Math.max(minY, Math.min(y, maxY));
+
   function ticked() {
-    // TODO: ensure the node does not go out of bound
+    node
+      .attr("cx", (d) => {return d.x = clampX(d.x)})
+      .attr("cy", (d) => {return d.y = clampY(d.y)});
     link
       .attr("x1", (d) => d.source.x)
       .attr("y1", (d) => d.source.y)
       .attr("x2", (d) => d.target.x)
       .attr("y2", (d) => d.target.y);
-
-    node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
   }
 });
 

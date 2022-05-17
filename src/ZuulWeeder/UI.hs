@@ -33,7 +33,7 @@ toD3Graph g =
       ZuulWeeder.UI.links = toLinks <$> edges
     }
   where
-    (edges, _) = splitAt 150 $ Algebra.Graph.edgeList g
+    (edges, _) = splitAt 500 $ Algebra.Graph.edgeList g
     -- edges = Algebra.Graph.edgeList g
     vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
@@ -218,6 +218,7 @@ welcomeComponent = do
   searchComponent
   style_ css
   with (script_ mempty) [src_ "https://d3js.org/d3.v4.min.js"]
+  with (script_ mempty) [src_ "/dists/d3-force-boundary.min.js"]
   with (script_ mempty) [src_ "/dists/graph.js"]
   where
     css :: Text
@@ -233,6 +234,7 @@ svg#d3 {
   width: 100%;
   margin: 0;
   top: 0;
+  left: 0;
   z-index: -1;
 }
 |]
