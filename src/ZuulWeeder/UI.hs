@@ -219,7 +219,6 @@ welcomeComponent = do
   searchComponent
   style_ css
   with (script_ mempty) [src_ "https://d3js.org/d3.v4.min.js"]
-  with (script_ mempty) [src_ "/dists/d3-force-boundary.min.js"]
   with (script_ mempty) [src_ "/dists/graph.js"]
   where
     css :: Text
