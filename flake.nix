@@ -49,6 +49,9 @@
         devShell = haskellPackages.shellFor {
           packages = p: [ zuulWeederPackage ];
 
+          # disable zookeeper in devel mode
+          ZUUL_WEEDER_NO_ZK = "1";
+
           buildInputs = with haskellPackages; [
             python
             ghcid

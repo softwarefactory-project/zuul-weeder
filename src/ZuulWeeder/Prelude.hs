@@ -25,6 +25,7 @@ module ZuulWeeder.Prelude
     when,
     whenM,
     nub,
+    lookupEnv,
 
     -- * hashable
     Hashable,
@@ -112,6 +113,7 @@ import System.Clock qualified
 import System.Directory qualified
 import System.FilePath qualified
 import System.IO (hPutStrLn, stderr)
+import System.Environment (lookupEnv)
 import Witch qualified
 
 newtype FilePathT = FilePathT {getPath :: Text}

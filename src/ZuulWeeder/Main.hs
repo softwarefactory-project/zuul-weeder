@@ -142,7 +142,10 @@ configLoader dataDir configFile = do
   where
     configDumper :: ServiceConfig -> ConfigDumper
     configDumper serviceConfig = ConfigDumper do
-      dumpZKConfig dataDir serviceConfig.zookeeper
+      env <- lift $ lookupEnv "ZUUL_WEEDER_NO_ZK"
+      case env of
+        Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
+        Nothing -> dumpZKConfig dataDir serviceConfig.zookeeper
     cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
     go :: ServiceConfig -> ExceptT Text IO (TenantsConfig, Config)
     go serviceConfig = do
