@@ -243,7 +243,9 @@ updateTopConfig tenantResolver configLoc ze = case ze of
   _ -> error "Not implemented"
   where
     tenants = tenantResolver configLoc (from ze)
-    insertConfig k v = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
+    insertConfig k v
+      | null tenants = id -- The object is not attached to any tenant, we don't add it
+      | otherwise = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
 decodeConfig (project, _branch) zkJSONData =

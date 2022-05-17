@@ -141,7 +141,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           | isJust job.parent = [(loc, job)]
           -- Otherwise we set the parent for each tenant
           | otherwise = case mapMaybe (setParentJob (loc, job)) baseJobs of
-              [] -> [] -- error "This job is not attached to any tenant?!"
+              [] -> error "This job is not attached to any tenant?!"
               xs -> xs
         setParentJob :: (ConfigLoc, Job) -> (JobName, [TenantName]) -> Maybe (ConfigLoc, Job)
         setParentJob (loc, job) (parent, tenants)
