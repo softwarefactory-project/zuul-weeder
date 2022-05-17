@@ -156,9 +156,37 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     go = do
       goJobs $ concat $ Map.elems allJobs
       goNodesets $ concat $ Map.elems config.nodesets
+      goProjectPipelines $ concat $ Map.elems config.projectPipelines
     -- look for semaphore, secret, ...
 
     -- TODO: implement a lookup function that check matching tenant. Otherwise we might incorrectly link objects between tenants
+
+    goProjectPipelines :: [(ConfigLoc, ProjectPipeline)] -> State Analysis ()
+    goProjectPipelines pPipelines = do
+      -- TODO: filter using tenant config
+      forM_ pPipelines $ \(loc, pPipeline) -> do
+        -- TODO: handle templates
+        forM_ pPipeline.pipelines $ \pipeline -> do
+          case Map.lookup pipeline.name config.pipelines of
+            Just xs ->
+              -- TODO: filter using tenant config
+              forM_ xs $ \(loc', pipeline') -> do
+                feedState ((loc, VProjectPipeline pPipeline), (loc', VPipeline pipeline'))
+            Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
+          forM_ pipeline.jobs $ \pJob -> do
+            case pJob of
+              pj@(PJName jobName) -> do
+                case Map.lookup jobName config.jobs of
+                  Just xs -> do
+                    -- TODO: filter using tenant config
+                    forM_ xs $ \(loc'', job) -> do
+                      feedState ((loc, VProjectPipeline pPipeline), (loc'', VJob job))
+                  Nothing -> #graphErrors %= (("Can't find : " <> show pj) :)
+              PJJob _job -> do
+                -- TODO: handle inline job
+                pure ()
+
+    -- TODO: connect to job
 
     goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
     goNodesets nodesets = do
