@@ -153,6 +153,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       traverse_ goNodeset $ concat $ Map.elems config.nodesets
       traverse_ goProject $ concat $ Map.elems config.projects
       traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
+      traverse_ goPipeline $ concat $ Map.elems config.pipelines
     -- look for semaphore, secret, ...
 
     lookupTenant :: Ord a => [TenantName] -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
@@ -163,6 +164,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           xs' -> Just xs'
         matchingTenant :: ConfigLoc -> Bool
         matchingTenant loc = any (`elem` loc.tenants) tenants
+
+    goPipeline :: (ConfigLoc, Pipeline) -> State Analysis ()
+    goPipeline (loc, pipeline) = insertName $ mkVertex loc pipeline
 
     goProjectPipeline :: ConfigLoc -> Vertex -> Set ProjectPipeline -> State Analysis ()
     goProjectPipeline loc src projectPipelines = do

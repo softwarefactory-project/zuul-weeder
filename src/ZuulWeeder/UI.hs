@@ -328,6 +328,7 @@ objectInfo tenant v analysis = do
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
+      VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
       _ -> error "Config lookup not implemented"
     dependsOn = Set.toList $ findReachable v analysis.configDependsOnGraph
     required = Set.toList $ findReachable v analysis.configRequireGraph
@@ -348,6 +349,7 @@ instance FromHttpApiData VertexTypeUrl where
     "label" -> pure $ VTU $ VNodeLabel . NodeLabelName
     "project" -> pure $ VTU $ VProject . ProjectName
     "project-template" -> pure $ VTU $ VProjectTemplate . ProjectTemplateName
+    "pipeline" -> pure $ VTU $ VPipeline . PipelineName
     _ -> Left $ "Unknown obj type: " <> txt
 
 newtype ConfigNameUrl = CNU Text
