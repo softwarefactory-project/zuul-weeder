@@ -15,6 +15,7 @@ where
 
 import Algebra.Graph qualified
 import Algebra.Graph.ToGraph qualified
+import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -26,7 +27,7 @@ import ZuulWeeder.Prelude
 
 -- | The graph vertex
 data Vertex = Vertex
-  { tenants :: [TenantName],
+  { tenants :: Set TenantName,
     name :: VertexName
   }
   deriving (Eq, Ord, Show, Generic, Hashable)
@@ -87,8 +88,10 @@ mkVertex loc x = Vertex loc.tenants (from x)
 
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
-findReachable :: Vertex -> ConfigGraph -> Set Vertex
-findReachable v = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.reachable v
+findReachable :: NonEmpty Vertex -> ConfigGraph -> Set Vertex
+findReachable xs = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.dfs (NE.toList xs)
+  where
+    v = NE.head xs
 
 filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
 filterTenant tenant = Algebra.Graph.induce $ \vertex -> tenant `elem` vertex.tenants
@@ -97,6 +100,7 @@ data Analysis = Analysis
   { configRequireGraph :: ConfigGraph,
     configDependsOnGraph :: ConfigGraph,
     vertices :: Set Vertex,
+    names :: Map VertexName (Set TenantName),
     config :: Config,
     graphErrors :: [String]
   }
@@ -104,20 +108,20 @@ data Analysis = Analysis
 
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty config mempty))
+  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty config mempty))
   where
     -- All the default base jobs defined by the tenants
     -- Given:
     -- - tenant1, tenant2 default base job is 'base'
     -- - tenant3 default base job is 'base-minimal'
     -- Then: baseJobs = [(base, [tenant1, tenant2]), (base-minimal, [tenant3])]
-    baseJobs :: [(JobName, [TenantName])]
+    baseJobs :: [(JobName, Set TenantName)]
     baseJobs = Map.toList baseJobsMap
       where
-        baseJobsMap :: Map JobName [TenantName]
+        baseJobsMap :: Map JobName (Set TenantName)
         baseJobsMap = foldr insertTenant mempty (Map.toList tenantsConfig)
         insertTenant (tenantName, tenantConfig) =
-          Map.insertWith mappend tenantConfig.defaultParent [tenantName]
+          Map.insertWith Set.union tenantConfig.defaultParent (Set.singleton tenantName)
 
     -- The job list, where the tenant parent job is applied.
     -- Given:
@@ -138,7 +142,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           | otherwise = case mapMaybe (setParentJob (loc, job)) baseJobs of
               [] -> error "This job is not attached to any tenant?!"
               xs -> xs
-        setParentJob :: (ConfigLoc, Job) -> (JobName, [TenantName]) -> Maybe (ConfigLoc, Job)
+        setParentJob :: (ConfigLoc, Job) -> (JobName, Set TenantName) -> Maybe (ConfigLoc, Job)
         setParentJob (loc, job) (parent, tenants)
           -- The default base job is from other tenants
           | all (`notElem` loc.tenants) tenants = Nothing
@@ -156,7 +160,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       traverse_ goPipeline $ concat $ Map.elems config.pipelines
     -- look for semaphore, secret, ...
 
-    lookupTenant :: Ord a => [TenantName] -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
+    lookupTenant :: Ord a => Set TenantName -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
     lookupTenant tenants key cm = filterTenants =<< Map.lookup key cm
       where
         filterTenants xs = case filter (matchingTenant . fst) xs of
@@ -166,7 +170,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         matchingTenant loc = any (`elem` loc.tenants) tenants
 
     goPipeline :: (ConfigLoc, Pipeline) -> State Analysis ()
-    goPipeline (loc, pipeline) = insertName $ mkVertex loc pipeline
+    goPipeline (loc, pipeline) = insertVertex $ mkVertex loc pipeline
 
     goProjectPipeline :: ConfigLoc -> Vertex -> Set ProjectPipeline -> State Analysis ()
     goProjectPipeline loc src projectPipelines = do
@@ -187,7 +191,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goProject :: (ConfigLoc, Project) -> State Analysis ()
     goProject (loc, project) = do
       let src = mkVertex loc project
-      insertName src
+      insertVertex src
       forM_ project.templates $ \templateName -> do
         case lookupTenant loc.tenants templateName config.projectTemplates of
           Just xs -> goFeedState src xs
@@ -197,22 +201,22 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goProjectTemplate :: (ConfigLoc, ProjectTemplate) -> State Analysis ()
     goProjectTemplate (loc, tmpl) = do
       let src = mkVertex loc tmpl
-      insertName src
+      insertVertex src
       goProjectPipeline loc src tmpl.pipelines
 
     goNodeset :: (ConfigLoc, Nodeset) -> State Analysis ()
     goNodeset (loc, nodeset) = do
       let src = mkVertex loc nodeset
-      insertName src
+      insertVertex src
       forM_ nodeset.labels $ \label -> do
         let dst = mkVertex loc label
-        insertName dst
+        insertVertex dst
         feedState (src, dst)
 
     goJob :: (ConfigLoc, Job) -> State Analysis ()
     goJob (loc, job) = do
       let src = mkVertex loc job
-      insertName src
+      insertVertex src
       -- look for nodeset location
       case job.nodeset of
         Just (JobNodeset nodeset) -> case lookupTenant loc.tenants nodeset config.nodesets of
@@ -221,7 +225,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         Just (JobAnonymousNodeset nodeLabels) -> do
           forM_ nodeLabels $ \nodeLabel -> do
             let dst = mkVertex loc nodeLabel
-            insertName dst
+            insertVertex dst
             feedState (src, dst)
         _ -> pure ()
 
@@ -248,5 +252,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
       #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
 
-    insertName :: Vertex -> State Analysis ()
-    insertName v = #vertices %= Set.insert v
+    insertVertex :: Vertex -> State Analysis ()
+    insertVertex v = do
+      #vertices %= Set.insert v
+      #names %= Map.insertWith Set.union v.name v.tenants

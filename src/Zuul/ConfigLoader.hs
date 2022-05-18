@@ -202,7 +202,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
 
 type UrlBuilder = Map ProviderName ConnectionUrl
 
-type TenantResolver = ConfigLoc -> ZuulConfigType -> [TenantName]
+type TenantResolver = ConfigLoc -> ZuulConfigType -> Set TenantName
 
 loadConfig :: UrlBuilder -> TenantResolver -> Either ConfigError ZKConfig -> StateT Config IO ()
 loadConfig urlBuilder tenantResolver zkcE = do
@@ -220,7 +220,7 @@ loadConfig urlBuilder tenantResolver zkcE = do
           configPath = zkc.filePath
           -- tenants info are set in the updateTopConfig function.
           -- this is done per element because a tenant may not include everything.
-          tenants = []
+          tenants = mempty
           url = fromMaybe (error "Missing connection provider?!") $ Map.lookup providerName urlBuilder
           configLoc = ConfigLoc canonicalProjectName branchName configPath url tenants
        in traverse_ (updateTopConfig tenantResolver configLoc) zkcDecoded

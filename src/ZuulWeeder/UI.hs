@@ -8,6 +8,7 @@ module ZuulWeeder.UI where
 
 import Algebra.Graph qualified
 import Data.Aeson qualified
+import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.String.QQ (s)
@@ -15,12 +16,12 @@ import Data.Text qualified as Text
 import Lucid
 import Lucid.Base (makeAttribute)
 import Network.Wai.Handler.Warp as Warp (run)
-import Servant
+import Servant hiding (Context)
 import Servant.HTML.Lucid (HTML)
 import Servant.Server.StaticFiles qualified
 import Web.FormUrlEncoded (FromForm)
 import Zuul.Config
-import Zuul.ConfigLoader (Config (..))
+import Zuul.ConfigLoader (Config (..), ConfigMap)
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 
@@ -34,17 +35,20 @@ configLocUrl loc = case loc.url of
     BranchName branch = loc.branch
     FilePathT path = loc.path
 
+-- | The request context
+type Context = Maybe (Set TenantName)
+
 -- | The data.json for the d3 graph (see dists/graph.js)
-toD3Graph :: Maybe TenantName -> ConfigGraph -> ZuulWeeder.UI.D3Graph
-toD3Graph tenant g =
+toD3Graph :: Context -> ConfigGraph -> ZuulWeeder.UI.D3Graph
+toD3Graph tenantsM g =
   ZuulWeeder.UI.D3Graph
     { ZuulWeeder.UI.nodes = toNodes <$> vertexes,
       ZuulWeeder.UI.links = toLinks <$> edges
     }
   where
     -- Keep the edges whose both vertex are in the current tenant
-    keepTenant (a, b) = case tenant of
-      Just t -> t `elem` a.tenants && t `elem` b.tenants
+    keepTenant (a, b) = case tenantsM of
+      Just tenants -> tenants `Set.isSubsetOf` a.tenants && tenants `Set.isSubsetOf` b.tenants
       Nothing -> True
 
     (edges, _) = splitAt 500 $ filter keepTenant $ Algebra.Graph.edgeList g
@@ -116,44 +120,51 @@ instance Data.Aeson.ToJSON D3Link
 
 instance Data.Aeson.ToJSON D3Graph
 
-vertexLink :: Vertex -> Html ()
-vertexLink v = with a_ [href_ ref] $ do
-  vertexTypeIcon v.name
-  toHtml name
+vertexLink :: Context -> VertexName -> Html () -> Html ()
+vertexLink tenantsM name = with a_ [href_ ref]
   where
-    name = from v.name
     ref =
       Text.intercalate
         "/"
-        [ "/object",
-          vertexTypeName v.name,
+        [ tenantsSlug tenantsM <> "/object",
+          vertexTypeName name,
           -- TODO: url encode name
-          name,
-          -- TODO: base64 url encode tenant list
-          Text.intercalate "," (getName <$> v.tenants)
+          from name
         ]
 
+vertexName :: VertexName -> Html ()
+vertexName n = do
+  vertexTypeIcon n
+  toHtml (into @Text n)
+
 -- | Return the search result
-searchResults :: Maybe TenantName -> Text -> Set Vertex -> Html ()
-searchResults tenant (Text.strip -> query) vertices
+searchResults :: Context -> Text -> Map VertexName (Set TenantName) -> Html ()
+searchResults tenantsM (Text.strip -> query) names
   | Text.null query = pure ()
-  | otherwise = case filter matchQuery (Set.toList vertices) of
+  | otherwise = case mapMaybe matchQuery (Map.toList names) of
       [] -> div_ "no results :("
       results -> ul_ do
-        forM_ results $ \vertex ->
-          -- TODO: group jobs that have the same name, but different in tenant, and add a badge to differentiate name
-          with' li_ "bg-white/75" $ vertexLink vertex
+        forM_ results $ \(name, tenants) ->
+          with' li_ "bg-white/75" $ do
+            vertexLink tenantsM name (vertexName name)
+            case tenantsM of
+              Just _ -> pure ()
+              Nothing ->
+                forM_ tenants $ \tenant ->
+                  with' span_ "ml-2 px-1 bg-slate-300 rounded" do
+                    vertexLink (Just $ Set.singleton tenant) name (toHtml (into @Text tenant))
   where
-    matchTenant = case tenant of
-      Just tenant' -> \v -> tenant' `elem` v.tenants
-      Nothing -> const True
-    matchQuery v = query `Text.isInfixOf` from v.name && matchTenant v
-
-mkTooltip :: Text -> Html ()
-mkTooltip n =
-  with div_ [id_ "tooltip-default", role_ "tooltip", class_ "inline-block absolute invisible z-10 py-2 px-3 text-sm font-medium text-white bg-gray-900 rounded-lg shadow-sm opacity-0 transition-opacity duration-300 tooltip dark:bg-gray-700"] do
-    toHtml n
-    with div_ [class_ "tooltip-arrow", makeAttribute "data-popper-arrow" mempty] mempty
+    matchTenant vertexTenants = case tenantsM of
+      -- The provided context match the vertex, keep the context
+      Just tenants | tenants `Set.isSubsetOf` vertexTenants -> Just tenants
+      -- The provided context does not match
+      Just _ -> Nothing
+      -- No context was provided, keep the vertex tenants
+      Nothing -> Just vertexTenants
+    matchQuery :: (VertexName, Set TenantName) -> Maybe (VertexName, Set TenantName)
+    matchQuery (name, tenants) = case (query `Text.isInfixOf` from name, matchTenant tenants) of
+      (True, Just matchingTenants) -> Just (name, matchingTenants)
+      _ -> Nothing
 
 newtype SearchForm = SearchForm {query :: Text} deriving (Eq, Show, Generic)
 
@@ -162,8 +173,8 @@ instance FromForm SearchForm
 with' :: With a => a -> Text -> a
 with' x n = with x [class_ n]
 
-searchComponent :: Html ()
-searchComponent = do
+searchComponent :: Context -> Html ()
+searchComponent tenants = do
   with' div_ "grid p-4 place-content-center" do
     input_
       [ class_ "form-control",
@@ -171,7 +182,7 @@ searchComponent = do
         type_ "search",
         name_ "query",
         placeholder_ "Begin Typing To Search Config...",
-        hxPost "/search_results",
+        hxPost (tenantsSlug tenants <> "/search_results"),
         hxTrigger "keyup changed delay:500ms, search",
         hxTarget "#search-results"
       ]
@@ -185,8 +196,16 @@ hxGet = makeAttribute "hx-get"
 hxPost = makeAttribute "hx-post"
 hxBoost = makeAttribute "hx-boost"
 
-index :: Maybe TenantName -> Text -> Html () -> Html ()
-index tenantName page mainComponent =
+tenantsList :: Set TenantName -> Text
+tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)
+
+tenantsSlug :: Context -> Text
+tenantsSlug = \case
+  Nothing -> ""
+  Just tenants -> "tenant/" <> tenantsList tenants <> "/"
+
+index :: Context -> Text -> Html () -> Html ()
+index tenantsM page mainComponent =
   doctypehtml_ do
     head_ do
       title_ "Zuul Weeder"
@@ -198,22 +217,25 @@ index tenantName page mainComponent =
       with div_ [class_ "container grid p-4", id_ "main"] mainComponent
       with (script_ mempty) [src_ "/dists/htmx.min.js"]
   where
-    baseUrl = case tenantName of
-      Just (TenantName name) -> "/tenant/" <> name
-      Nothing -> ""
+    rootUrl = "/"
+    baseUrl = rootUrl <> tenantsSlug tenantsM
 
     navComponent =
       with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
         with' div_ "flex-grow" do
           with' span_ "font-semibold text-white" do
-            with a_ [href_ (baseUrl <> "/")] "Zuul Weeder"
-          navLink "/search" "Search"
-          navLink "/info" "Info"
+            with a_ [href_ baseUrl] "Zuul Weeder"
+          navLink "search" "Search"
+          navLink "info" "Info"
         div_ do
-          navLink "/about" "About"
+          case tenantsM of
+            Just tenants -> with a_ [href_ rootUrl, tenantClass] (toHtml $ tenantsList tenants)
+            Nothing -> pure ()
+          navLink "about" "About"
+    tenantClass = class_ "my-4 p-1 text-white font-semibold "
     navLink path =
       let navLinkClass
-            | path == page || (path == "/search" && page == "/") = " bg-slate-500"
+            | "/" <> path == page || (path == "search" && page == "/") = " bg-slate-500"
             | otherwise = ""
           extra
             | path == "/about" = " right"
@@ -221,8 +243,8 @@ index tenantName page mainComponent =
           linkClass = "m-4 p-1 text-white rounded hover:text-teal-500" <> navLinkClass <> extra
        in with a_ [href_ (baseUrl <> path), class_ linkClass]
 
-infoComponent :: Maybe TenantName -> Config -> Html ()
-infoComponent _tenant config = do
+infoComponent :: Context -> Config -> Html ()
+infoComponent tenantsM config = do
   h2_ "Config details"
   with' div_ "grid p-4 place-content-center" do
     with' div_ "not-prose bg-slate-50 border rounded-xl" do
@@ -233,21 +255,26 @@ infoComponent _tenant config = do
           objectCounts "nodesets" config.nodesets
           objectCounts "pipelines" config.pipelines
   where
-    objectCounts :: Text -> Map a b -> Html ()
+    objectCounts :: Text -> Zuul.ConfigLoader.ConfigMap a b -> Html ()
     objectCounts n m = do
-      -- TODO: filter tenant
       with' tr_ "border-b" do
         with' td_ "p-1" (toHtml n)
-        with' td_ "p-1" (toHtml $ show $ Map.size m)
+        with' td_ "p-1" (toHtml $ show $ Map.size $ Map.filterWithKey forTenants m)
+    forTenants :: a -> [(ConfigLoc, b)] -> Bool
+    forTenants _ xs = case tenantsM of
+      Just tenants -> any (keepTenants tenants . fst) xs
+      Nothing -> True
+    keepTenants :: Set TenantName -> ConfigLoc -> Bool
+    keepTenants tenants loc = tenants `Set.isSubsetOf` loc.tenants
 
 aboutComponent :: Html ()
 aboutComponent = do
   h2_ "Welcome"
   p_ "Zuul Weeder is a web service to inspect Zuul configuration"
 
-welcomeComponent :: Html ()
-welcomeComponent = do
-  searchComponent
+welcomeComponent :: Context -> Html ()
+welcomeComponent tenants = do
+  searchComponent tenants
   style_ css
   with (script_ mempty) [src_ "/dists/d3.v4.min.js"]
   with (script_ mempty) [src_ "/dists/graph.js"]
@@ -311,11 +338,11 @@ dl title xs =
           | even pos = "bg-gray-50"
           | otherwise = "bg-white"
 
-objectInfo :: Maybe TenantName -> Vertex -> Analysis -> Html ()
-objectInfo tenant v analysis = do
+objectInfo :: Context -> NonEmpty Vertex -> Analysis -> Html ()
+objectInfo tenantsM vertices analysis = do
   h2_ do
-    vertexTypeIcon v.name
-    toHtml (from v.name :: Text)
+    vertexTypeIcon vertex.name
+    toHtml (from vertex.name :: Text)
   ul_ do
     traverse_ (li_ . locLink) configComponents
   with' div_ "grid grid-cols-2 gap-1 m-4" do
@@ -326,56 +353,56 @@ objectInfo tenant v analysis = do
       h3_ "Requires"
       renderVertexes required
   where
-    tenants = case tenant of
-      Just x -> [x]
-      Nothing -> v.tenants
+    vertex = NE.head vertices
     forTenant :: ConfigLoc -> Bool
-    forTenant loc = any (`elem` loc.tenants) tenants
+    forTenant loc = case tenantsM of
+      Just tenants -> tenants `Set.isSubsetOf` loc.tenants
+      Nothing -> True
+
     getLocs :: Maybe [(ConfigLoc, a)] -> [ConfigLoc]
     getLocs = filter forTenant . maybe [] (fmap fst)
     configComponents :: [ConfigLoc]
-    configComponents = case v.name of
+    configComponents = case vertex.name of
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
       _ -> error "Config lookup not implemented"
-    dependsOn = Set.toList $ findReachable v analysis.configDependsOnGraph
-    required = Set.toList $ findReachable v analysis.configRequireGraph
+    dependsOn = Set.toList $ findReachable vertices analysis.configDependsOnGraph
+    required = Set.toList $ findReachable vertices analysis.configRequireGraph
     renderVertexes :: [Vertex] -> Html ()
     renderVertexes xs = do
       ul_ do
         traverse_ renderVertex xs
-    renderVertex v' =
+    renderVertex v =
       li_ do
-        vertexLink v'
+        vertexLink tenantsM v.name (vertexName v.name)
 
 newtype VertexTypeUrl = VTU (Text -> VertexName)
 
 instance FromHttpApiData VertexTypeUrl where
-  parseUrlPiece txt = case txt of
-    "job" -> pure . VTU $ VJob . JobName
-    "nodeset" -> pure . VTU $ VNodeset . NodesetName
-    "label" -> pure $ VTU $ VNodeLabel . NodeLabelName
-    "project" -> pure $ VTU $ VProject . ProjectName
-    "project-template" -> pure $ VTU $ VProjectTemplate . ProjectTemplateName
-    "pipeline" -> pure $ VTU $ VPipeline . PipelineName
-    _ -> Left $ "Unknown obj type: " <> txt
+  parseUrlPiece txt = pure . VTU $ case txt of
+    "job" -> VJob . JobName
+    "nodeset" -> VNodeset . NodesetName
+    "label" -> VNodeLabel . NodeLabelName
+    "project" -> VProject . ProjectName
+    "project-template" -> VProjectTemplate . ProjectTemplateName
+    "pipeline" -> VPipeline . PipelineName
+    _ -> error $ "Unknown obj type: " <> from txt
 
-newtype ConfigNameUrl = CNU Text
+newtype VertexNameUrl = CNU Text
 
-instance FromHttpApiData ConfigNameUrl where
+instance FromHttpApiData VertexNameUrl where
   parseUrlPiece = pure . CNU
 
-newtype TenantsUrl = TNU [TenantName]
+newtype TenantsUrl = TNU {getTNU :: Set TenantName}
 
 instance FromHttpApiData TenantsUrl where
-  parseUrlPiece piece = pure . TNU $ TenantName <$> Text.split (== ',') piece
+  parseUrlPiece piece = pure . TNU $ Set.fromList (TenantName <$> Text.split (== ',') piece)
 
 type ObjectPath =
   Capture "type" VertexTypeUrl
-    :> Capture "name" ConfigNameUrl
-    :> Capture "tenants" TenantsUrl
+    :> Capture "name" VertexNameUrl
     :> Get '[HTML] (Html ())
 
 type BaseAPI =
@@ -387,10 +414,9 @@ type BaseAPI =
     :<|> "object" :> ObjectPath
     :<|> "data.json" :> Get '[JSON] D3Graph
 
-type TenantAPI = "tenant" :> Capture "tenant" Text :> BaseAPI
+type TenantAPI = "tenant" :> Capture "tenant" TenantsUrl :> BaseAPI
 
-type StaticAPI =
-  "dists" :> Raw
+type StaticAPI = "dists" :> Raw
 
 type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 
@@ -406,30 +432,40 @@ run config = do
     rootServer =
       Servant.Server.StaticFiles.serveDirectoryWebApp "dists"
         :<|> server Nothing
-        :<|> server . Just . TenantName
+        :<|> server . Just . getTNU
 
-    server tenant =
-      pure (index tenant "/" welcomeComponent)
-        :<|> pure (index tenant "/about" aboutComponent)
-        :<|> pure (index tenant "/search" searchComponent)
-        :<|> infoRoute tenant
-        :<|> searchRoute tenant
-        :<|> objectRoute tenant
-        :<|> d3Route tenant
+    server :: Context -> Server BaseAPI
+    server tenants =
+      pure (index tenants "/" (welcomeComponent tenants))
+        :<|> pure (index tenants "/about" aboutComponent)
+        :<|> pure (index tenants "/search" (searchComponent tenants))
+        :<|> infoRoute
+        :<|> searchRoute
+        :<|> objectRoute
+        :<|> d3Route
+      where
+        infoRoute = do
+          analysis <- liftIO config
+          pure (index tenants "/info" (infoComponent tenants analysis.config))
 
-    infoRoute tenant = do
-      analysis <- liftIO config
-      pure (index tenant "/info" (infoComponent tenant analysis.config))
+        objectRoute (VTU mkName) (CNU name) = do
+          analysis <- liftIO config
+          let vname = mkName name
+          let vertices = Set.toList $ Set.filter matchVertex analysis.vertices
+                where
+                  matchVertex v = v.name == vname && matchTenant v
+                  matchTenant v = case tenants of
+                    Just xs -> xs `Set.isSubsetOf` v.tenants
+                    Nothing -> True
+          case NE.nonEmpty vertices of
+            Just xs -> pure (index tenants "/object" (objectInfo tenants xs analysis))
+            Nothing -> pure "not found!"
 
-    objectRoute tenant (VTU mkName) (CNU name) (TNU tenants) = do
-      analysis <- liftIO config
-      pure (index tenant "/object" (objectInfo tenant (Vertex tenants (mkName name)) analysis))
+        searchRoute req = do
+          analysis <- liftIO config
+          pure (searchResults tenants req.query analysis.names)
 
-    searchRoute tenant req = do
-      analysis <- liftIO config
-      pure (searchResults tenant req.query analysis.vertices)
-
-    d3Route tenant = do
-      analysis <- liftIO config
-      let graph = configRequireGraph analysis
-      pure (toD3Graph tenant graph)
+        d3Route = do
+          analysis <- liftIO config
+          let graph = configRequireGraph analysis
+          pure (toD3Graph tenants graph)

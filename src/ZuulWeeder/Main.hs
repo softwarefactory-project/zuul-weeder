@@ -2,7 +2,9 @@ module ZuulWeeder.Main (main, mainWithArgs, demoConfig) where
 
 import Algebra.Graph.Export.Dot qualified
 import Data.IORef
+import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Data.Text (pack, unpack)
 import Data.Text qualified as Text
 import Options.Applicative ((<**>))
@@ -177,7 +179,7 @@ printReachable cl tenant key name graph = do
           findVertex key name config
       analyzis = analyzeConfig tenants config
       g = filterTenant tenant (graph analyzis)
-      reachables = findReachable vertex g
+      reachables = findReachable (NE.singleton vertex) g
   forM_ reachables $ \obj -> do
     putStrLn $ Text.unpack $ display obj
 
@@ -212,5 +214,5 @@ demoConfig = pure $ analyzeConfig tenants config
     tenantConfig = TenantConfig (JobName "base") mempty
     config = emptyConfig & #jobs `set` Map.fromList [mkJob "base", mkJob "linters"]
     mkJob (JobName -> n) = (n, [(demoLoc, Job n Nothing Nothing [] [])])
-    demoLoc = ConfigLoc (CanonicalProjectName demoProject) (BranchName "main") ".zuul.yaml" undefined [TenantName "demo"]
+    demoLoc = ConfigLoc (CanonicalProjectName demoProject) (BranchName "main") ".zuul.yaml" undefined (Set.singleton $ TenantName "demo")
     demoProject = (ProviderName "sftests.com", ProjectName "config")

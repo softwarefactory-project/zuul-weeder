@@ -90,9 +90,12 @@ data ConnectionUrl
   | GitUrl Text
   deriving (Eq, Ord, Show)
 
-newtype TenantName = TenantName {getName :: Text}
+newtype TenantName = TenantName Text
   deriving (Show, Eq, Ord, Generic)
   deriving newtype (Hashable)
+
+instance From TenantName Text where
+  from (TenantName name) = name
 
 data JobNodeset
   = JobNodeset NodesetName
@@ -196,7 +199,7 @@ data ConfigLoc = ConfigLoc
     branch :: BranchName,
     path :: FilePathT,
     url :: ConnectionUrl,
-    tenants :: [TenantName]
+    tenants :: Set TenantName
   }
   deriving (Show, Eq, Ord, Generic)
 

@@ -127,10 +127,10 @@ getTenantProjects serviceConfig tenantsConfig tenantName =
           )
             <$> projects
 
-tenantResolver :: ServiceConfig -> TenantsConfig -> ConfigLoc -> ZuulConfigType -> [TenantName]
-tenantResolver serviceConfig tenantsConfig configLoc zct = matches
+tenantResolver :: ServiceConfig -> TenantsConfig -> ConfigLoc -> ZuulConfigType -> Set TenantName
+tenantResolver serviceConfig tenantsConfig configLoc zct =
+  Set.fromList $ map fst $ filter (containsProject . snd) $ Map.toList $ tenantsConfig.tenants
   where
-    matches = map fst $ filter (containsProject . snd) $ Map.toList $ tenantsConfig.tenants
     containsProject :: TenantConfig -> Bool
     containsProject tc = any containsProject' $ Map.toList $ tc.connections
     containsProject' :: (ConnectionName, TenantConnectionConfig) -> Bool

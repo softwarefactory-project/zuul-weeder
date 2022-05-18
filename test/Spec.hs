@@ -128,7 +128,7 @@ tests =
                 branch = BranchName "main"
                 path = FilePathT "zuul.d/pipelines.yaml"
                 url = GerritUrl "https://managesf.sftests.com"
-                tenants = []
+                tenants = mempty
              in ConfigLoc {..}
           expected = "https://managesf.sftests.com/plugins/gitiles/sf-config/+/refs/heads/main/zuul.d/pipelines.yaml"
       assertEqual "Expect gitweb url" expected $ configLocUrl testConfigLoc

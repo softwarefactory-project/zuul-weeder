@@ -26,6 +26,7 @@ module ZuulWeeder.Prelude
     whenM,
     nub,
     lookupEnv,
+    NonEmpty,
 
     -- * hashable
     Hashable,
@@ -57,6 +58,7 @@ module ZuulWeeder.Prelude
     Witch.From,
     Witch.from,
     Witch.via,
+    Witch.into,
 
     -- * mtl
     lift,
@@ -110,6 +112,7 @@ import Data.Generics.Labels ()
 import Data.Hashable (Hashable, hash)
 import Data.Int (Int64)
 import Data.List (elemIndex, nub, sort)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Maybe (catMaybes, fromMaybe, isJust, mapMaybe)
 import Data.Set (Set)
