@@ -70,6 +70,9 @@ instance From Job VertexName where
 instance From Project VertexName where
   from pp = VProject pp.name
 
+instance From ProjectTemplate VertexName where
+  from p = VProjectTemplate p.name
+
 instance From Pipeline VertexName where
   from p = VPipeline p.name
 
@@ -148,7 +151,8 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     go = do
       traverse_ goJob $ concat $ Map.elems allJobs
       traverse_ goNodeset $ concat $ Map.elems config.nodesets
-      traverse_ goProjectPipeline $ concat $ Map.elems config.projects
+      traverse_ goProject $ concat $ Map.elems config.projects
+      traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
     -- look for semaphore, secret, ...
 
     lookupTenant :: Ord a => [TenantName] -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
@@ -160,11 +164,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         matchingTenant :: ConfigLoc -> Bool
         matchingTenant loc = any (`elem` loc.tenants) tenants
 
-    goProjectPipeline :: (ConfigLoc, Project) -> State Analysis ()
-    goProjectPipeline (loc, project) = do
-      let src = mkVertex loc project
-      -- TODO: handle templates
-      forM_ project.pipelines $ \pipeline -> do
+    goProjectPipeline :: ConfigLoc -> Vertex -> Set ProjectPipeline -> State Analysis ()
+    goProjectPipeline loc src projectPipelines = do
+      forM_ projectPipelines $ \pipeline -> do
         case lookupTenant loc.tenants pipeline.name config.pipelines of
           Just xs -> goFeedState src xs
           Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
@@ -177,6 +179,21 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
             PJJob _job -> do
               -- TODO: handle inline job
               pure ()
+
+    goProject :: (ConfigLoc, Project) -> State Analysis ()
+    goProject (loc, project) = do
+      let src = mkVertex loc project
+      forM_ project.templates $ \templateName -> do
+        case lookupTenant loc.tenants templateName config.projectTemplates of
+          Just xs -> goFeedState src xs
+          Nothing -> #graphErrors %= (("Can't find : " <> show templateName) :)
+      goProjectPipeline loc src project.pipelines
+
+    goProjectTemplate :: (ConfigLoc, ProjectTemplate) -> State Analysis ()
+    goProjectTemplate (loc, tmpl) = do
+      let src = mkVertex loc tmpl
+      insertName src
+      goProjectPipeline loc src tmpl.pipelines
 
     goNodeset :: (ConfigLoc, Nodeset) -> State Analysis ()
     goNodeset (loc, nodeset) = do
