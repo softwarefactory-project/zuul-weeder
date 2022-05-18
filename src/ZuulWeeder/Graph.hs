@@ -101,6 +101,7 @@ data Analysis = Analysis
     configDependsOnGraph :: ConfigGraph,
     vertices :: Set Vertex,
     names :: Map VertexName (Set TenantName),
+    tenants :: Set TenantName,
     config :: Config,
     graphErrors :: [String]
   }
@@ -108,8 +109,9 @@ data Analysis = Analysis
 
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty config mempty))
+  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty allTenants config mempty))
   where
+    allTenants = Set.fromList $ Map.keys tenantsConfig
     -- All the default base jobs defined by the tenants
     -- Given:
     -- - tenant1, tenant2 default base job is 'base'

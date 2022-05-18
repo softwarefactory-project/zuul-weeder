@@ -22,6 +22,7 @@ module ZuulWeeder.Prelude
     orDie,
     fromEither,
     Int64,
+    unless,
     when,
     whenM,
     nub,
@@ -96,7 +97,7 @@ where
 
 import Control.Lens ((%=))
 import Control.Lens qualified
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, unless, when)
 import Control.Monad.Catch (SomeException, catchAll)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
