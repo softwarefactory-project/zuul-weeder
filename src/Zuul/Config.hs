@@ -14,6 +14,7 @@ module Zuul.Config
     BranchName (..),
     ProviderName (..),
     ConnectionName (..),
+    ConnectionUrl (..),
     CanonicalProjectName (..),
 
     -- * Configuration data type
@@ -83,6 +84,11 @@ instance Display CanonicalProjectName where
 newtype ConnectionName = ConnectionName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
+
+data ConnectionUrl
+  = GerritUrl Text
+  | GitUrl Text
+  deriving (Eq, Ord, Show)
 
 newtype TenantName = TenantName {getName :: Text}
   deriving (Show, Eq, Ord, Generic)
@@ -189,6 +195,7 @@ data ConfigLoc = ConfigLoc
   { project :: CanonicalProjectName,
     branch :: BranchName,
     path :: FilePathT,
+    url :: ConnectionUrl,
     tenants :: [TenantName]
   }
   deriving (Show, Eq, Ord, Generic)

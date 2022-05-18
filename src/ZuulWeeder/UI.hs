@@ -24,6 +24,16 @@ import Zuul.ConfigLoader (Config (..))
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 
+configLocUrl :: ConfigLoc -> Text
+configLocUrl loc = case loc.url of
+  GerritUrl url ->
+    Text.dropWhileEnd (== '/') url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
+  GitUrl _ -> error "TODO"
+  where
+    CanonicalProjectName (_, ProjectName name) = loc.project
+    BranchName branch = loc.branch
+    FilePathT path = loc.path
+
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Maybe TenantName -> ConfigGraph -> ZuulWeeder.UI.D3Graph
 toD3Graph tenant g =

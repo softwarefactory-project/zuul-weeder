@@ -5,21 +5,22 @@ module Zuul.ConfigLoader
     loadConfig,
     emptyConfig,
     TenantResolver,
+    UrlBuilder,
 
     -- * Test helper
-    decodeConfig
+    decodeConfig,
   )
 where
 
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
-import Data.Map (insertWith)
+import Data.Map qualified as Map
 import Data.Set qualified
 import Data.Vector qualified as V
+import Zuul.Config
 import Zuul.ZooKeeper (ConfigError (..), ZKConfig (..))
 import ZuulWeeder.Prelude
-import Zuul.Config
 
 type ConfigMap a b = Map a [(ConfigLoc, b)]
 
@@ -50,7 +51,7 @@ updateTopConfig tenantResolver configLoc ze = case ze of
     tenants = tenantResolver configLoc (from ze)
     insertConfig k v
       | null tenants = id -- The object is not attached to any tenant, we don't add it
-      | otherwise = Data.Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
+      | otherwise = Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
 
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
 decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName projectName), _branch) zkJSONData =
@@ -199,17 +200,20 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
     getName :: Object -> Text
     getName = getString . getObjValue "name"
 
+type UrlBuilder = Map ProviderName ConnectionUrl
+
 type TenantResolver = ConfigLoc -> ZuulConfigType -> [TenantName]
 
-loadConfig :: TenantResolver -> Either ConfigError ZKConfig -> StateT Config IO ()
-loadConfig tenantResolver zkcE = do
+loadConfig :: UrlBuilder -> TenantResolver -> Either ConfigError ZKConfig -> StateT Config IO ()
+loadConfig urlBuilder tenantResolver zkcE = do
   case zkcE of
     Left e -> #configErrors %= (e :)
     Right zkc -> flip catchAll (handler zkc.fullPath) do
       let zkcDecoded = decodeConfig (canonicalProjectName, branchName) $ zkJSONData zkc
+          providerName = ProviderName $ zkc.provider
           canonicalProjectName =
             CanonicalProjectName
-              ( ProviderName $ zkc.provider,
+              ( providerName,
                 ProjectName $ zkc.project
               )
           branchName = BranchName zkc.branch
@@ -217,7 +221,8 @@ loadConfig tenantResolver zkcE = do
           -- tenants info are set in the updateTopConfig function.
           -- this is done per element because a tenant may not include everything.
           tenants = []
-          configLoc = ConfigLoc canonicalProjectName branchName configPath tenants
+          url = fromMaybe (error "Missing connection provider?!") $ Map.lookup providerName urlBuilder
+          configLoc = ConfigLoc canonicalProjectName branchName configPath url tenants
        in traverse_ (updateTopConfig tenantResolver configLoc) zkcDecoded
   where
     handler :: FilePathT -> SomeException -> StateT Config IO ()

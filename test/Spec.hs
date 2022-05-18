@@ -13,6 +13,7 @@ import Zuul.ConfigLoader
 import Zuul.ServiceConfig
 import Zuul.Tenant
 import Zuul.ZooKeeper
+import ZuulWeeder.UI
 import ZuulWeeder.Prelude
 
 main :: IO ()
@@ -55,7 +56,8 @@ tests =
       goldenTest "Decode Pipeline config" "pipelines" decodeProjectPipeline,
       goldenTest "Decode Tenant config" "system-config" decodeTenants,
       testCase "Decode Connections config" decodeServiceConfig,
-      goldenTest "Get Tenant projects" "zuul" testGetTenantProjects
+      goldenTest "Get Tenant projects" "zuul" testGetTenantProjects,
+      testCase "Compute gitweb links" computeGitwebLinks
     ]
   where
     extractDataZKPath =
@@ -107,7 +109,7 @@ tests =
 
     decodeServiceConfig = do
       conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))
-      let expected = [(ConnectionName "gerrit", ConnectionCanonicalName "sftests.com")]
+      let expected = [(ConnectionName "gerrit", ProviderName "sftests.com")]
       assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conf.connections)
       assertEqual "Expect zk conf" (ZKConnection ["localhost", "key.pem", "cert.pem", "ca.pem"]) conf.zookeeper
 
@@ -119,3 +121,14 @@ tests =
           tenantConfigAlt = getTenantProjects conf tenantsConfig (TenantName "unknown")
       assertEqual "Expect empty tenant projects" Nothing tenantConfigAlt
       pure tenantConfig
+
+    computeGitwebLinks = do
+      let testConfigLoc =
+            let project = CanonicalProjectName (ProviderName "sftests.com", ProjectName "sf-config")
+                branch = BranchName "main"
+                path = FilePathT "zuul.d/pipelines.yaml"
+                url = GerritUrl "https://managesf.sftests.com"
+                tenants = []
+             in ConfigLoc {..}
+          expected = "https://managesf.sftests.com/plugins/gitiles/sf-config/+/refs/heads/main/zuul.d/pipelines.yaml"
+      assertEqual "Expect gitweb url" expected $ configLocUrl testConfigLoc

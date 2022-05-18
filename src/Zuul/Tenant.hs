@@ -4,11 +4,11 @@ import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
 import Data.Map qualified as Map
-import Data.Text qualified as Text
 import Data.Set qualified as Set
+import Data.Text qualified as Text
 import Data.Vector qualified as V
 import Zuul.Config
-import Zuul.ServiceConfig (ConnectionCanonicalName (ConnectionCanonicalName), ServiceConfig (..))
+import Zuul.ServiceConfig (ServiceConfig (..))
 import Zuul.ZooKeeper (ZKSystemConfig (..))
 import ZuulWeeder.Prelude
 
@@ -118,7 +118,7 @@ getTenantProjects serviceConfig tenantsConfig tenantName =
     extractProject (connectionName, TenantConnectionConfig {..}) =
       let projects = configProjects <> untrustedProjects
           providerName = case Map.lookup connectionName serviceConfig.connections of
-            Just (ConnectionCanonicalName pn) -> ProviderName pn
+            Just pn -> pn
             Nothing -> error "Unable to find project connection's provider name"
        in ( \TenantProject {..} ->
               ( CanonicalProjectName (providerName, projectName),
@@ -139,7 +139,7 @@ tenantResolver serviceConfig tenantsConfig configLoc zct = matches
         matchProject :: TenantProject -> Bool
         matchProject TenantProject {..} =
           let providerName = case Map.lookup cn serviceConfig.connections of
-                Just (ConnectionCanonicalName pn) -> ProviderName pn
+                Just pn -> pn
                 Nothing -> error "Unable to find project connection's provider name"
            in and
                 [ CanonicalProjectName (providerName, projectName) == configLoc.project,

@@ -12,7 +12,7 @@ import Streaming.Prelude qualified as S
 import System.Environment
 import Text.Pretty.Simple qualified
 import Zuul.Config
-import Zuul.ConfigLoader (Config (..), TenantResolver, emptyConfig, loadConfig)
+import Zuul.ConfigLoader (Config (..), TenantResolver, UrlBuilder, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
 import Zuul.ZooKeeper
@@ -156,7 +156,8 @@ configLoader dataDir configFile = do
       -- decode the tenants config
       tenantsConfig <- except (decodeTenantsConfig systemConfig `orDie` "Invalid tenant config")
       -- load all the config objects
-      config <- lift $ loadConfigFiles (Zuul.Tenant.tenantResolver serviceConfig tenantsConfig) dataDir
+      let tr = Zuul.Tenant.tenantResolver serviceConfig tenantsConfig
+      config <- lift $ loadConfigFiles serviceConfig.urlBuilders tr dataDir
       pure (tenantsConfig, config)
 
 outputDot :: ConfigLoader -> TenantName -> (Analysis -> ConfigGraph) -> IO ()
@@ -180,13 +181,13 @@ printReachable cl tenant key name graph = do
   forM_ reachables $ \obj -> do
     putStrLn $ Text.unpack $ display obj
 
-loadConfigFiles :: TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
-loadConfigFiles tr =
+loadConfigFiles :: UrlBuilder -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
+loadConfigFiles ub tr =
   flip execStateT Zuul.ConfigLoader.emptyConfig
     -- StateT Config IO ()
     . S.effects
     -- Apply the loadConfig function to each element
-    . S.chain (Zuul.ConfigLoader.loadConfig tr)
+    . S.chain (Zuul.ConfigLoader.loadConfig ub tr)
     -- Stream (Of ZKConfig) (StateT Config IO)
     . hoist lift
     -- Stream (Of ZKConfig) IO
@@ -211,5 +212,5 @@ demoConfig = pure $ analyzeConfig tenants config
     tenantConfig = TenantConfig (JobName "base") mempty
     config = emptyConfig & #jobs `set` Map.fromList [mkJob "base", mkJob "linters"]
     mkJob (JobName -> n) = (n, [(demoLoc, Job n Nothing Nothing [] [])])
-    demoLoc = ConfigLoc (CanonicalProjectName demoProject) (BranchName "main") ".zuul.yaml" [TenantName "demo"]
+    demoLoc = ConfigLoc (CanonicalProjectName demoProject) (BranchName "main") ".zuul.yaml" undefined [TenantName "demo"]
     demoProject = (ProviderName "sftests.com", ProjectName "config")
