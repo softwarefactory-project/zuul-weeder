@@ -183,6 +183,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goProject :: (ConfigLoc, Project) -> State Analysis ()
     goProject (loc, project) = do
       let src = mkVertex loc project
+      insertName src
       forM_ project.templates $ \templateName -> do
         case lookupTenant loc.tenants templateName config.projectTemplates of
           Just xs -> goFeedState src xs
