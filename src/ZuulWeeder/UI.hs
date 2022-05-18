@@ -202,20 +202,24 @@ instance FromForm SearchForm
 with' :: With a => a -> Text -> a
 with' x n = with x [class_ n]
 
-searchComponent :: Context -> Html ()
-searchComponent ctx = do
+searchComponent :: Context -> Maybe Text -> Html () -> Html ()
+searchComponent ctx queryM result = do
   with' div_ "grid p-4 place-content-center" do
     input_
       [ class_ "form-control",
         size_ "42",
         type_ "search",
         name_ "query",
-        placeholder_ "Begin Typing To Search Config...",
         hxPost (baseUrl ctx <> "search_results"),
         hxTrigger "keyup changed delay:500ms, search",
-        hxTarget "#search-results"
+        hxTarget "#search-results",
+        attr
       ]
-    with div_ [id_ "search-results"] mempty
+    with div_ [id_ "search-results"] result
+  where
+    attr = case queryM of
+      Just q -> value_ q
+      Nothing -> placeholder_ "Begin Typing To Search Config..."
 
 hxTrigger, hxTarget, hxSwap, hxGet, hxPost, hxBoost :: Text -> Attribute
 hxTrigger = makeAttribute "hx-trigger"
@@ -305,7 +309,7 @@ aboutComponent = do
 
 welcomeComponent :: Context -> Html ()
 welcomeComponent ctx = do
-  searchComponent ctx
+  searchComponent ctx Nothing mempty
   style_ css
   with (script_ mempty) [src_ $ distUrl ctx "d3.v4.min.js"]
   with (script_ mempty) [src_ $ distUrl ctx "graph.js"]
@@ -445,6 +449,7 @@ type BaseAPI =
   Get '[HTML] (Html ())
     :<|> "about" :> Get '[HTML] (Html ())
     :<|> "search" :> Get '[HTML] (Html ())
+    :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
     :<|> "info" :> Get '[HTML] (Html ())
     :<|> "search_results" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
     :<|> "object" :> ObjectPath
@@ -476,9 +481,10 @@ app config rootURL = serve (Proxy @API) rootServer
     server ctx =
       pure (index ctx "" (welcomeComponent ctx))
         :<|> pure (index ctx "about" aboutComponent)
-        :<|> pure (index ctx "search" (searchComponent ctx))
+        :<|> searchRoute Nothing
+        :<|> searchRoute . Just
         :<|> infoRoute
-        :<|> searchRoute
+        :<|> searchResultRoute
         :<|> objectRoute
         :<|> d3Route
       where
@@ -499,7 +505,13 @@ app config rootURL = serve (Proxy @API) rootServer
             Just xs -> pure (index ctx "object" (objectInfo ctx xs analysis))
             Nothing -> pure "not found!"
 
-        searchRoute req = do
+        searchRoute queryM = do
+          result <- case queryM of
+            Just query -> searchResultRoute (SearchForm query)
+            Nothing -> pure mempty
+          pure (index ctx "search" (searchComponent ctx queryM result))
+
+        searchResultRoute req = do
           analysis <- liftIO config
           pure (searchResults ctx req.query analysis.names)
 
