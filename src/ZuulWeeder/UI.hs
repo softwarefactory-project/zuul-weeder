@@ -169,20 +169,22 @@ vertexName n = do
   toHtml (into @Text n)
 
 -- | Return the search result
-searchResults :: Context -> Text -> Map VertexName (Set TenantName) -> Html ()
+searchResults :: Context -> Text -> Map VertexName (Set TenantName) -> (Maybe Text, Html ())
 searchResults ctx (Text.strip -> query) names
-  | Text.null query = pure ()
+  | Text.null query = (Nothing, pure ())
   | otherwise = case mapMaybe matchQuery (Map.toList names) of
-      [] -> div_ "no results :("
-      results -> ul_ do
-        forM_ results $ \(name, tenants) ->
-          with' li_ "bg-white/75" $ do
-            vertexLink ctx name (vertexName name)
-            case ctx.scope of
-              -- When scoped, don't display tenant badge
-              Scoped _ -> pure ()
-              UnScoped -> traverse_ (tenantLink ctx.rootURL name) tenants
+      [] -> (Nothing, div_ "no results :(")
+      results -> (Just query, ul_ $ traverse_ renderResult results)
   where
+    renderResult :: (VertexName, Set TenantName) -> Html ()
+    renderResult (name, tenants) =
+      with' li_ "bg-white/75" $ do
+        vertexLink ctx name (vertexName name)
+        case ctx.scope of
+          -- When scoped, don't display tenant badge
+          Scoped _ -> pure ()
+          UnScoped -> traverse_ (tenantLink ctx.rootURL name) tenants
+
     matchTenant vertexTenants = case ctx.scope of
       -- The provided context match the vertex, keep the context
       Scoped tenants | tenants `Set.isSubsetOf` vertexTenants -> Just tenants
@@ -445,13 +447,17 @@ type ObjectPath =
     :> Capture "name" VertexNameUrl
     :> Get '[HTML] (Html ())
 
+type SearchPath =
+  ReqBody '[FormUrlEncoded] SearchForm
+    :> Post '[HTML] (Headers '[Header "HX-Push" Text] (Html ()))
+
 type BaseAPI =
   Get '[HTML] (Html ())
     :<|> "about" :> Get '[HTML] (Html ())
     :<|> "search" :> Get '[HTML] (Html ())
     :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
     :<|> "info" :> Get '[HTML] (Html ())
-    :<|> "search_results" :> ReqBody '[FormUrlEncoded] SearchForm :> Post '[HTML] (Html ())
+    :<|> "search_results" :> SearchPath
     :<|> "object" :> ObjectPath
     :<|> "data.json" :> Get '[JSON] D3Graph
 
@@ -507,13 +513,16 @@ app config rootURL = serve (Proxy @API) rootServer
 
         searchRoute queryM = do
           result <- case queryM of
-            Just query -> searchResultRoute (SearchForm query)
+            Just query -> do
+              analysis <- liftIO config
+              pure . snd $ searchResults ctx query analysis.names
             Nothing -> pure mempty
           pure (index ctx "search" (searchComponent ctx queryM result))
 
         searchResultRoute req = do
           analysis <- liftIO config
-          pure (searchResults ctx req.query analysis.names)
+          let (value, result) = searchResults ctx req.query analysis.names
+          pure $ addHeader (maybe "false" (mappend (baseUrl ctx <> "search/")) value) result
 
         d3Route = do
           analysis <- liftIO config
