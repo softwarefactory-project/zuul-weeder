@@ -108,13 +108,13 @@ tests =
       pure $ Data.Map.toList decoded.tenants
 
     decodeServiceConfig = do
-      conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))
+      conf <- fromEither <$> runExceptT (readServiceConfig (readFileText $ fixturesPath </> "zuul.conf"))
       let expected = [(ConnectionName "gerrit", ProviderName "sftests.com")]
       assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conf.connections)
       assertEqual "Expect zk conf" (ZKConnection ["localhost", "key.pem", "cert.pem", "ca.pem"]) conf.zookeeper
 
     testGetTenantProjects = do
-      conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))
+      conf <- fromEither <$> runExceptT (readServiceConfig (readFileText $ fixturesPath </> "zuul.conf"))
       json <- loadJSONFixture "system-config"
       let tenantsConfig = fromMaybe (error "oops") $ decodeTenantsConfig (ZKSystemConfig json)
           tenantConfig = getTenantProjects conf tenantsConfig (TenantName "local")

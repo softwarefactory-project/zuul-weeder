@@ -4,9 +4,9 @@ import Algebra.Graph.Export.Dot qualified
 import Data.IORef
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
-import Data.Set qualified as Set
 import Data.Text (pack, unpack)
 import Data.Text qualified as Text
+import Data.Yaml (decodeThrow)
 import Options.Applicative ((<**>))
 import Options.Applicative qualified as Opts
 import Streaming
@@ -139,7 +139,7 @@ getConfig cl = do
 configLoader :: FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
 configLoader dataDir configFile = do
   -- Load the zuul.conf
-  serviceConfig <- readServiceConfig configFile
+  serviceConfig <- readServiceConfig (readFileText configFile)
   pure (configDumper serviceConfig, go serviceConfig)
   where
     configDumper :: ServiceConfig -> ConfigDumper
@@ -208,11 +208,84 @@ findVertex "nodelabel" name config = case Map.lookup (NodeLabelName name) config
 findVertex _ _ _ = Nothing
 
 demoConfig :: IO Analysis
-demoConfig = pure $ analyzeConfig tenants config
+demoConfig = do
+  (tenantsConfig, config) <-
+    either (error . show) id
+      <$> runExceptT do
+        serviceConfig <-
+          readServiceConfig
+            ( pure
+                [s|
+[zookeeper]
+hosts=localhost
+tls_cert=cert.pem
+tls_key=key.pem
+tls_ca=ca.pem
+
+[connection gerrit]
+driver=gerrit
+server=managesf.sftests.com
+canonical_hostname=sftests.com
+|]
+            )
+        systemConfig <-
+          ZKSystemConfig
+            <$> decodeThrow
+              [s|
+unparsed_abide:
+  tenants:
+    local:
+      source:
+        gerrit:
+          config-projects:
+            - config: {}
+          untrusted-projects:
+            - sf-jobs: {}
+            - zuul-jobs:
+                include: [job]
+                shadow: sf-jobs
+|]
+        tenantsConfig <- except (decodeTenantsConfig systemConfig `orDie` "Invalid tenant config")
+        let tr = Zuul.Tenant.tenantResolver serviceConfig tenantsConfig
+        conf <- lift $ flip execStateT Zuul.ConfigLoader.emptyConfig do
+          xs <- sequence configFiles
+          traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
+        pure (tenantsConfig, conf)
+
+  pure $ analyzeConfig tenantsConfig config
   where
-    tenants = TenantsConfig (Map.fromList [(TenantName "demo", tenantConfig)])
-    tenantConfig = TenantConfig (JobName "base") mempty
-    config = emptyConfig & #jobs `set` Map.fromList [mkJob "base", mkJob "linters"]
-    mkJob (JobName -> n) = (n, [(demoLoc, Job n Nothing Nothing [] [])])
-    demoLoc = ConfigLoc (CanonicalProjectName demoProject) (BranchName "main") ".zuul.yaml" undefined (Set.singleton $ TenantName "demo")
-    demoProject = (ProviderName "sftests.com", ProjectName "config")
+    configFiles =
+      [ ZKConfig
+          "sftests.com"
+          "config"
+          "main"
+          (FilePathT ".zuul.yaml")
+          (FilePathT "/")
+          <$> decodeThrow
+            [s|
+- job:
+    name: base
+    nodeset: centos
+
+- nodeset:
+    name: centos
+    nodes:
+      - name: runner
+        label: cloud-centos-7
+|],
+        ZKConfig
+          "sftests.com"
+          "sf-jobs"
+          "main"
+          (FilePathT ".zuul.yaml")
+          (FilePathT "/")
+          <$> decodeThrow
+            [s|
+- job:
+    name: linter
+    nodeset:
+      nodes:
+        - name: container
+          label: pod-centos-7
+|]
+      ]

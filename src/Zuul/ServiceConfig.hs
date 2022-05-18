@@ -26,10 +26,10 @@ data ServiceConfig = ServiceConfig
     zookeeper :: ZKConnection
   }
 
-readServiceConfig :: FilePathT -> ExceptT Text IO ServiceConfig
-readServiceConfig fp = do
-  iniE <- lift $ Data.Ini.readIniFile (getPath' fp)
-  case iniE of
+readServiceConfig :: IO Text -> ExceptT Text IO ServiceConfig
+readServiceConfig getContent = do
+  content <- lift getContent
+  case Data.Ini.parseIni content of
     Right (Data.Ini.Ini sections _) -> except $ parseConfig sections
     Left _ -> throwError "Unable to read Zuul config file"
 

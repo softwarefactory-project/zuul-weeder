@@ -46,6 +46,7 @@ module ZuulWeeder.Prelude
     listDirectory,
     doesDirectoryExist,
     readFileBS,
+    readFileText,
 
     -- * text
     Text,
@@ -87,6 +88,9 @@ module ZuulWeeder.Prelude
 
     -- * text-display
     module Data.Text.Display,
+
+    -- * qq
+    Data.String.QQ.s,
   )
 where
 
@@ -117,12 +121,15 @@ import Data.Map (Map)
 import Data.Maybe (catMaybes, fromMaybe, isJust, mapMaybe)
 import Data.Set (Set)
 import Data.String (IsString)
+import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified as Text
 import Data.Text.Display
+import Data.Text.IO qualified as Text (readFile)
 import Data.Vector qualified as V
 import Debug.Trace (trace)
 import GHC.Generics (Generic)
+import GHC.Stack (HasCallStack)
 import System.Clock qualified
 import System.Directory qualified
 import System.Environment (lookupEnv)
@@ -157,6 +164,9 @@ doesDirectoryExist (FilePathT fp) = System.Directory.doesDirectoryExist (unpack 
 readFileBS :: FilePathT -> IO BS.ByteString
 readFileBS (FilePathT fp) = BS.readFile (unpack fp)
 
+readFileText :: FilePathT -> IO Text
+readFileText (FilePathT fp) = Text.readFile (unpack fp)
+
 getSec :: IO Int64
 getSec = do
   System.Clock.TimeSpec sec _ <- System.Clock.getTime System.Clock.Monotonic
@@ -179,7 +189,7 @@ decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
   Just _va -> error $ "Unexpected " <> Text.unpack k <> " structure: " <> show _va
   Nothing -> []
 
-unwrapObject :: Value -> Object
+unwrapObject :: HasCallStack => Value -> Object
 unwrapObject va = case va of
   Object hm -> hm
   _ -> error $ "Expecting an Object out of JSON Value: " <> show va

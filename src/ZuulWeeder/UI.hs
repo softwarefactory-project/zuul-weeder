@@ -11,7 +11,6 @@ import Data.Aeson qualified
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Data.String.QQ (s)
 import Data.Text qualified as Text
 import Lucid
 import Lucid.Base (makeAttribute)

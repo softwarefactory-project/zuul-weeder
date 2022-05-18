@@ -17,7 +17,6 @@ where
 import Control.Exception (try)
 import Data.Aeson (Value, eitherDecodeFileStrict)
 import Data.ByteString (ByteString)
-import Data.String.QQ (s)
 import Data.Text qualified as Text
 import Data.Yaml qualified
 import Network.URI.Encode qualified
