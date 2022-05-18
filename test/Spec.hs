@@ -2,6 +2,7 @@ module Main (main) where
 
 import Data.Aeson (Value, eitherDecodeFileStrict, object)
 import Data.Map qualified (toList)
+import Data.Map qualified as Map
 import Data.Text.Lazy.Encoding qualified as LText
 import Data.Yaml qualified as Y (decodeFileEither)
 import Test.Tasty
@@ -13,11 +14,15 @@ import Zuul.ConfigLoader
 import Zuul.ServiceConfig
 import Zuul.Tenant
 import Zuul.ZooKeeper
-import ZuulWeeder.UI
+import ZuulWeeder.Graph
+import ZuulWeeder.Main qualified
 import ZuulWeeder.Prelude
+import ZuulWeeder.UI
 
 main :: IO ()
-main = defaultMain (testGroup "Tests" [tests])
+main = do
+  demo <- ZuulWeeder.Main.demoConfig
+  defaultMain (testGroup "Tests" $ tests demo)
 
 fixturesPath :: FilePathT
 fixturesPath = "test/fixtures"
@@ -44,22 +49,28 @@ loadJSONFixture name = do
     Left _any -> error $ "Unable to decode fixture " <> getPath' name
     Right bs -> pure bs
 
-tests :: TestTree
-tests =
-  testGroup
-    "ZooKeeper module"
-    [ testCase "Extract data from ZK path" extractDataZKPath,
-      goldenTest "Decode Jobs config" "jobs" decodeJobsConfig,
-      goldenTest "Decode Projects config" "projects" decodeProjectsConfig,
-      goldenTest "Decode Nodesets config" "nodesets" decodeNodesetsConfig,
-      goldenTest "Decode Project templates config" "project-templates" decodeProjectTemplatesConfig,
-      goldenTest "Decode Pipeline config" "pipelines" decodeProjectPipeline,
-      goldenTest "Decode Tenant config" "system-config" decodeTenants,
-      testCase "Decode Connections config" decodeServiceConfig,
-      goldenTest "Get Tenant projects" "zuul" testGetTenantProjects,
-      testCase "Compute gitweb links" computeGitwebLinks
-    ]
+tests :: Analysis -> [TestTree]
+tests demo =
+  [ testGroup
+      "ZooKeeper module"
+      [ testCase "Extract data from ZK path" extractDataZKPath,
+        goldenTest "Decode Jobs config" "jobs" decodeJobsConfig,
+        goldenTest "Decode Projects config" "projects" decodeProjectsConfig,
+        goldenTest "Decode Nodesets config" "nodesets" decodeNodesetsConfig,
+        goldenTest "Decode Project templates config" "project-templates" decodeProjectTemplatesConfig,
+        goldenTest "Decode Pipeline config" "pipelines" decodeProjectPipeline,
+        goldenTest "Decode Tenant config" "system-config" decodeTenants,
+        testCase "Decode Connections config" decodeServiceConfig,
+        goldenTest "Get Tenant projects" "zuul" testGetTenantProjects,
+        testCase "Compute gitweb links" computeGitwebLinks
+      ],
+    testGroup
+      "Integration"
+      [goldenTest "Git Nodelabel test" "vertex-git" validateGitConfig]
+  ]
   where
+    validateGitConfig = pure $ Map.lookup (NodeLabelName "cloud-rhel-7") demo.config.nodeLabels
+
     extractDataZKPath =
       let path = "/tmp/zk-dump/zuul/config/cache/sftests.com%2Fzuul-jobs/master/files/zuul.d%2Fhaskell-jobs.yaml/0000000000/ZKDATA"
           obj = object []

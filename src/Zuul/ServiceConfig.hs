@@ -9,6 +9,7 @@ import Data.HashMap.Strict qualified as HM
 import Data.Ini qualified
 import Data.Map qualified as Map
 import Data.Text qualified as Text
+import Network.URI (parseURI, uriAuthority, uriPath, uriRegName)
 import Zuul.Config
   ( ConnectionName (ConnectionName),
     ConnectionUrl (..),
@@ -60,6 +61,10 @@ parseConfig sections = do
                 (Right canonicalName, Just url) ->
                   Just (ProviderName canonicalName, GerritUrl url)
                 _ -> Nothing
+            Just "git" -> do
+              case getGitProviderName sectionHM of
+                Left x -> error $ "Can't get git url: " <> Text.unpack x
+                Right pn -> Just (ProviderName pn, GitUrl pn)
             _ -> Nothing
 
     getConn :: ConfigSection -> Either Text (Maybe (ConnectionName, ProviderName))
@@ -70,10 +75,18 @@ parseConfig sections = do
               server <- getCanonicalName sectionHM
               pure $ Just (getSectionName sectionName, ProviderName server)
             Just "git" -> do
-              server <- HM.lookup "baseurl" sectionHM `orDie` "No baseurl"
-              pure $ Just (getSectionName sectionName, ProviderName server)
+              pn <- getGitProviderName sectionHM
+              pure $ Just (getSectionName sectionName, ProviderName pn)
             _ -> pure Nothing
-    getSectionName sn = ConnectionName $ Text.drop 11 sn
+
+    -- return 'host' from "baseurl=http://host:42/"
+    getGitProviderName section = do
+      uri <- (parseURI . from =<< HM.lookup "baseurl" section) `orDie` "No baseurl"
+      host <- uriAuthority uri `orDie` "invalid url"
+      pure . from $ uriRegName host <> "/" <> drop 1 (uriPath uri)
+
+    dropSectionPrefix = Text.drop 11
+    getSectionName sn = ConnectionName $ dropSectionPrefix sn
     getCanonicalName hm = case HM.lookup "canonical_hostname" hm of
       Just hostname -> pure hostname
       Nothing -> getServer hm

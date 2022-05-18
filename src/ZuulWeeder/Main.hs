@@ -226,6 +226,10 @@ tls_ca=ca.pem
 driver=gerrit
 server=managesf.sftests.com
 canonical_hostname=sftests.com
+
+[connection git]
+driver=git
+baseurl=http://localhost/cgit
 |]
             )
         systemConfig <-
@@ -234,6 +238,11 @@ canonical_hostname=sftests.com
               [s|
 unparsed_abide:
   tenants:
+    demo:
+      source:
+        git:
+          config-projects:
+            - project-config: {}
     local:
       source:
         gerrit:
@@ -254,15 +263,13 @@ unparsed_abide:
 
   pure $ analyzeConfig tenantsConfig config
   where
+    mkConfigFile conn proj conf =
+      ZKConfig conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
     configFiles =
-      [ ZKConfig
+      [ mkConfigFile
           "sftests.com"
           "config"
-          "main"
-          (FilePathT ".zuul.yaml")
-          (FilePathT "/")
-          <$> decodeThrow
-            [s|
+          [s|
 - job:
     name: base
     nodeset: centos
@@ -273,19 +280,29 @@ unparsed_abide:
       - name: runner
         label: cloud-centos-7
 |],
-        ZKConfig
+        mkConfigFile
           "sftests.com"
           "sf-jobs"
-          "main"
-          (FilePathT ".zuul.yaml")
-          (FilePathT "/")
-          <$> decodeThrow
-            [s|
+          [s|
 - job:
     name: linter
     nodeset:
       nodes:
         - name: container
           label: pod-centos-7
+|],
+        mkConfigFile
+          "localhost/cgit"
+          "project-config"
+          [s|
+- job:
+    name: base
+    nodeset: rhel
+
+- nodeset:
+    name: rhel
+    nodes:
+      - name: runner
+        label: cloud-rhel-7
 |]
       ]

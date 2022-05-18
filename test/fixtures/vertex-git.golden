@@ -1,0 +1,16 @@
+Just
+    [
+        ( ConfigLoc
+            { project = CanonicalProjectName
+                ( ProviderName "localhost/cgit"
+                , ProjectName "project-config"
+                )
+            , branch = BranchName "main"
+            , path = ".zuul.yaml"
+            , url = GitUrl "localhost/cgit"
+            , tenants = fromList
+                [ TenantName "demo" ]
+            }
+        , NodeLabelName "cloud-rhel-7"
+        )
+    ]

@@ -87,6 +87,7 @@ library
                      , typed-process
                      , exceptions
                      , hashable
+                     , network-uri
                      -- Main
                      , optparse-applicative
                      -- UI
