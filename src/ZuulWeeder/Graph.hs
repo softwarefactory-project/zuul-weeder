@@ -146,9 +146,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
 
     go :: State Analysis ()
     go = do
-      goJobs $ concat $ Map.elems allJobs
-      goNodesets $ concat $ Map.elems config.nodesets
-      goProjectPipelines $ concat $ Map.elems config.projects
+      traverse_ goJob $ concat $ Map.elems allJobs
+      traverse_ goNodeset $ concat $ Map.elems config.nodesets
+      traverse_ goProjectPipeline $ concat $ Map.elems config.projects
     -- look for semaphore, secret, ...
 
     lookupTenant :: Ord a => [TenantName] -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
@@ -160,83 +160,71 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         matchingTenant :: ConfigLoc -> Bool
         matchingTenant loc = any (`elem` loc.tenants) tenants
 
-    goProjectPipelines :: [(ConfigLoc, Project)] -> State Analysis ()
-    goProjectPipelines pPipelines = do
-      -- TODO: filter using tenant config
-      forM_ pPipelines $ \(loc, pPipeline) -> do
-        let src = mkVertex loc pPipeline
-        -- TODO: handle templates
-        forM_ pPipeline.pipelines $ \pipeline -> do
-          case lookupTenant loc.tenants pipeline.name config.pipelines of
-            Just xs ->
-              forM_ xs $ \(loc', pipeline') -> do
-                feedState (src, mkVertex loc' pipeline')
-            Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
-          forM_ pipeline.jobs $ \pJob -> do
-            case pJob of
-              pj@(PJName jobName) -> do
-                case lookupTenant loc.tenants jobName config.jobs of
-                  Just xs -> do
-                    -- TODO: filter using tenant config
-                    forM_ xs $ \(loc'', job) -> do
-                      feedState (src, mkVertex loc'' job)
-                  Nothing -> #graphErrors %= (("Can't find : " <> show pj) :)
-              PJJob _job -> do
-                -- TODO: handle inline job
-                pure ()
+    goProjectPipeline :: (ConfigLoc, Project) -> State Analysis ()
+    goProjectPipeline (loc, project) = do
+      let src = mkVertex loc project
+      -- TODO: handle templates
+      forM_ project.pipelines $ \pipeline -> do
+        case lookupTenant loc.tenants pipeline.name config.pipelines of
+          Just xs -> goFeedState src xs
+          Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
+        forM_ pipeline.jobs $ \pJob -> do
+          case pJob of
+            pj@(PJName jobName) -> do
+              case lookupTenant loc.tenants jobName config.jobs of
+                Just xs -> goFeedState src xs
+                Nothing -> #graphErrors %= (("Can't find : " <> show pj) :)
+            PJJob _job -> do
+              -- TODO: handle inline job
+              pure ()
 
-    -- TODO: connect to job
+    goNodeset :: (ConfigLoc, Nodeset) -> State Analysis ()
+    goNodeset (loc, nodeset) = do
+      let src = mkVertex loc nodeset
+      insertName src
+      forM_ nodeset.labels $ \label -> do
+        let dst = mkVertex loc label
+        insertName dst
+        feedState (src, dst)
 
-    goNodesets :: [(ConfigLoc, Nodeset)] -> State Analysis ()
-    goNodesets nodesets = do
-      forM_ nodesets $ \(loc, nodeset) -> do
-        let src = mkVertex loc nodeset
-        insertName src
-        forM_ nodeset.labels $ \label -> do
-          let dst = mkVertex loc label
-          insertName dst
-          feedState (src, dst)
+    goJob :: (ConfigLoc, Job) -> State Analysis ()
+    goJob (loc, job) = do
+      let src = mkVertex loc job
+      insertName src
+      -- look for nodeset location
+      case job.nodeset of
+        Just (JobNodeset nodeset) -> case lookupTenant loc.tenants nodeset config.nodesets of
+          Just xs -> goFeedState src xs
+          Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
+        Just (JobAnonymousNodeset nodeLabels) -> do
+          forM_ nodeLabels $ \nodeLabel -> do
+            let dst = mkVertex loc nodeLabel
+            insertName dst
+            feedState (src, dst)
+        _ -> pure ()
 
-    goJobs :: [(ConfigLoc, Job)] -> State Analysis ()
-    goJobs jobs = do
-      -- TODO: filter using tenant config
-      forM_ jobs $ \(loc, job) -> do
-        let src = mkVertex loc job
-        insertName src
-        -- look for nodeset location
-        case job.nodeset of
-          Just (JobNodeset nodeset) -> case lookupTenant loc.tenants nodeset config.nodesets of
-            Just xs ->
-              forM_ xs $ \(loc', ns) -> feedState (src, mkVertex loc' ns)
-            Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
-          Just (JobAnonymousNodeset nodeLabels) -> do
-            forM_ nodeLabels $ \nodeLabel -> do
-              let dst = mkVertex loc nodeLabel
-              insertName dst
-              feedState (src, dst)
-          _ -> pure ()
+      -- look for job parent
+      case job.parent of
+        Just parent -> do
+          case lookupTenant loc.tenants parent allJobs of
+            Just xs -> goFeedState src xs
+            Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
+        Nothing -> pure ()
 
-        -- look for job parent
-        case job.parent of
-          Just parent -> do
-            case lookupTenant loc.tenants parent allJobs of
-              Just xs ->
-                forM_ xs $ \(loc', pj) -> feedState (src, mkVertex loc' pj)
-              Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
-          Nothing -> pure ()
+      -- look for job dependencies
+      forM_ job.dependencies $ \dJob' -> do
+        case lookupTenant loc.tenants dJob' allJobs of
+          -- TODO: look in priority for PJJob defined in the same loc
+          Just xs -> goFeedState src xs
+          Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
 
-        -- look for job dependencies
-        forM_ job.dependencies $ \dJob' -> do
-          case lookupTenant loc.tenants dJob' allJobs of
-            Just xs ->
-              -- TODO: look in priority for PJJob defined in the same loc
-              forM_ xs $ \(loc', dJob) -> feedState (src, mkVertex loc' dJob)
-            Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
+    goFeedState :: From a VertexName => Vertex -> [(ConfigLoc, a)] -> State Analysis ()
+    goFeedState src = traverse_ (\(loc, dst) -> feedState (src, mkVertex loc dst))
 
     feedState :: (Vertex, Vertex) -> State Analysis ()
     feedState (a, b) = do
       #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
       #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
 
-    insertName v = do
-      #vertices %= Set.insert v
+    insertName :: Vertex -> State Analysis ()
+    insertName v = #vertices %= Set.insert v
