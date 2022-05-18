@@ -1,194 +1,25 @@
-module Zuul.ConfigLoader where
+module Zuul.ConfigLoader
+  ( -- * The resulting configuration
+    Config (..),
+    ConfigMap,
+    loadConfig,
+    emptyConfig,
+    TenantResolver,
+
+    -- * Test helper
+    decodeConfig
+  )
+where
 
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Map (insertWith)
 import Data.Set qualified
-import Data.Text qualified as Text
-import Data.Text.Lazy.Builder qualified as TB
 import Data.Vector qualified as V
-import Zuul.ZKDump (ConfigError (..), ZKConfig (..))
+import Zuul.ZooKeeper (ConfigError (..), ZKConfig (..))
 import ZuulWeeder.Prelude
-
-newtype BranchName = BranchName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype JobName = JobName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving (Display) via (ShowInstance JobName)
-  deriving newtype (Hashable)
-
-newtype PipelineName = PipelineName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype ProjectName = ProjectName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype ProjectNameRE = ProjectNameRE Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype NodesetName = NodesetName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-  deriving (Display) via (ShowInstance NodesetName)
-
-newtype NodeLabelName = NodeLabelName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-  deriving (Display) via (ShowInstance NodeLabelName)
-
-newtype ProviderName = ProviderName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype ProjectTemplateName = ProjectTemplateName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName)
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype ConnectionName = ConnectionName Text
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-newtype TenantName = TenantName {getName :: Text}
-  deriving (Show, Eq, Ord, Generic)
-  deriving newtype (Hashable)
-
-data JobNodeset
-  = JobNodeset NodesetName
-  | JobAnonymousNodeset [NodeLabelName]
-  deriving (Eq, Ord, Show, Generic, Hashable)
-
-data Nodeset = Nodeset
-  { name :: NodesetName,
-    labels :: [NodeLabelName]
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data Job = Job
-  { name :: JobName,
-    parent :: Maybe JobName,
-    nodeset :: Maybe JobNodeset,
-    branches :: [BranchName],
-    dependencies :: [JobName]
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data PipelineJob
-  = PJName JobName
-  | PJJob Job
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data PPipeline = PPipeline
-  { name :: PipelineName,
-    jobs :: [PipelineJob]
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data Project = Project
-  { name :: ProjectName,
-    templates :: [ProjectTemplateName],
-    pipelines :: Data.Set.Set PPipeline
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data ProjectTemplate = ProjectTemplate
-  { name :: ProjectTemplateName,
-    pipelines :: Data.Set.Set PPipeline
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-newtype PipelineTrigger = PipelineTrigger {connectionName :: ConnectionName}
-  deriving (Show, Ord, Eq, Generic)
-  deriving newtype (Hashable)
-
-data Pipeline = Pipeline
-  { name :: PipelineName,
-    triggers :: [PipelineTrigger]
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data Queue = Queue {name :: Text, perBranch :: Bool} deriving (Show, Eq, Ord, Generic, Hashable)
-
-data Semaphore = Semaphore {name :: Text, max :: Int} deriving (Show, Eq, Ord, Generic, Hashable)
-
-data ZuulConfigElement
-  = ZJob Job
-  | ZProject Project
-  | ZNodeset Nodeset
-  | ZProjectTemplate ProjectTemplate
-  | ZPipeline Pipeline
-  | ZQueue Queue
-  | ZSemaphore Semaphore
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data ZuulConfigType
-  = PipelineT
-  | JobT
-  | SemaphoreT
-  | ProjectT
-  | ProjectTemplateT
-  | NodesetT
-  | SecretT
-  | QueueT
-  deriving (Show, Eq, Ord, Enum, Bounded, Generic, Hashable)
-
-instance From ZuulConfigElement ZuulConfigType where
-  from zce = case zce of
-    ZJob _ -> JobT
-    ZProject _ -> ProjectT
-    ZNodeset _ -> NodesetT
-    ZProjectTemplate _ -> ProjectTemplateT
-    ZPipeline _ -> PipelineT
-    ZQueue _ -> QueueT
-    ZSemaphore _ -> SemaphoreT
-
-instance From ZuulConfigType Text where
-  from zce = case zce of
-    PipelineT -> "pipeline"
-    JobT -> "job"
-    SemaphoreT -> "semaphore"
-    ProjectT -> "project-pipeline"
-    ProjectTemplateT -> "project-template"
-    NodesetT -> "nodeset"
-    SecretT -> "secret"
-    QueueT -> "queue"
-
-instance Display ZuulConfigElement where
-  displayBuilder zce = case zce of
-    ZJob job -> displayBuilder $ job.name
-    ZNodeset ns -> displayBuilder $ ns.name
-    _ -> error "display instance todo"
-
-data ConfigLoc = ConfigLoc
-  { project :: CanonicalProjectName,
-    branch :: BranchName,
-    path :: FilePathT,
-    tenants :: [TenantName]
-  }
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-instance Display CanonicalProjectName where
-  displayBuilder (CanonicalProjectName (_, ProjectName projectName)) = TB.fromText projectName
-
-instance Display ConfigLoc where
-  displayBuilder loc =
-    displayBuilder loc.project
-      <> branchBuilder
-      <> TB.fromText ": "
-      <> displayBuilder loc.path
-    where
-      branchBuilder = case loc.branch of
-        BranchName "master" -> ""
-        BranchName n -> TB.fromText $ "[" <> n <> "]"
+import Zuul.Config
 
 type ConfigMap a b = Map a [(ConfigLoc, b)]
 
@@ -314,11 +145,11 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
             Nothing -> ProjectName (providerName <> "/" <> projectName)
             Just name' -> ProjectName name'
           templates = decodeAsList "templates" ProjectTemplateName va
-          pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
+          pipelines = Data.Set.fromList $ mapMaybe decodeProjectPipeline (HM.toList va)
        in Project {..}
 
-    decodePPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe PPipeline
-    decodePPipeline (Data.Aeson.Key.toText -> pipelineName', va')
+    decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe ProjectPipeline
+    decodeProjectPipeline (Data.Aeson.Key.toText -> pipelineName', va')
       | pipelineName' `elem` ["name", "vars", "description"] = Nothing
       | pipelineName' == "templates" = Nothing -- TODO: decode templates
       | pipelineName' == "queue" = Nothing -- TODO: decode project queues
@@ -327,18 +158,18 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
             let name = PipelineName pipelineName'
                 jobs = case HM.lookup "jobs" inner of
                   -- Just (String name') -> [PJName $ JobName name']
-                  Just (Array jobElems) -> decodePPipelineJob <$> V.toList jobElems
+                  Just (Array jobElems) -> decodeProjectPipelineJob <$> V.toList jobElems
                   _ -> [] -- pipeline has no jobs
                   -- TODO: decode pipeline queue
                 _queue = case HM.lookup "queue" inner of
                   Just (String queueName) -> Just queueName
                   Just _ -> error $ "Unexpected queue name: " <> show inner
                   Nothing -> Nothing
-             in Just $ PPipeline {..}
+             in Just $ ProjectPipeline {..}
           _ -> error $ "Unexpected pipeline: " <> show va'
       where
-        decodePPipelineJob :: Value -> PipelineJob
-        decodePPipelineJob jobElem = case jobElem of
+        decodeProjectPipelineJob :: Value -> PipelineJob
+        decodeProjectPipelineJob jobElem = case jobElem of
           Object jobObj ->
             let key = getKey jobObj
                 name = JobName key
@@ -356,7 +187,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
       case getString <$> HM.lookup "name" va of
         Nothing -> error "Un-named project template"
         Just (ProjectTemplateName -> name) ->
-          let pipelines = Data.Set.fromList $ mapMaybe decodePPipeline (HM.toList va)
+          let pipelines = Data.Set.fromList $ mapMaybe decodeProjectPipeline (HM.toList va)
            in ProjectTemplate {..}
 
     -- Zuul config elements are object with an unique key
@@ -367,28 +198,6 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
 
     getName :: Object -> Text
     getName = getString . getObjValue "name"
-
-decodeAsList :: Text -> (Text -> a) -> Object -> [a]
-decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
-  Just (String x) -> [build x]
-  Just (Array xs) -> build . getString <$> sort (V.toList xs)
-  Just _va -> error $ "Unexpected " <> Text.unpack k <> " structure: " <> show _va
-  Nothing -> []
-
-unwrapObject :: Value -> Object
-unwrapObject va = case va of
-  Object hm -> hm
-  _ -> error $ "Expecting an Object out of JSON Value: " <> show va
-
-getObjValue :: Text -> Object -> Value
-getObjValue k hm = case HM.lookup (Data.Aeson.Key.fromText k) hm of
-  Just va -> va
-  Nothing -> error $ "Unable to get " <> Text.unpack k <> " from Object: " <> show (HM.keys hm)
-
-getString :: Value -> Text
-getString va = case va of
-  String str -> str
-  _ -> error $ "Expected a String out of JSON value: " <> show va
 
 type TenantResolver = ConfigLoc -> ZuulConfigType -> [TenantName]
 

@@ -4,27 +4,15 @@ import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
 import Data.Map qualified as Map
-import Data.Set qualified as Set
 import Data.Text qualified as Text
+import Data.Set qualified as Set
 import Data.Vector qualified as V
-import Zuul.ConfigLoader
-  ( CanonicalProjectName (CanonicalProjectName),
-    ConfigLoc (..),
-    ConnectionName (ConnectionName),
-    JobName (JobName),
-    ProjectName (ProjectName),
-    ProviderName (ProviderName),
-    TenantName (TenantName),
-    ZuulConfigType (..),
-    decodeAsList,
-    getObjValue,
-    unwrapObject,
-  )
-import Zuul.ServiceConfig (ConnectionCName (ConnectionCName), ServiceConfig (..))
-import Zuul.ZKDump (ZKSystemConfig (..))
+import Zuul.Config
+import Zuul.ServiceConfig (ConnectionCanonicalName (ConnectionCanonicalName), ServiceConfig (..))
+import Zuul.ZooKeeper (ZKSystemConfig (..))
 import ZuulWeeder.Prelude
 
-allItems :: Set.Set ZuulConfigType
+allItems :: Set ZuulConfigType
 allItems = Set.fromList [minBound .. maxBound]
 
 toItemType :: Text -> ZuulConfigType
@@ -40,7 +28,7 @@ toItemType name = case name of
 
 data TenantProject = TenantProject
   { projectName :: ProjectName,
-    includedConfigElements :: Set.Set ZuulConfigType,
+    includedConfigElements :: Set ZuulConfigType,
     configPaths :: [FilePathT]
   }
   deriving (Show, Eq, Ord, Generic)
@@ -55,12 +43,12 @@ data TenantConnectionConfig = TenantConnectionConfig
 
 data TenantConfig = TenantConfig
   { defaultParent :: JobName,
-    connections :: Map.Map ConnectionName TenantConnectionConfig
+    connections :: Map ConnectionName TenantConnectionConfig
   }
   deriving (Show, Eq, Ord, Generic)
 
 newtype TenantsConfig = TenantsConfig
-  { tenants :: Map.Map TenantName TenantConfig
+  { tenants :: Map TenantName TenantConfig
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -130,7 +118,7 @@ getTenantProjects serviceConfig tenantsConfig tenantName =
     extractProject (connectionName, TenantConnectionConfig {..}) =
       let projects = configProjects <> untrustedProjects
           providerName = case Map.lookup connectionName serviceConfig.connections of
-            Just (ConnectionCName pn) -> ProviderName pn
+            Just (ConnectionCanonicalName pn) -> ProviderName pn
             Nothing -> error "Unable to find project connection's provider name"
        in ( \TenantProject {..} ->
               ( CanonicalProjectName (providerName, projectName),
@@ -151,7 +139,7 @@ tenantResolver serviceConfig tenantsConfig configLoc zct = matches
         matchProject :: TenantProject -> Bool
         matchProject TenantProject {..} =
           let providerName = case Map.lookup cn serviceConfig.connections of
-                Just (ConnectionCName pn) -> ProviderName pn
+                Just (ConnectionCanonicalName pn) -> ProviderName pn
                 Nothing -> error "Unable to find project connection's provider name"
            in and
                 [ CanonicalProjectName (providerName, projectName) == configLoc.project,

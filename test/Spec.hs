@@ -8,10 +8,11 @@ import Test.Tasty
 import Test.Tasty.Golden (goldenVsString)
 import Test.Tasty.HUnit
 import Text.Pretty.Simple (pShowNoColor)
+import Zuul.Config
 import Zuul.ConfigLoader
 import Zuul.ServiceConfig
 import Zuul.Tenant
-import Zuul.ZKDump (ZKConfig (..), ZKSystemConfig (ZKSystemConfig), mkZKConfig)
+import Zuul.ZooKeeper
 import ZuulWeeder.Prelude
 
 main :: IO ()
@@ -45,13 +46,13 @@ loadJSONFixture name = do
 tests :: TestTree
 tests =
   testGroup
-    "ZKDump module"
+    "ZooKeeper module"
     [ testCase "Extract data from ZK path" extractDataZKPath,
       goldenTest "Decode Jobs config" "jobs" decodeJobsConfig,
       goldenTest "Decode Projects config" "projects" decodeProjectsConfig,
       goldenTest "Decode Nodesets config" "nodesets" decodeNodesetsConfig,
       goldenTest "Decode Project templates config" "project-templates" decodeProjectTemplatesConfig,
-      goldenTest "Decode Pipeline config" "pipelines" decodePipelineConfig,
+      goldenTest "Decode Pipeline config" "pipelines" decodeProjectPipeline,
       goldenTest "Decode Tenant config" "system-config" decodeTenants,
       testCase "Decode Connections config" decodeServiceConfig,
       goldenTest "Get Tenant projects" "zuul" testGetTenantProjects
@@ -94,7 +95,7 @@ tests =
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
       pure $ sort decoded
 
-    decodePipelineConfig = do
+    decodeProjectPipeline = do
       json <- loadFixture "pipelines"
       let decoded = decodeConfig (CanonicalProjectName (ProviderName "", ProjectName ""), BranchName "") json
       pure $ sort decoded
@@ -106,9 +107,9 @@ tests =
 
     decodeServiceConfig = do
       conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))
-      let expected = [(ConnectionName "gerrit", ConnectionCName "sftests.com")]
+      let expected = [(ConnectionName "gerrit", ConnectionCanonicalName "sftests.com")]
       assertEqual "Expect connections extracted from Zuul.conf" expected (Data.Map.toList conf.connections)
-      assertEqual "Expect zk conf" ["localhost", "key.pem", "cert.pem", "ca.pem"] conf.zookeeper
+      assertEqual "Expect zk conf" (ZKConnection ["localhost", "key.pem", "cert.pem", "ca.pem"]) conf.zookeeper
 
     testGetTenantProjects = do
       conf <- fromEither <$> runExceptT (readServiceConfig (fixturesPath </> "zuul.conf"))

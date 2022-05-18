@@ -97,7 +97,8 @@ library
                      , string-qq
                      , http-api-data
   hs-source-dirs:      src
-  exposed-modules:     Zuul.ZKDump
+  exposed-modules:     Zuul.ZooKeeper
+                     , Zuul.Config
                      , Zuul.ConfigLoader
                      , Zuul.Tenant
                      , Zuul.ServiceConfig

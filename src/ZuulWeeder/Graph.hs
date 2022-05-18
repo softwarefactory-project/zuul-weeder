@@ -19,7 +19,8 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Text.Lazy.Builder qualified as TB
-import Zuul.ConfigLoader
+import Zuul.Config
+import Zuul.ConfigLoader (Config (..), ConfigMap)
 import Zuul.Tenant
 import ZuulWeeder.Prelude
 
@@ -83,7 +84,7 @@ mkVertex loc x = Vertex loc.tenants (from x)
 
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
-findReachable :: Vertex -> ConfigGraph -> Set.Set Vertex
+findReachable :: Vertex -> ConfigGraph -> Set Vertex
 findReachable v = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.reachable v
 
 filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
@@ -110,7 +111,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     baseJobs :: [(JobName, [TenantName])]
     baseJobs = Map.toList baseJobsMap
       where
-        baseJobsMap :: Map.Map JobName [TenantName]
+        baseJobsMap :: Map JobName [TenantName]
         baseJobsMap = foldr insertTenant mempty (Map.toList tenantsConfig)
         insertTenant (tenantName, tenantConfig) =
           Map.insertWith mappend tenantConfig.defaultParent [tenantName]

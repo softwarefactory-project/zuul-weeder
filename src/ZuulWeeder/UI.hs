@@ -1,5 +1,3 @@
-{-# LANGUAGE QuasiQuotes #-}
-
 -- | The web interface for zuul-weeder
 -- The UI is implemented with
 -- * htmx - https://htmx.org/docs/#introduction
@@ -21,7 +19,8 @@ import Servant
 import Servant.HTML.Lucid (HTML)
 import Servant.Server.StaticFiles qualified
 import Web.FormUrlEncoded (FromForm)
-import Zuul.ConfigLoader
+import Zuul.Config
+import Zuul.ConfigLoader (Config (..))
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 

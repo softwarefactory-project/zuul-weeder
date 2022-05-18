@@ -1,21 +1,27 @@
--- | A zuul.conf loader
-module Zuul.ServiceConfig (ServiceConfig (..), ConnectionCName (..), readServiceConfig) where
+-- | The Zuul Service configuration (zuul.conf)
+module Zuul.ServiceConfig
+  ( ServiceConfig (..),
+    ConnectionCanonicalName (..),
+    readServiceConfig,
+  )
+where
 
 import Data.HashMap.Strict qualified as HM
 import Data.Ini qualified
 import Data.Map qualified as Map
 import Data.Text qualified as Text
-import Zuul.ConfigLoader (ConnectionName (ConnectionName))
+import Zuul.Config (ConnectionName (ConnectionName))
+import Zuul.ZooKeeper (ZKConnection (..))
 import ZuulWeeder.Prelude
 
-newtype ConnectionCName = ConnectionCName Text deriving (Show, Eq, Ord)
+newtype ConnectionCanonicalName = ConnectionCanonicalName Text deriving (Show, Eq, Ord)
 
 type ConfigSection = (Text, [(Text, Text)])
 
 data ServiceConfig = ServiceConfig
-  { connections :: Map ConnectionName ConnectionCName,
+  { connections :: Map ConnectionName ConnectionCanonicalName,
     -- | The dump script parameter: hosts, key, cert, ca
-    zookeeper :: [Text]
+    zookeeper :: ZKConnection
   }
 
 readServiceConfig :: FilePathT -> ExceptT Text IO ServiceConfig
@@ -30,14 +36,14 @@ parseConfig sections = do
   zookeeper <- do
     zkSection <- getZkSection
     let getZK k = lookup k zkSection `orDie` ("No " <> k <> " in zookeeper section")
-    traverse getZK ["hosts", "tls_key", "tls_cert", "tls_ca"]
+    ZKConnection <$> traverse getZK ["hosts", "tls_key", "tls_cert", "tls_ca"]
   connections <- Map.fromList . catMaybes <$> traverse getConn (HM.toList connSections)
   pure $ ServiceConfig {connections, zookeeper}
   where
     getZkSection = HM.lookup "zookeeper" sections `orDie` "No zookeeper section"
     connSections = HM.filterWithKey (\k _ -> Text.isPrefixOf "connection " k) sections
 
-    getConn :: ConfigSection -> Either Text (Maybe (ConnectionName, ConnectionCName))
+    getConn :: ConfigSection -> Either Text (Maybe (ConnectionName, ConnectionCanonicalName))
     getConn (sectionName, section) =
       let sectionHM = HM.fromList section
        in case HM.lookup "driver" sectionHM of
@@ -46,11 +52,11 @@ parseConfig sections = do
               pure $ Just (getSectionName sectionName, server)
             Just "git" -> do
               server <- HM.lookup "baseurl" sectionHM `orDie` "No baseurl"
-              pure $ Just (getSectionName sectionName, ConnectionCName server)
+              pure $ Just (getSectionName sectionName, ConnectionCanonicalName server)
             _ -> pure Nothing
     getSectionName sn = ConnectionName $ Text.drop 11 sn
     getCannonicalName hm =
-      ConnectionCName <$> case HM.lookup "canonical_hostname" hm of
+      ConnectionCanonicalName <$> case HM.lookup "canonical_hostname" hm of
         Just hostname -> pure hostname
         Nothing -> getServer hm
     getServer hm = case HM.lookup "server" hm of

@@ -1,13 +1,16 @@
-{-# LANGUAGE QuasiQuotes #-}
+-- | Data acquisition from ZooKeeper
+module Zuul.ZooKeeper
+  ( -- * fetch data
+    ZKConnection (..),
+    dumpZKConfig,
 
-module Zuul.ZKDump
-  ( walkConfigNodes,
+    -- * parser
+    walkConfigNodes,
     mkZKConfig,
     readSystemConfig,
     ZKConfig (..),
     ConfigError (..),
     ZKSystemConfig (..),
-    dumpZKConfig,
   )
 where
 
@@ -127,8 +130,11 @@ getTree("/zuul/config/cache")
 getTree("/zuul/system/conf")
 |]
 
-dumpZKConfig :: FilePathT -> [Text] -> ExceptT Text IO ()
-dumpZKConfig dataDir zkConf = do
+newtype ZKConnection = ZKConnection [Text] deriving (Eq, Show)
+
+-- | Dump the configuration found in ZooKeeper
+dumpZKConfig :: FilePathT -> ZKConnection -> ExceptT Text IO ()
+dumpZKConfig dataDir (ZKConnection zkConf) = do
   exitCode <- lift $ do
     whenM (doesDirectoryExist dataDir) $ do
       hPutStrLn stderr $ "[+] Removing " <> getPath' dataDir

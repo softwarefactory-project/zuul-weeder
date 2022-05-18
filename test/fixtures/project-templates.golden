@@ -2,7 +2,7 @@
     ( ProjectTemplate
         { name = ProjectTemplateName "sf-ci-jobs"
         , pipelines = fromList
-            [ PPipeline
+            [ ProjectPipeline
                 { name = PipelineName "check"
                 , jobs =
                     [ PJName
@@ -39,7 +39,7 @@
                         )
                     ]
                 }
-            , PPipeline
+            , ProjectPipeline
                 { name = PipelineName "gate"
                 , jobs =
                     [ PJName

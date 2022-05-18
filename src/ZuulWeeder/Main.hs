@@ -11,11 +11,11 @@ import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
 import Text.Pretty.Simple qualified
-import Zuul.ConfigLoader hiding (loadConfig)
-import Zuul.ConfigLoader qualified
+import Zuul.Config
+import Zuul.ConfigLoader (Config (..), TenantResolver, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
-import Zuul.ZKDump
+import Zuul.ZooKeeper
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 import ZuulWeeder.UI qualified
@@ -156,7 +156,7 @@ configLoader dataDir configFile = do
       -- decode the tenants config
       tenantsConfig <- except (decodeTenantsConfig systemConfig `orDie` "Invalid tenant config")
       -- load all the config objects
-      config <- lift $ loadConfig (Zuul.Tenant.tenantResolver serviceConfig tenantsConfig) dataDir
+      config <- lift $ loadConfigFiles (Zuul.Tenant.tenantResolver serviceConfig tenantsConfig) dataDir
       pure (tenantsConfig, config)
 
 outputDot :: ConfigLoader -> TenantName -> (Analysis -> ConfigGraph) -> IO ()
@@ -180,8 +180,8 @@ printReachable cl tenant key name graph = do
   forM_ reachables $ \obj -> do
     putStrLn $ Text.unpack $ display obj
 
-loadConfig :: TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
-loadConfig tr =
+loadConfigFiles :: TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
+loadConfigFiles tr =
   flip execStateT Zuul.ConfigLoader.emptyConfig
     -- StateT Config IO ()
     . S.effects

@@ -77,6 +77,12 @@ module ZuulWeeder.Prelude
     (%=),
     safeGet,
 
+    -- * aeson helpers
+    decodeAsList,
+    unwrapObject,
+    getObjValue,
+    getString,
+
     -- * text-display
     module Data.Text.Display,
   )
@@ -91,6 +97,9 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (State, StateT, execStateT)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Except (except)
+import Data.Aeson (Object, Value (Array, Object, String))
+import Data.Aeson.Key qualified
+import Data.Aeson.KeyMap qualified as HM
 import Data.ByteString qualified as BS
 import Data.Either (fromRight)
 import Data.Foldable (traverse_)
@@ -106,14 +115,16 @@ import Data.Maybe (catMaybes, fromMaybe, isJust, mapMaybe)
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.Text (Text, pack, unpack)
+import Data.Text qualified as Text
 import Data.Text.Display
+import Data.Vector qualified as V
 import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import System.Clock qualified
 import System.Directory qualified
+import System.Environment (lookupEnv)
 import System.FilePath qualified
 import System.IO (hPutStrLn, stderr)
-import System.Environment (lookupEnv)
 import Witch qualified
 
 newtype FilePathT = FilePathT {getPath :: Text}
@@ -157,3 +168,25 @@ fromEither :: Show a => Either a b -> b
 fromEither e = case e of
   Left x -> error (show x)
   Right x -> x
+
+decodeAsList :: Text -> (Text -> a) -> Object -> [a]
+decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
+  Just (String x) -> [build x]
+  Just (Array xs) -> build . getString <$> sort (V.toList xs)
+  Just _va -> error $ "Unexpected " <> Text.unpack k <> " structure: " <> show _va
+  Nothing -> []
+
+unwrapObject :: Value -> Object
+unwrapObject va = case va of
+  Object hm -> hm
+  _ -> error $ "Expecting an Object out of JSON Value: " <> show va
+
+getObjValue :: Text -> Object -> Value
+getObjValue k hm = case HM.lookup (Data.Aeson.Key.fromText k) hm of
+  Just va -> va
+  Nothing -> error $ "Unable to get " <> Text.unpack k <> " from Object: " <> show (HM.keys hm)
+
+getString :: Value -> Text
+getString va = case va of
+  String str -> str
+  _ -> error $ "Expected a String out of JSON value: " <> show va
