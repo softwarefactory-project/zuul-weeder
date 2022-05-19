@@ -34,6 +34,101 @@ data Context = Context
     scope :: Scope
   }
 
+mainBody :: Context -> Text -> Html () -> Html ()
+mainBody ctx page mainComponent =
+  doctypehtml_ do
+    head_ do
+      title_ "Zuul Weeder"
+      meta_ [charset_ "utf-8"]
+      meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1.0"]
+      link_ [href_ $ distUrl ctx "tailwind.css", rel_ "stylesheet"]
+      with (script_ mempty) [src_ $ distUrl ctx "d3.v4.min.js"]
+      with (script_ mempty) [src_ $ distUrl ctx "graph.js"]
+      with (script_ mempty) [src_ $ distUrl ctx "htmx.min.js"]
+      style_ css
+    with body_ [id_ "main"] do
+      navComponent ctx page
+      with div_ [class_ "container grid p-4"] mainComponent
+  where
+    css :: Text
+    css =
+      [s|
+.links line {
+  stroke: #999;
+  stroke-opacity: 0.6;
+}
+svg#d3 {
+  position: fixed;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  top: 0;
+  left: 0;
+  z-index: -1;
+}
+|]
+
+navComponent :: Context -> Text -> Html ()
+navComponent ctx page =
+  with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
+    with' div_ "flex-grow" do
+      with' span_ "font-semibold text-white" do
+        hxNavLink base Nothing "Zuul Weeder"
+      navLink "search" "Search"
+      navLink "info" "Info"
+    div_ do
+      exitScope
+      navLink "about" "About"
+      spinner
+  where
+    base = baseUrl ctx
+    navLink path =
+      let navLinkClass
+            | path == page || (path == "search" && page == "") = " bg-slate-500"
+            | otherwise = ""
+          extra
+            | path == "about" = " right"
+            | otherwise = ""
+          linkClass = "m-4 p-1 cursor-pointer text-white rounded hover:text-teal-500" <> navLinkClass <> extra
+       in hxNavLinkWithAttr [id_ $ "nav-" <> path] (base <> path) (Just linkClass)
+    exitScope =
+      case ctx.scope of
+        Scoped tenants -> hxNavLink (rootUrl ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
+        UnScoped -> pure ()
+      where
+        tenantClass = "my-4 p-1 text-white font-semibold "
+
+spinner :: Html ()
+spinner = with span_ [class_ "htmx-indicator font-semibold text-white", id_ "spinner"] "◌"
+
+hxNavLinkWithAttr :: [Attribute] -> Text -> Maybe Text -> Html () -> Html ()
+hxNavLinkWithAttr xs url extraClass =
+  with
+    a_
+    ( xs
+        <> [ hxGet url,
+             hxPushUrl,
+             hxIndicator "#spinner",
+             hxTarget "#main",
+             class_ ("cursor-pointer" <> maybe "" (mappend " ") extraClass),
+             href_ url
+           ]
+    )
+
+hxNavLink :: Text -> Maybe Text -> Html () -> Html ()
+hxNavLink = hxNavLinkWithAttr []
+
+welcomeComponent :: Context -> Html ()
+welcomeComponent ctx = do
+  searchComponent ctx Nothing mempty
+  script_ do
+    "renderToy();"
+
+aboutComponent :: Html ()
+aboutComponent = do
+  h2_ "Welcome"
+  p_ "Zuul Weeder is a web service to inspect Zuul configuration"
+
 tenantsList :: Set TenantName -> Text
 tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)
 
@@ -153,7 +248,7 @@ instance Data.Aeson.ToJSON D3Link
 instance Data.Aeson.ToJSON D3Graph
 
 vertexLink :: Context -> VertexName -> Html () -> Html ()
-vertexLink ctx name = with a_ [href_ ref]
+vertexLink ctx name = hxNavLink ref Nothing
   where
     ref =
       Text.intercalate
@@ -167,7 +262,7 @@ vertexLink ctx name = with a_ [href_ ref]
 tenantBaseLink :: RootURL -> TenantName -> Html ()
 tenantBaseLink rootURL tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
-    with a_ [href_ (tenantUrl rootURL tenant)] (toHtml (into @Text tenant))
+    hxNavLink (tenantUrl rootURL tenant) Nothing (toHtml (into @Text tenant))
 
 tenantLink :: RootURL -> VertexName -> TenantName -> Html ()
 tenantLink rootURL name tenant =
@@ -234,51 +329,17 @@ searchComponent ctx queryM result = do
       Just q -> value_ q
       Nothing -> placeholder_ "Begin Typing To Search Config..."
 
-hxTrigger, hxTarget, hxSwap, hxGet, hxPost, hxBoost :: Text -> Attribute
+hxTrigger, hxTarget, hxSwap, hxGet, hxPost, hxBoost, hxIndicator :: Text -> Attribute
 hxTrigger = makeAttribute "hx-trigger"
 hxTarget = makeAttribute "hx-target"
 hxSwap = makeAttribute "hx-swap"
 hxGet = makeAttribute "hx-get"
 hxPost = makeAttribute "hx-post"
 hxBoost = makeAttribute "hx-boost"
+hxIndicator = makeAttribute "hx-indicator"
 
-index :: Context -> Text -> Html () -> Html ()
-index ctx page mainComponent =
-  doctypehtml_ do
-    head_ do
-      title_ "Zuul Weeder"
-      meta_ [charset_ "utf-8"]
-      meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1.0"]
-      link_ [href_ $ distUrl ctx "tailwind.css", rel_ "stylesheet"]
-    body_ do
-      navComponent
-      with div_ [class_ "container grid p-4", id_ "main"] mainComponent
-      with (script_ mempty) [src_ $ distUrl ctx "htmx.min.js"]
-  where
-    base = baseUrl ctx
-
-    navComponent =
-      with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
-        with' div_ "flex-grow" do
-          with' span_ "font-semibold text-white" do
-            with a_ [href_ base] "Zuul Weeder"
-          navLink "search" "Search"
-          navLink "info" "Info"
-        div_ do
-          case ctx.scope of
-            Scoped tenants -> with a_ [href_ (rootUrl ctx.rootURL), tenantClass] (toHtml $ tenantsList tenants)
-            UnScoped -> pure ()
-          navLink "about" "About"
-    tenantClass = class_ "my-4 p-1 text-white font-semibold "
-    navLink path =
-      let navLinkClass
-            | path == page || (path == "search" && page == "") = " bg-slate-500"
-            | otherwise = ""
-          extra
-            | path == "about" = " right"
-            | otherwise = ""
-          linkClass = "m-4 p-1 text-white rounded hover:text-teal-500" <> navLinkClass <> extra
-       in with a_ [href_ (base <> path), class_ linkClass]
+hxPushUrl :: Attribute
+hxPushUrl = makeAttribute "hx-push-url" "true"
 
 infoComponent :: Context -> Analysis -> Html ()
 infoComponent ctx analysis = do
@@ -314,36 +375,6 @@ infoComponent ctx analysis = do
       UnScoped -> True
     keepTenants :: Set TenantName -> ConfigLoc -> Bool
     keepTenants tenants loc = tenants `Set.isSubsetOf` loc.tenants
-
-aboutComponent :: Html ()
-aboutComponent = do
-  h2_ "Welcome"
-  p_ "Zuul Weeder is a web service to inspect Zuul configuration"
-
-welcomeComponent :: Context -> Html ()
-welcomeComponent ctx = do
-  searchComponent ctx Nothing mempty
-  style_ css
-  with (script_ mempty) [src_ $ distUrl ctx "d3.v4.min.js"]
-  with (script_ mempty) [src_ $ distUrl ctx "graph.js"]
-  where
-    css :: Text
-    css =
-      [s|
-.links line {
-  stroke: #999;
-  stroke-opacity: 0.6;
-}
-svg#d3 {
-  position: fixed;
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  top: 0;
-  left: 0;
-  z-index: -1;
-}
-|]
 
 locLink :: ConfigLoc -> Html ()
 locLink loc =
@@ -456,14 +487,18 @@ type SearchPath =
   ReqBody '[FormUrlEncoded] SearchForm
     :> Post '[HTML] (Headers '[Header "HX-Push" Text] (Html ()))
 
+type GetRequest = Header "HX-Request" Text :> Get '[HTML] (Html ())
+
+-- | The zuul-weeder base HTTP API.
+-- The HX-Request header is set by inline navigation, when it is missing, the full body is returned.
 type BaseAPI =
-  Get '[HTML] (Html ())
-    :<|> "about" :> Get '[HTML] (Html ())
-    :<|> "search" :> Get '[HTML] (Html ())
-    :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
-    :<|> "info" :> Get '[HTML] (Html ())
+  GetRequest
+    :<|> "about" :> GetRequest
+    :<|> "search" :> GetRequest
+    :<|> "info" :> GetRequest
+    :<|> "object" :> Header "HX-Request" Text :> ObjectPath
     :<|> "search_results" :> SearchPath
-    :<|> "object" :> ObjectPath
+    :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
     :<|> "data.json" :> Get '[JSON] D3Graph
 
 type TenantAPI = "tenant" :> Capture "tenant" TenantsUrl :> BaseAPI
@@ -474,10 +509,9 @@ type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 
 run :: IO Analysis -> IO ()
 run config = do
-  envURL <- fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
-  let rootURL = RootURL (Text.pack envURL)
-      port = 8080
-  hPutStrLn stderr $ "[+] serving at " <> show port
+  rootURL <- RootURL . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
+  port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
+  hPutStrLn stderr $ "[+] serving 0.0.0.0:" <> show port <> from (rootUrl rootURL)
   Warp.run port (app config rootURL)
 
 app :: IO Analysis -> RootURL -> Application
@@ -490,20 +524,27 @@ app config rootURL = serve (Proxy @API) rootServer
         :<|> server . Context rootURL . Scoped . getTNU
     server :: Context -> Server BaseAPI
     server ctx =
-      pure (index ctx "" (welcomeComponent ctx))
-        :<|> pure (index ctx "about" aboutComponent)
-        :<|> searchRoute Nothing
-        :<|> searchRoute . Just
-        :<|> infoRoute
-        :<|> searchResultRoute
+      indexRoute "" (pure $ welcomeComponent ctx)
+        :<|> indexRoute "about" (pure aboutComponent)
+        :<|> flip searchRoute Nothing
+        :<|> indexRoute "info" (infoComponent ctx <$> liftIO config)
         :<|> objectRoute
+        :<|> searchResultRoute
+        :<|> searchRouteWithQuery
         :<|> d3Route
       where
-        infoRoute = do
-          analysis <- liftIO config
-          pure (index ctx "info" (infoComponent ctx analysis))
+        indexRoute :: Text -> Handler (Html ()) -> Maybe a -> Handler (Html ())
+        -- The HX-Request header is missing, return the full body
+        indexRoute name component Nothing = mainBody ctx name <$> component
+        -- The HX-Request header is set, return the component and update the nav links
+        indexRoute name component (Just _htmxRequest) = do
+          liftIO $ threadDelay 1_000_000
+          componentHtml <- component
+          pure do
+            navComponent ctx name
+            componentHtml
 
-        objectRoute (VTU mkName) (CNU name) = do
+        objectRoute htmxRequest (VTU mkName) (CNU name) = do
           analysis <- liftIO config
           let vname = mkName name
           let vertices = Set.toList $ Set.filter matchVertex analysis.vertices
@@ -512,17 +553,21 @@ app config rootURL = serve (Proxy @API) rootServer
                   matchTenant v = case ctx.scope of
                     Scoped xs -> xs `Set.isSubsetOf` v.tenants
                     UnScoped -> True
-          case NE.nonEmpty vertices of
-            Just xs -> pure (index ctx "object" (objectInfo ctx xs analysis))
-            Nothing -> pure "not found!"
+          let component = case NE.nonEmpty vertices of
+                Just xs -> pure (objectInfo ctx xs analysis)
+                Nothing -> pure "not found!"
+          indexRoute "object" component htmxRequest
 
-        searchRoute queryM = do
+        -- /search/query does not come from htmx, the body is always served
+        searchRouteWithQuery query = searchRoute Nothing (Just query)
+
+        searchRoute htmxRequest queryM = do
           result <- case queryM of
             Just query -> do
               analysis <- liftIO config
               pure . snd $ searchResults ctx query analysis.names
             Nothing -> pure mempty
-          pure (index ctx "search" (searchComponent ctx queryM result))
+          indexRoute "search" (pure $ searchComponent ctx queryM result) htmxRequest
 
         searchResultRoute req = do
           analysis <- liftIO config

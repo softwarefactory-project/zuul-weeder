@@ -13,16 +13,12 @@ function setSize() {
   maxY = height - radius;
 }
 
-setSize(); window.addEventListener('resize', setSize);
-var svg = d3.select("#main").append("svg").attr("id", "d3");
+  const clampX = x => Math.max(minX, Math.min(x, maxX));
+  const clampY = y => Math.max(minY, Math.min(y, maxY));
 
-var color = d3.scaleOrdinal(d3.schemeCategory20);
 
-var simulation = d3
-  .forceSimulation()
-  .force("link", d3.forceLink().id((d) => d.id))
-  .force("charge", d3.forceManyBody().strength(-5))
-  .force("center", d3.forceCenter(width / 2, height / 2));
+setSize();
+window.addEventListener('resize', setSize);
 
 const getColor = group => {switch (group) {
   case 1: return "#1f77b4";
@@ -37,10 +33,23 @@ const getColor = group => {switch (group) {
   case _: return "pink";
 }}
 
+function renderToy () {
+  console.log("Rendeing toy");
+let svg = d3.select("#main").append("svg").attr("id", "d3");
+
+let color = d3.scaleOrdinal(d3.schemeCategory20);
+
+let simulation = d3
+  .forceSimulation()
+  .force("link", d3.forceLink().id((d) => d.id))
+  .force("charge", d3.forceManyBody().strength(-5))
+  .force("center", d3.forceCenter(width / 2, height / 2));
+
+
 d3.json("data.json", function (error, graph) {
   if (error) throw error;
 
-  var link = svg
+  let link = svg
     .append("g")
     .attr("class", "links")
     .selectAll("line")
@@ -49,7 +58,7 @@ d3.json("data.json", function (error, graph) {
     .append("line")
     .attr("stroke-width", (d) => 1);
 
-  var node = svg
+  let node = svg
     .append("g")
     .attr("class", "nodes")
     .selectAll("circle")
@@ -72,9 +81,6 @@ d3.json("data.json", function (error, graph) {
 
   simulation.force("link").links(graph.links);
 
-  const clampX = x => Math.max(minX, Math.min(x, maxX));
-  const clampY = y => Math.max(minY, Math.min(y, maxY));
-
   function ticked() {
     node
       .attr("cx", (d) => {return d.x = clampX(d.x)})
@@ -85,9 +91,8 @@ d3.json("data.json", function (error, graph) {
       .attr("x2", (d) => d.target.x)
       .attr("y2", (d) => d.target.y);
   }
-});
 
-function dragstarted(d) {
+  function dragstarted(d) {
   if (!d3.event.active) simulation.alphaTarget(0.3).restart();
   d.fx = d.x;
   d.fy = d.y;
@@ -103,3 +108,6 @@ function dragended(d) {
   d.fx = null;
   d.fy = null;
 }
+});
+}
+

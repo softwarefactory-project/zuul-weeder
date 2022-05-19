@@ -28,6 +28,7 @@ module ZuulWeeder.Prelude
     nub,
     lookupEnv,
     NonEmpty,
+    threadDelay,
 
     -- * hashable
     Hashable,
@@ -95,6 +96,7 @@ module ZuulWeeder.Prelude
   )
 where
 
+import Control.Concurrent (threadDelay)
 import Control.Lens ((%=))
 import Control.Lens qualified
 import Control.Monad (forM_, unless, when)

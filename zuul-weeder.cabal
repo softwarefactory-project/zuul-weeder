@@ -54,6 +54,7 @@ common common-options
                      , GeneralizedNewtypeDeriving
                      , NegativeLiterals
                      , NamedFieldPuns
+                     , NumericUnderscores
                      , LambdaCase
                      -- For the new record dot syntax
                      -- , NoFieldSelectors
