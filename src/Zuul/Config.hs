@@ -87,6 +87,9 @@ newtype ConnectionName = ConnectionName Text
 
 data ConnectionUrl
   = GerritUrl Text
+  | GitlabUrl Text
+  | GithubUrl Text
+  | PagureUrl Text
   | GitUrl Text
   deriving (Eq, Ord, Show)
 

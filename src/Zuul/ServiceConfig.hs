@@ -51,21 +51,35 @@ parseConfig sections = do
     getGitwebBuilder (_, section) =
       let sectionHM = HM.fromList section
        in case HM.lookup "driver" sectionHM of
-            Just "gerrit" -> do
-              let baseUrl = case HM.lookup "baseurl" sectionHM of
-                    Just url -> Just url
-                    Nothing -> case getServer sectionHM of
-                      Right server -> Just $ "https://" <> server
-                      Left _ -> Nothing
-              case (getCanonicalName sectionHM, baseUrl) of
-                (Right canonicalName, Just url) ->
-                  Just (ProviderName canonicalName, GerritUrl url)
+            Just driver | driver `elem` ["gerrit", "gitlab", "pagure"] -> do
+              let baseUrl = getBaseUrl sectionHM
+              case getCanonicalName sectionHM of
+                Right canonicalName ->
+                  Just (ProviderName canonicalName, getUrl driver baseUrl)
+                _ -> Nothing
+            Just "github" -> do
+              let baseUrl = "https://" <> fromMaybe "github.com" (HM.lookup "server" sectionHM)
+              case getCanonicalName sectionHM of
+                Right canonicalName ->
+                  Just (ProviderName canonicalName, GithubUrl baseUrl)
                 _ -> Nothing
             Just "git" -> do
               case getGitProviderInfo sectionHM of
                 Left x -> error $ "Can't get git url: " <> Text.unpack x
                 Right (pn, baseUrl) -> Just (ProviderName pn, GitUrl baseUrl)
             _ -> Nothing
+      where
+        getUrl driver url = case driver of
+          "gerrit" -> GerritUrl url
+          "gitlab" -> GitlabUrl url
+          "pagure" -> PagureUrl url
+          _ -> error $ "Unknown driver type: " <> from driver
+        getBaseUrl :: HM.HashMap Text Text -> Text
+        getBaseUrl sectionHM = case HM.lookup "baseurl" sectionHM of
+          Just url -> url
+          Nothing -> case getServer sectionHM of
+            Right server -> "https://" <> server
+            Left _ -> error $ "Unable to find 'server' attribute in: " <> show sectionHM
 
     getConn :: ConfigSection -> Either Text (Maybe (ConnectionName, ProviderName))
     getConn (sectionName, section) =

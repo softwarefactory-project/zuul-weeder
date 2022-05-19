@@ -51,13 +51,24 @@ baseUrl ctx =
 
 configLocUrl :: ConfigLoc -> Text
 configLocUrl loc = case loc.url of
-  GerritUrl url ->
-    Text.dropWhileEnd (== '/') url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
-  GitUrl _ -> error "TODO"
+  GerritUrl url -> trimedUrl url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
+  GithubUrl url -> buildGithubUrl url
+  GitlabUrl url -> buildGitlabUrl url
+  PagureUrl url -> buildPagureUrl url
+  GitUrl url
+    | "gitlab.com" `Text.isInfixOf` url -> buildGitlabUrl url
+    | "github.com" `Text.isInfixOf` url -> buildGithubUrl url
+    | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
+    | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
+  GitUrl url -> trimedUrl url <> "/cgit/" <> name <> "/tree/" <> path <> "?h=" <> branch
   where
     CanonicalProjectName (_, ProjectName name) = loc.project
     BranchName branch = loc.branch
     FilePathT path = loc.path
+    trimedUrl = Text.dropWhileEnd (== '/')
+    buildGitlabUrl url = trimedUrl url <> name <> "/-/blob/" <> branch <> "/" <> path
+    buildPagureUrl url = trimedUrl url <> name <> "/blob/" <> branch <> "/f/" <> path
+    buildGithubUrl url = trimedUrl url <> name <> "/blob/" <> branch <> "/" <> path
 
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
@@ -334,12 +345,6 @@ svg#d3 {
 }
 |]
 
-locUrl :: ConfigLoc -> Text
-locUrl loc = "https://" <> locPath
-  where
-    CanonicalProjectName (ProviderName providerName, ProjectName projectName) = loc.project
-    locPath = Text.intercalate "/" [providerName, projectName, getPath loc.path]
-
 locLink :: ConfigLoc -> Html ()
 locLink loc =
   with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
@@ -347,7 +352,7 @@ locLink loc =
     toHtml locPath
   where
     -- TODO: render valid link based on config connection
-    url = locUrl loc
+    url = configLocUrl loc
     locPath = Text.drop 8 url
 
 locComponent :: ConfigLoc -> Html ()
