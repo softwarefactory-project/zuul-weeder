@@ -1,6 +1,6 @@
 module ZuulWeeder.Main (main, mainWithArgs, demoConfig) where
 
-import Data.IORef
+import Control.Concurrent.MVar
 import Data.Text qualified as Text
 import Data.Yaml (decodeThrow)
 import Streaming
@@ -55,15 +55,14 @@ configReloader cd cl = do
   -- Read the inital conf, error is fatal here
   conf <- either (error . Text.unpack) id <$> runExceptT cl
   -- Cache the result
-  cache <- newIORef (now, conf)
-  pure (go cache)
+  cache <- newMVar (now, conf)
+  pure (modifyMVar cache go)
   where
-    go cache = do
-      (ts, prev) <- readIORef cache
+    go cache@(ts, prev) = do
       now <- getSec
       if now - ts < 3600
         then -- conf is still fresh, we return
-          pure prev
+          pure (cache, prev)
         else -- conf is stall, we reload
         do
           confE <- runExceptT do
@@ -72,10 +71,9 @@ configReloader cd cl = do
           case confE of
             Left e -> do
               hPutStrLn stderr $ "Error reloading config: " <> Text.unpack e
-              pure prev
+              pure ((now, prev), prev)
             Right conf -> do
-              writeIORef cache (now, conf)
-              pure conf
+              pure ((now, conf), conf)
 
 -- | Create IO actions to dump and load the config
 configLoader :: FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
