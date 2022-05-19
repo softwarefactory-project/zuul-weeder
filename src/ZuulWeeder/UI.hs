@@ -26,14 +26,14 @@ import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 
 -- | The request context
-data Scope = UnScoped | Scoped (Set TenantName)
+data Scope = UnScoped | Scoped (Set TenantName) deriving (Show)
 
-newtype RootURL = RootURL {rootUrl :: Text}
+newtype RootURL = RootURL {rootUrl :: Text} deriving newtype (Show)
 
 data Context = Context
   { rootURL :: RootURL,
     scope :: Scope
-  }
+  } deriving (Show)
 
 mainBody :: Context -> Text -> Html () -> Html ()
 mainBody ctx page mainComponent =
@@ -123,7 +123,7 @@ welcomeComponent :: Context -> Html ()
 welcomeComponent ctx = do
   searchComponent ctx Nothing mempty
   script_ do
-    "renderToy();"
+    "renderToy('" <> baseUrl ctx <> "data.json');"
 
 aboutComponent :: Html ()
 aboutComponent = do
@@ -168,31 +168,25 @@ configLocUrl loc = case loc.url of
 
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
-toD3Graph scope g =
-  ZuulWeeder.UI.D3Graph
+toD3Graph scope g = ZuulWeeder.UI.D3Graph
     { ZuulWeeder.UI.nodes = toNodes <$> vertexes,
       ZuulWeeder.UI.links = toLinks <$> edges
     }
   where
     -- Keep the edges whose both vertex are in the current tenant
     keepTenant (a, b) = case scope of
-      Scoped tenants -> tenants `Set.isSubsetOf` a.tenants && tenants `Set.isSubsetOf` b.tenants
+      Scoped tenants -> tenants == a.tenants && tenants == b.tenants
       UnScoped -> True
 
     (edges, _) = splitAt 500 $ filter keepTenant $ Algebra.Graph.edgeList g
     -- edges = Algebra.Graph.edgeList g
     vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
-    toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    toNodes v = ZuulWeeder.UI.D3Node (toNode v) (nodeID v) $ vertexGroup v.name
 
-    toNode :: Vertex -> Text
-    toNode v = from v.name
+    toNodes :: Vertex -> ZuulWeeder.UI.D3Node
+    toNodes v = ZuulWeeder.UI.D3Node (from v.name) (hash v) $ vertexGroup v.name
 
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
-    toLinks (a, b) = ZuulWeeder.UI.D3Link (nodeID a) (nodeID b)
-
-    nodeID :: Vertex -> Int
-    nodeID = hash
+    toLinks (a, b) = ZuulWeeder.UI.D3Link (hash a) (hash b)
 
 vertexGroup :: VertexName -> Int
 vertexGroup = \case
