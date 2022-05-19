@@ -6,6 +6,7 @@
 -- After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
 module ZuulWeeder.UI where
 
+import Network.URI.Encode qualified
 import Algebra.Graph qualified
 import Data.Aeson qualified
 import Data.List.NonEmpty qualified as NE
@@ -256,7 +257,7 @@ vertexLink ctx name = hxNavLink ref Nothing
         [ baseUrl ctx <> "object",
           vertexTypeName name,
           -- TODO: url encode name
-          from name
+          Network.URI.Encode.encodeText (from name)
         ]
 
 tenantBaseLink :: RootURL -> TenantName -> Html ()
