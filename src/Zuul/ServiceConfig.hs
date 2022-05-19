@@ -9,7 +9,7 @@ import Data.HashMap.Strict qualified as HM
 import Data.Ini qualified
 import Data.Map qualified as Map
 import Data.Text qualified as Text
-import Network.URI (parseURI, uriAuthority, uriPath, uriRegName)
+import Network.URI (parseURI, uriAuthority, uriRegName)
 import Zuul.Config
   ( ConnectionName (ConnectionName),
     ConnectionUrl (..),
@@ -62,9 +62,9 @@ parseConfig sections = do
                   Just (ProviderName canonicalName, GerritUrl url)
                 _ -> Nothing
             Just "git" -> do
-              case getGitProviderName sectionHM of
+              case getGitProviderInfo sectionHM of
                 Left x -> error $ "Can't get git url: " <> Text.unpack x
-                Right pn -> Just (ProviderName pn, GitUrl pn)
+                Right (pn, baseUrl) -> Just (ProviderName pn, GitUrl baseUrl)
             _ -> Nothing
 
     getConn :: ConfigSection -> Either Text (Maybe (ConnectionName, ProviderName))
@@ -75,15 +75,16 @@ parseConfig sections = do
               server <- getCanonicalName sectionHM
               pure $ Just (getSectionName sectionName, ProviderName server)
             Just "git" -> do
-              pn <- getGitProviderName sectionHM
+              (pn, _) <- getGitProviderInfo sectionHM
               pure $ Just (getSectionName sectionName, ProviderName pn)
             _ -> pure Nothing
 
-    -- return 'host' from "baseurl=http://host:42/"
-    getGitProviderName section = do
-      uri <- (parseURI . from =<< HM.lookup "baseurl" section) `orDie` "No baseurl"
+    -- return ('host','http://host:42/') from "baseurl=http://host:42/"
+    getGitProviderInfo section = do
+      baseUrl <- HM.lookup "baseurl" section `orDie` "No baseurl"
+      uri <- parseURI (from baseUrl) `orDie` ("Unable to parse URI: " <> baseUrl)
       host <- uriAuthority uri `orDie` "invalid url"
-      pure . from $ uriRegName host <> "/" <> drop 1 (uriPath uri)
+      pure (from $ uriRegName host, baseUrl)
 
     dropSectionPrefix = Text.drop 11
     getSectionName sn = ConnectionName $ dropSectionPrefix sn

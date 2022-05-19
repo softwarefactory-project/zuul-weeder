@@ -292,7 +292,7 @@ unparsed_abide:
           label: pod-centos-7
 |],
         mkConfigFile
-          "localhost/cgit"
+          "localhost"
           "project-config"
           [s|
 - job:

@@ -2,12 +2,12 @@ Just
     [
         ( ConfigLoc
             { project = CanonicalProjectName
-                ( ProviderName "localhost/cgit"
+                ( ProviderName "localhost"
                 , ProjectName "project-config"
                 )
             , branch = BranchName "main"
             , path = ".zuul.yaml"
-            , url = GitUrl "localhost/cgit"
+            , url = GitUrl "http://localhost/cgit"
             , tenants = fromList
                 [ TenantName "demo" ]
             }
