@@ -83,7 +83,6 @@ library
                      , vector
                      , ini
                      , witch
-                     , pretty-simple
                      , clock
                      , typed-process
                      , exceptions

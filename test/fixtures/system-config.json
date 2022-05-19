@@ -1,64 +1,71 @@
 {
-    "system_attributes": {
-        "default_ansible_version": null,
-        "default_hold_expiration": 86400,
-        "max_hold_expiration": 0,
-        "use_relative_priority": false,
-        "web_root": "https://sftests.com/zuul/t/{tenant.name}/",
-        "web_status_url": "",
-        "websocket_url": null
-    },
-    "unparsed_abide": {
-        "admin_rules": [
-            {
-                "conditions": [
-                    {
-                        "groups": "config-ptl"
-                    },
-                    {
-                        "groups": "config-core"
-                    }
-                ],
-                "name": "config-acl"
-            }
+  "system_attributes": {
+    "default_ansible_version": null,
+    "default_hold_expiration": 86400,
+    "max_hold_expiration": 0,
+    "use_relative_priority": false,
+    "web_root": "https://sftests.com/zuul/t/{tenant.name}/",
+    "web_status_url": "",
+    "websocket_url": null
+  },
+  "unparsed_abide": {
+    "admin_rules": [
+      {
+        "conditions": [
+          {
+            "groups": "config-ptl"
+          },
+          {
+            "groups": "config-core"
+          }
         ],
-        "tenants": {
-            "local": {
-                "max-job-timeout": 10800,
-                "name": "local",
-                "report-build-page": true,
-                "default-parent": "base",
-                "source": {
-                    "gerrit": {
-                        "config-projects": [
-                            {
-                                "config": {}
-                            }
-                        ],
-                        "untrusted-projects": [
-                            {
-                                "sf-jobs": {
-                                    "exclude": "pipeline"
-                                }
-                            },
-                            {
-                                "zuul-jobs": {
-                                    "include": [
-                                        "job"
-                                    ],
-                                    "shadow": "sf-jobs"
-                                }
-                            },
-                            {
-                                "zuul-distro-jobs": {
-                                    "include": []
-                                }
-                            }
-                        ]
-                    }
+        "name": "config-acl"
+      }
+    ],
+    "tenants": {
+      "local": {
+        "max-job-timeout": 10800,
+        "name": "local",
+        "report-build-page": true,
+        "default-parent": "base",
+        "source": {
+          "gerrit": {
+            "config-projects": [
+              {
+                "config": {}
+              },
+              "project-config"
+            ],
+            "untrusted-projects": [
+              {
+                "sf-jobs": {
+                  "exclude": "pipeline"
                 }
-            }
-        },
-        "uuid": "b748d19f1c674b29b728d81e79520635"
-    }
+              },
+              {
+                "zuul-jobs": {
+                  "include": [
+                    "job"
+                  ],
+                  "shadow": "sf-jobs"
+                }
+              },
+              {
+                "zuul-distro-jobs": {
+                  "include": []
+                }
+              },
+              {
+                "include": [],
+                "projects": [
+                  "no-include-proj"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "uuid": "b748d19f1c674b29b728d81e79520635"
+  }
 }

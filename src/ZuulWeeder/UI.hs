@@ -445,7 +445,8 @@ objectInfo ctx vertices analysis = do
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
-      _ -> error "Config lookup not implemented"
+      VNodeset name -> getLocs $ Map.lookup name analysis.config.nodesets
+      VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
     dependsOn = Set.toList $ findReachable vertices analysis.configDependsOnGraph
     required = Set.toList $ findReachable vertices analysis.configRequireGraph
     renderVertexes :: [Vertex] -> Html ()

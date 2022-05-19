@@ -3,6 +3,7 @@ module Zuul.Tenant where
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
+import Data.Aeson.Types qualified
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -93,9 +94,20 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
         getProjects :: Text -> [TenantProject]
         getProjects ptype = case HM.lookup (Data.Aeson.Key.fromText ptype) $ unwrapObject cnx of
           Just (Data.Aeson.String name) -> [TenantProject (ProjectName name) mempty defaultPaths]
-          Just (Data.Aeson.Array vec) -> getProject <$> concatMap (HM.toList . unwrapObject) (V.toList vec)
+          Just (Data.Aeson.Array vec) -> getProject <$> concatMap decodeProjectItems (V.toList vec)
           _ -> []
-        -- TODO: support https://zuul-ci.org/docs/zuul/latest/tenants.html#attr-tenant.untrusted-projects.%3Cproject-group%3E
+
+        decodeProjectItems :: Data.Aeson.Value -> [(Data.Aeson.Key.Key, Data.Aeson.Value)]
+        decodeProjectItems x = case x of
+          Data.Aeson.Object o
+            | isJust (HM.lookup "projects" o) -> map (getProjectGroup x) (decodeAsList "projects" id o)
+            | otherwise -> HM.toList o
+          Data.Aeson.String v -> [(Data.Aeson.Key.fromText v, Data.Aeson.Types.emptyObject)]
+          _ -> error $ "Invalid object definition: " <> show x
+
+        getProjectGroup :: Data.Aeson.Value -> Text -> (Data.Aeson.Key.Key, Data.Aeson.Value)
+        getProjectGroup v n = (Data.Aeson.Key.fromText n, v)
+
         getProject :: (Data.Aeson.Key.Key, Data.Aeson.Value) -> TenantProject
         getProject (Data.Aeson.Key.toText -> name, options') =
           let options = unwrapObject options'

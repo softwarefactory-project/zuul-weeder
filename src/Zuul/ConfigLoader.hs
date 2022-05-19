@@ -107,14 +107,19 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
         decodeJobNodeset = case HM.lookup "nodeset" va of
           Just (String n) -> Just . JobNodeset $ NodesetName n
           Just (Object nObj) -> case getObjValue "nodes" nObj of
-            Array nodes ->
-              Just $
-                JobAnonymousNodeset $
-                  NodeLabelName . getString . getObjValue "label"
-                    <$> (unwrapObject <$> sort (V.toList nodes))
+            Array nodes -> decodeJobNodesetNodes (V.toList nodes)
+            o@(Object _) -> decodeJobNodesetNodes [o]
             _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
           Just _va -> error $ "Unexpected nodeset structure: " <> show _va
           Nothing -> Nothing
+
+        decodeJobNodesetNodes :: [Value] -> Maybe JobNodeset
+        decodeJobNodesetNodes xs =
+          Just $
+            JobAnonymousNodeset $
+              NodeLabelName . getString . getObjValue "label"
+                <$> (unwrapObject <$> sort xs)
+
         decodeJobBranches :: [BranchName]
         decodeJobBranches = decodeAsList "branches" BranchName va
         decodeJobDependencies :: [JobName]
@@ -151,7 +156,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
 
     decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe ProjectPipeline
     decodeProjectPipeline (Data.Aeson.Key.toText -> pipelineName', va')
-      | pipelineName' `elem` ["name", "vars", "description"] = Nothing
+      | pipelineName' `elem` ["name", "vars", "description", "default-branch", "merge-mode", "squash-merge"] = Nothing
       | pipelineName' == "templates" = Nothing -- TODO: decode templates
       | pipelineName' == "queue" = Nothing -- TODO: decode project queues
       | otherwise = case va' of

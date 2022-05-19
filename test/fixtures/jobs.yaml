@@ -40,7 +40,9 @@
       gateway_url: "https://sftests.com"
       tenant_config: False
     nodeset:
-      nodes: []
+      nodes:
+        name: test-node
+        label: cloud-fedora-35
 
 - job:
     name: config-update

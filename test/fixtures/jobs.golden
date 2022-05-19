@@ -16,7 +16,9 @@
         , parent = Just
             ( JobName "base" )
         , nodeset = Just
-            ( JobAnonymousNodeset [] )
+            ( JobAnonymousNodeset
+                [ NodeLabelName "cloud-fedora-35" ]
+            )
         , branches =
             [ BranchName "master" ]
         , dependencies =

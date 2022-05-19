@@ -18,6 +18,22 @@ Just
     ,
         ( CanonicalProjectName
             ( ProviderName "sftests.com"
+            , ProjectName "project-config"
+            )
+        ,
+            [ PipelineT
+            , JobT
+            , SemaphoreT
+            , ProjectT
+            , ProjectTemplateT
+            , NodesetT
+            , SecretT
+            , QueueT
+            ]
+        )
+    ,
+        ( CanonicalProjectName
+            ( ProviderName "sftests.com"
             , ProjectName "sf-jobs"
             )
         ,
@@ -41,6 +57,13 @@ Just
         ( CanonicalProjectName
             ( ProviderName "sftests.com"
             , ProjectName "zuul-distro-jobs"
+            )
+        , []
+        )
+    ,
+        ( CanonicalProjectName
+            ( ProviderName "sftests.com"
+            , ProjectName "no-include-proj"
             )
         , []
         )

@@ -77,17 +77,18 @@ configReloader cd cl = do
 
 -- | Create IO actions to dump and load the config
 configLoader :: FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
-configLoader dataDir configFile = do
+configLoader dataBaseDir configFile = do
   -- Load the zuul.conf
   serviceConfig <- readServiceConfig (readFileText configFile)
   pure (configDumper serviceConfig, go serviceConfig)
   where
+    dataDir = dataBaseDir </> "data"
     configDumper :: ServiceConfig -> ConfigDumper
     configDumper serviceConfig = ConfigDumper do
       env <- lift $ lookupEnv "ZUUL_WEEDER_NO_ZK"
       case env of
         Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
-        Nothing -> dumpZKConfig (dataDir </> "data") serviceConfig.zookeeper
+        Nothing -> dumpZKConfig dataDir serviceConfig.zookeeper
     cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
     go :: ServiceConfig -> ExceptT Text IO (TenantsConfig, Config)
     go serviceConfig = do
