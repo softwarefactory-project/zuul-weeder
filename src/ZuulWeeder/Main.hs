@@ -1,11 +1,21 @@
-module ZuulWeeder.Main (main, mainWithArgs, demoConfig) where
+module ZuulWeeder.Main (main, mainWithArgs, runDemo, demoConfig) where
 
 import Control.Concurrent.MVar
+import Data.ByteString qualified as BS
 import Data.Text qualified as Text
 import Data.Yaml (decodeThrow)
+import Main.Utf8 (withUtf8)
+import Network.HTTP.Types.Status qualified as HTTP
+import Network.Socket qualified
+import Network.Wai qualified as Wai
+import Network.Wai.Handler.Warp as Warp (run)
+import Prometheus qualified
+import Prometheus.Metric.GHC qualified
 import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
+import System.Log.FastLogger qualified
+import Web.HttpApiData (toHeader)
 import Zuul.ConfigLoader (Config (..), TenantResolver, UrlBuilder, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
@@ -27,25 +37,84 @@ getEnvArgs =
     envPath name def = FilePathT . Text.pack . fromMaybe def <$> lookupEnv name
 
 main :: IO ()
-main = getEnvArgs >>= mainWithArgs
+main = withUtf8 $ withLogger (\l -> getEnvArgs >>= mainWithArgs l)
 
-mainWithArgs :: Args -> IO ()
-mainWithArgs args = do
+withLogger :: (Logger -> IO ()) -> IO ()
+withLogger cb = do
+  tc <- System.Log.FastLogger.newTimeCache "%F %T "
+  System.Log.FastLogger.withTimedFastLogger tc l cb
+  where
+    l = System.Log.FastLogger.LogStderr 1024
+
+mainWithArgs :: Logger -> Args -> IO ()
+mainWithArgs logger args = do
   (cd, cl) <- do
-    cl <- runExceptT $ configLoader args.zkPath args.configPath
+    cl <- runExceptT $ configLoader logger args.zkPath args.configPath
     case cl of
       Left e -> error $ Text.unpack $ "Can't load config: " <> e
       Right x -> pure x
-  cr <- configReloader cd cl
-  ZuulWeeder.UI.run cr
+  cr <- configReloader logger cd cl
+  runWeb logger cr
+
+runDemo :: IO ()
+runDemo = do
+  Prometheus.unregisterAll
+  withLogger $ \l -> runWeb l demoConfig
+
+runWeb :: Logger -> IO Analysis -> IO ()
+runWeb logger config = do
+  rootUrl <- ensureTrailingSlash . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
+  distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
+  port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
+  info logger $ "[+] serving 0.0.0.0:" <> toHeader port <> from rootUrl
+  let app = ZuulWeeder.UI.app config (ZuulWeeder.UI.RootURL rootUrl) distPath
+  -- monitornig
+  void $ Prometheus.register Prometheus.Metric.GHC.ghcMetrics
+  counter <- Prometheus.register $ Prometheus.counter (Prometheus.Info "http_request" "")
+  Warp.run port $ monitoring logger counter app
+  where
+    ensureTrailingSlash url = case Text.unsnoc url of
+      Nothing -> "/"
+      Just (x, '/') -> ensureTrailingSlash x
+      _ -> Text.snoc url '/'
+
+monitoring :: Logger -> Prometheus.Counter -> Wai.Middleware
+monitoring logger counter baseApp req resp = case Wai.rawPathInfo req of
+  "/health" -> resp $ Wai.responseLBS HTTP.ok200 [] mempty
+  "/metrics" -> resp . Wai.responseLBS HTTP.ok200 [] =<< Prometheus.exportMetricsAsText
+  p | "/dists/" `BS.isPrefixOf` p -> baseApp req resp
+  p -> do
+    measure <- intervalMilliSec
+    baseApp req $ \r -> do
+      Prometheus.incCounter counter
+      result <- resp r
+      elapsed <- measure
+      let statusCode = HTTP.statusCode $ Wai.responseStatus r
+          htmx = any (\h -> fst h == "HX-Request") $ Wai.requestHeaders req
+          client = remoteHash (Wai.remoteHost req) + hash (Wai.requestHeaderUserAgent req)
+          msg =
+            p
+              <> (" code=" <> toHeader statusCode)
+              <> (" ms=" <> toHeader elapsed)
+              <> (" htmx=" <> toHeader htmx)
+              <> (" client=" <> toHeader client)
+              <> "\n"
+      info logger msg
+      pure result
+  where
+    remoteHash :: Network.Socket.SockAddr -> Int
+    remoteHash = \case
+      Network.Socket.SockAddrInet _ h -> hash h
+      Network.Socket.SockAddrInet6 _ h _ _ -> hash h
+      Network.Socket.SockAddrUnix _ -> 0
 
 newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 
 type ConfigLoader = ExceptT Text IO (TenantsConfig, Config)
 
 -- | Create a IO action that reloads the config every hour.
-configReloader :: ConfigDumper -> ConfigLoader -> IO (IO Analysis)
-configReloader cd cl = do
+configReloader :: Logger -> ConfigDumper -> ConfigLoader -> IO (IO Analysis)
+configReloader logger cd cl = do
   -- Get current time
   now <- getSec
   -- Read the inital conf, error is fatal here
@@ -62,23 +131,23 @@ configReloader cd cl = do
           pure (cache, prev)
         else -- conf is stall, we reload
         do
-          info "Loading the configuration"
+          info logger "Loading the configuration"
           confE <- runExceptT do
             dumpConfig cd
             cl
           case confE of
             Left e -> do
-              hPutStrLn stderr $ "Error reloading config: " <> Text.unpack e
+              info logger $ "Error reloading config: " <> from e
               pure ((now, prev), prev)
             Right conf -> do
-              info "Building the graph"
+              info logger "Building the graph"
               let analysis = uncurry analyzeConfig conf
-              info "Caching the results"
+              info logger "Caching the results"
               pure ((now, analysis), analysis)
 
 -- | Create IO actions to dump and load the config
-configLoader :: FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
-configLoader dataBaseDir configFile = do
+configLoader :: Logger -> FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
+configLoader logger dataBaseDir configFile = do
   -- Load the zuul.conf
   serviceConfig <- readServiceConfig (readFileText configFile)
   pure (configDumper serviceConfig, go serviceConfig)
@@ -89,7 +158,7 @@ configLoader dataBaseDir configFile = do
       env <- lift $ lookupEnv "ZUUL_WEEDER_NO_ZK"
       case env of
         Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
-        Nothing -> dumpZKConfig dataDir serviceConfig.zookeeper
+        Nothing -> dumpZKConfig logger dataDir serviceConfig.zookeeper
     cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
     go :: ServiceConfig -> ExceptT Text IO (TenantsConfig, Config)
     go serviceConfig = do

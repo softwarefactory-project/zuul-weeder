@@ -3,6 +3,7 @@ module ZuulWeeder.Prelude
   ( module Prelude,
 
     -- * logger
+    Logger,
     info,
 
     -- * base
@@ -22,6 +23,7 @@ module ZuulWeeder.Prelude
     elemIndex,
     hPutStrLn,
     stderr,
+    bool,
     orDie,
     fromEither,
     Int64,
@@ -43,6 +45,7 @@ module ZuulWeeder.Prelude
 
     -- * clock
     getSec,
+    intervalMilliSec,
 
     -- * filepath text
     FilePathT (..),
@@ -112,12 +115,13 @@ import Control.Monad.Trans.Except (except)
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM
+import Data.Bool (bool)
+import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Either (fromRight)
 import Data.Foldable (traverse_)
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
--- This import is necessary to bring orphan Lens instance for #labels
 import Data.Generics.Labels ()
 import Data.Hashable (Hashable, hash)
 import Data.Int (Int64)
@@ -141,14 +145,17 @@ import System.Directory qualified
 import System.Environment (lookupEnv)
 import System.FilePath qualified
 import System.IO (hPutStrLn, stderr)
+import System.Log.FastLogger qualified
 import Witch qualified
 
 newtype FilePathT = FilePathT {getPath :: Text}
   deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Hashable)
   deriving (Display) via (ShowInstance Text)
 
-info :: Text -> IO ()
-info = putStrLn . Witch.from . mappend "[+] "
+type Logger = System.Log.FastLogger.TimedFastLogger
+
+info :: Logger -> ByteString -> IO ()
+info logger msg = logger (\time -> System.Log.FastLogger.toLogStr $ time <> msg <> "\n")
 
 whenM :: Monad m => m Bool -> m () -> m ()
 whenM test action = do
@@ -180,6 +187,14 @@ getSec :: IO Int64
 getSec = do
   System.Clock.TimeSpec sec _ <- System.Clock.getTime System.Clock.Monotonic
   pure sec
+
+intervalMilliSec :: IO (IO Int64)
+intervalMilliSec = do
+  start <- System.Clock.getTime System.Clock.Monotonic
+  pure $ do
+    end <- System.Clock.getTime System.Clock.Monotonic
+    let ns = System.Clock.toNanoSecs $ System.Clock.diffTimeSpec end start
+    pure $ fromIntegral (ns `div` 1_000_000)
 
 -- | From https://www.haskellforall.com/2021/05/the-trick-to-avoid-deeply-nested-error.html
 orDie :: Maybe a -> b -> Either b a

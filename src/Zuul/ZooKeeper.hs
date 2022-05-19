@@ -132,13 +132,13 @@ getTree("/zuul/system/conf")
 newtype ZKConnection = ZKConnection [Text] deriving (Eq, Show)
 
 -- | Dump the configuration found in ZooKeeper
-dumpZKConfig :: FilePathT -> ZKConnection -> ExceptT Text IO ()
-dumpZKConfig dataDir (ZKConnection zkConf) = do
+dumpZKConfig :: Logger -> FilePathT -> ZKConnection -> ExceptT Text IO ()
+dumpZKConfig logger dataDir (ZKConnection zkConf) = do
   exitCode <- lift $ do
     whenM (doesDirectoryExist dataDir) $ do
-      info $ "Removing " <> getPath dataDir
+      info logger $ "Removing " <> from (getPath dataDir)
       System.Directory.removeDirectoryRecursive $ getPath' dataDir
-    info $ "Dumping with " <> Text.pack (show zkConf)
+    info logger $ "Dumping with " <> from (show zkConf)
     System.Process.Typed.runProcess process
   case exitCode of
     System.Process.Typed.ExitSuccess -> pure ()

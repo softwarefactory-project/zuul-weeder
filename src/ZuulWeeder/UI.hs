@@ -6,7 +6,6 @@
 -- After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
 module ZuulWeeder.UI where
 
-import Network.URI.Encode qualified
 import Algebra.Graph qualified
 import Data.Aeson qualified
 import Data.List.NonEmpty qualified as NE
@@ -15,7 +14,7 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Lucid
 import Lucid.Base (makeAttribute)
-import Network.Wai.Handler.Warp as Warp (run)
+import Network.URI.Encode qualified
 import Servant hiding (Context)
 import Servant.HTML.Lucid (HTML)
 import Servant.Server.StaticFiles qualified
@@ -33,7 +32,8 @@ newtype RootURL = RootURL {rootUrl :: Text} deriving newtype (Show)
 data Context = Context
   { rootURL :: RootURL,
     scope :: Scope
-  } deriving (Show)
+  }
+  deriving (Show)
 
 mainBody :: Context -> Text -> Html () -> Html ()
 mainBody ctx page mainComponent =
@@ -168,7 +168,8 @@ configLocUrl loc = case loc.url of
 
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
-toD3Graph scope g = ZuulWeeder.UI.D3Graph
+toD3Graph scope g =
+  ZuulWeeder.UI.D3Graph
     { ZuulWeeder.UI.nodes = toNodes <$> vertexes,
       ZuulWeeder.UI.links = toLinks <$> edges
     }
@@ -503,15 +504,7 @@ type StaticAPI = "dists" :> Raw
 
 type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 
-run :: IO Analysis -> IO ()
-run config = do
-  rootURL <- RootURL . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
-  distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
-  port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
-  hPutStrLn stderr $ "[+] serving 0.0.0.0:" <> show port <> from (rootUrl rootURL)
-  Warp.run port (app config rootURL distPath)
-
-app :: IO Analysis -> RootURL -> FilePath ->  Application
+app :: IO Analysis -> RootURL -> FilePath -> Application
 app config rootURL distPath = serve (Proxy @API) rootServer
   where
     rootServer :: Server API

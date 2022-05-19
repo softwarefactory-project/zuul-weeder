@@ -1,0 +1,6 @@
+#!/bin/sh -xe
+nix build --no-link -L .#containerImage
+IMG=$(nix path-info .#containerImage)
+trap "nix store delete '${IMG}'" SIGINT SIGTERM ERR EXIT
+mkdir -p /tmp/podman
+cat $IMG | TMPDIR=/tmp/podman podman load
