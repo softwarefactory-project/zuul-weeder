@@ -510,16 +510,17 @@ type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 run :: IO Analysis -> IO ()
 run config = do
   rootURL <- RootURL . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
+  distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
   port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
   hPutStrLn stderr $ "[+] serving 0.0.0.0:" <> show port <> from (rootUrl rootURL)
-  Warp.run port (app config rootURL)
+  Warp.run port (app config rootURL distPath)
 
-app :: IO Analysis -> RootURL -> Application
-app config rootURL = serve (Proxy @API) rootServer
+app :: IO Analysis -> RootURL -> FilePath ->  Application
+app config rootURL distPath = serve (Proxy @API) rootServer
   where
     rootServer :: Server API
     rootServer =
-      Servant.Server.StaticFiles.serveDirectoryWebApp "dists"
+      Servant.Server.StaticFiles.serveDirectoryWebApp distPath
         :<|> server (Context rootURL UnScoped)
         :<|> server . Context rootURL . Scoped . getTNU
     server :: Context -> Server BaseAPI
@@ -538,7 +539,6 @@ app config rootURL = serve (Proxy @API) rootServer
         indexRoute name component Nothing = mainBody ctx name <$> component
         -- The HX-Request header is set, return the component and update the nav links
         indexRoute name component (Just _htmxRequest) = do
-          liftIO $ threadDelay 1_000_000
           componentHtml <- component
           pure do
             navComponent ctx name

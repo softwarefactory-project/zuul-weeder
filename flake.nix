@@ -1,3 +1,6 @@
+# Build the container image using:
+#   nix build -L .#containerImage
+#   TMPDIR=/tmp/podman podman load < result
 {
   description = "Zuul Weeder";
   nixConfig.bash-prompt = "[nix(zuul-weeder)] ";
@@ -42,9 +45,30 @@
           pkgs.haskell.packages.ghc922.override haskellOverrides;
         zuulWeederPackage = haskellPackages.callCabal2nix packageName self { };
 
+        distFiles = pkgs.runCommand "copy-dists" { } ''
+          mkdir $out
+          cp -v ${./dists}/* $out/
+        '';
+
+        exe = pkgs.haskell.lib.justStaticExecutables zuulWeederPackage;
+
       in {
-        defaultExe = pkgs.haskell.lib.justStaticExecutables zuulWeederPackage;
+        defaultExe = exe;
         defaultPackage = zuulWeederPackage;
+
+        packages.containerImage = pkgs.dockerTools.buildLayeredImage {
+          name = "quay.io/software-factory/zuul-weeder";
+          tag = "latest";
+          extraCommands = ''
+            #!${pkgs.runtimeShell}
+            mkdir -p var/tmp/weeder
+          '';
+          contents = [ exe distFiles python ];
+          config = {
+            Entrypoint = [ "zuul-weeder" ];
+            Env = [ "WEEDER_DIST_PATH=${toString distFiles}" ];
+          };
+        };
 
         devShell = haskellPackages.shellFor {
           packages = p: [ zuulWeederPackage ];

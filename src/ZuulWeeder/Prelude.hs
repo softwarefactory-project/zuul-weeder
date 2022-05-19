@@ -2,6 +2,9 @@
 module ZuulWeeder.Prelude
   ( module Prelude,
 
+    -- * logger
+    info,
+
     -- * base
     Generic,
     catMaybes,
@@ -143,6 +146,9 @@ import Witch qualified
 newtype FilePathT = FilePathT {getPath :: Text}
   deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Hashable)
   deriving (Display) via (ShowInstance Text)
+
+info :: Text -> IO ()
+info = putStrLn . Witch.from . mappend "[+] "
 
 whenM :: Monad m => m Bool -> m () -> m ()
 whenM test action = do

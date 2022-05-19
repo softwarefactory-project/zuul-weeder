@@ -136,9 +136,9 @@ dumpZKConfig :: FilePathT -> ZKConnection -> ExceptT Text IO ()
 dumpZKConfig dataDir (ZKConnection zkConf) = do
   exitCode <- lift $ do
     whenM (doesDirectoryExist dataDir) $ do
-      hPutStrLn stderr $ "[+] Removing " <> getPath' dataDir
+      info $ "Removing " <> getPath dataDir
       System.Directory.removeDirectoryRecursive $ getPath' dataDir
-    hPutStrLn stderr $ "[+] Dumping with " <> show zkConf
+    info $ "Dumping with " <> Text.pack (show zkConf)
     System.Process.Typed.runProcess process
   case exitCode of
     System.Process.Typed.ExitSuccess -> pure ()
