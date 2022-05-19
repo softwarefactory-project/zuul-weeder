@@ -36,28 +36,25 @@ mainWithArgs args = do
     case cl of
       Left e -> error $ Text.unpack $ "Can't load config: " <> e
       Right x -> pure x
-  rc <- configReloader cd cl
-  ZuulWeeder.UI.run do
-    info "Loading the configuration"
-    (tenants, config) <- rc
-    info "Building the graph"
-    pure $ analyzeConfig tenants config
+  cr <- configReloader cd cl
+  ZuulWeeder.UI.run cr
 
 newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 
 type ConfigLoader = ExceptT Text IO (TenantsConfig, Config)
 
 -- | Create a IO action that reloads the config every hour.
-configReloader :: ConfigDumper -> ConfigLoader -> IO (IO (TenantsConfig, Config))
+configReloader :: ConfigDumper -> ConfigLoader -> IO (IO Analysis)
 configReloader cd cl = do
   -- Get current time
   now <- getSec
   -- Read the inital conf, error is fatal here
   conf <- either (error . Text.unpack) id <$> runExceptT cl
   -- Cache the result
-  cache <- newMVar (now, conf)
+  cache <- newMVar (now, uncurry analyzeConfig conf)
   pure (modifyMVar cache go)
   where
+    go :: (Int64, Analysis) -> IO ((Int64, Analysis), Analysis)
     go cache@(ts, prev) = do
       now <- getSec
       if now - ts < 3600
@@ -65,6 +62,7 @@ configReloader cd cl = do
           pure (cache, prev)
         else -- conf is stall, we reload
         do
+          info "Loading the configuration"
           confE <- runExceptT do
             dumpConfig cd
             cl
@@ -73,7 +71,10 @@ configReloader cd cl = do
               hPutStrLn stderr $ "Error reloading config: " <> Text.unpack e
               pure ((now, prev), prev)
             Right conf -> do
-              pure ((now, conf), conf)
+              info "Building the graph"
+              let analysis = uncurry analyzeConfig conf
+              info "Caching the results"
+              pure ((now, analysis), analysis)
 
 -- | Create IO actions to dump and load the config
 configLoader :: FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
