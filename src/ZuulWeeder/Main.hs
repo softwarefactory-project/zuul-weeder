@@ -1,7 +1,10 @@
 module ZuulWeeder.Main (main, mainWithArgs, runDemo, demoConfig) where
 
+import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar
 import Data.ByteString qualified as BS
+import Data.IORef
+import Data.Maybe (isNothing)
 import Data.Text qualified as Text
 import Data.Yaml (decodeThrow)
 import Main.Utf8 (withUtf8)
@@ -15,6 +18,7 @@ import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
 import System.Log.FastLogger qualified
+import System.Timeout (timeout)
 import Web.HttpApiData (toHeader)
 import Zuul.ConfigLoader (Config (..), TenantResolver, UrlBuilder, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
@@ -48,13 +52,13 @@ withLogger cb = do
 
 mainWithArgs :: Logger -> Args -> IO ()
 mainWithArgs logger args = do
-  (cd, cl) <- do
-    cl <- runExceptT $ configLoader logger args.zkPath args.configPath
-    case cl of
+  (configDump, configLoader) <- do
+    configLoader <- runExceptT $ mkConfigLoader logger args.zkPath args.configPath
+    case configLoader of
       Left e -> error $ Text.unpack $ "Can't load config: " <> e
       Right x -> pure x
-  cr <- configReloader logger cd cl
-  runWeb logger cr
+  config <- configReloader logger configDump configLoader
+  runWeb logger config
 
 runDemo :: IO ()
 runDemo = do
@@ -110,44 +114,49 @@ monitoring logger counter baseApp req resp = case Wai.rawPathInfo req of
 
 newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 
-type ConfigLoader = ExceptT Text IO (TenantsConfig, Config)
+newtype ConfigLoader = ConfigLoader {loadConfig :: ExceptT Text IO (TenantsConfig, Config)}
 
 -- | Create a IO action that reloads the config every hour.
 configReloader :: Logger -> ConfigDumper -> ConfigLoader -> IO (IO Analysis)
-configReloader logger cd cl = do
+configReloader logger configDumper configLoader = do
   -- Get current time
   now <- getSec
   -- Read the inital conf, error is fatal here
-  conf <- either (error . Text.unpack) id <$> runExceptT cl
+  conf <- either (error . Text.unpack) id <$> runExceptT (configLoader.loadConfig)
   -- Cache the result
-  cache <- newMVar (now, uncurry analyzeConfig conf)
-  pure (modifyMVar cache go)
+  cache <- newIORef (uncurry analyzeConfig conf)
+  ts <- newMVar (now, cache)
+  pure (modifyMVar ts go)
   where
-    go :: (Int64, Analysis) -> IO ((Int64, Analysis), Analysis)
-    go cache@(ts, prev) = do
+    go :: (Int64, IORef Analysis) -> IO ((Int64, IORef Analysis), Analysis)
+    go (ts, cache) = do
+      analysis <- readIORef cache
       now <- getSec
       if now - ts < 3600
-        then -- conf is still fresh, we return
-          pure (cache, prev)
-        else -- conf is stall, we reload
-        do
-          info logger "Loading the configuration"
-          confE <- runExceptT do
-            dumpConfig cd
-            cl
-          case confE of
-            Left e -> do
-              info logger $ "Error reloading config: " <> from e
-              pure ((now, prev), prev)
-            Right conf -> do
-              info logger "Building the graph"
-              let analysis = uncurry analyzeConfig conf
-              info logger "Caching the results"
-              pure ((now, analysis), analysis)
+        then pure ((ts, cache), analysis)
+        else do
+          reload cache
+          pure ((now, cache), analysis)
+
+    reload :: IORef Analysis -> IO ()
+    reload cache = void $ forkIO do
+      res <- timeout 600_000_000 $ do
+        info logger "ReLoading the configuration"
+        confE <- runExceptT do
+          configDumper.dumpConfig
+          configLoader.loadConfig
+        case confE of
+          Left e -> do
+            info logger ("Error reloading config: " <> from e)
+          Right conf -> do
+            info logger "Caching the graph result"
+            writeIORef cache (uncurry analyzeConfig conf)
+      when (isNothing res) do
+        info logger "Error reloading config timeout"
 
 -- | Create IO actions to dump and load the config
-configLoader :: Logger -> FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
-configLoader logger dataBaseDir configFile = do
+mkConfigLoader :: Logger -> FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
+mkConfigLoader logger dataBaseDir configFile = do
   -- Load the zuul.conf
   serviceConfig <- readServiceConfig (readFileText configFile)
   pure (configDumper serviceConfig, go serviceConfig)
@@ -160,8 +169,8 @@ configLoader logger dataBaseDir configFile = do
         Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
         Nothing -> dumpZKConfig logger dataDir serviceConfig.zookeeper
     cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
-    go :: ServiceConfig -> ExceptT Text IO (TenantsConfig, Config)
-    go serviceConfig = do
+    go :: ServiceConfig -> ConfigLoader
+    go serviceConfig = ConfigLoader do
       -- ensure data-dir exists
       whenM (not <$> lift (doesDirectoryExist cp)) (dumpConfig $ configDumper serviceConfig)
       -- read the tenants config from dataDir
