@@ -1,30 +1,29 @@
-module ZuulWeeder.Main (main, mainWithArgs, runDemo, demoConfig) where
+-- |
+-- Module      : ZuulWeeder
+-- Description : The project entrypoint
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- The project entrypoint.
+module ZuulWeeder (main, runDemo, demoConfig) where
 
-import Control.Concurrent (forkIO)
-import Control.Concurrent.MVar
-import Data.ByteString qualified as BS
-import Data.IORef
-import Data.Maybe (isNothing)
 import Data.Text qualified as Text
 import Data.Yaml (decodeThrow)
-import Main.Utf8 (withUtf8)
-import Network.HTTP.Types.Status qualified as HTTP
-import Network.Socket qualified
-import Network.Wai qualified as Wai
 import Network.Wai.Handler.Warp as Warp (run)
-import Prometheus qualified
-import Prometheus.Metric.GHC qualified
 import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
-import System.Log.FastLogger qualified
-import System.Timeout (timeout)
 import Web.HttpApiData (toHeader)
-import Zuul.ConfigLoader (Config (..), TenantResolver, UrlBuilder, emptyConfig, loadConfig)
+import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, TenantResolver, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
 import Zuul.ZooKeeper
 import ZuulWeeder.Graph
+import ZuulWeeder.Monitoring qualified
 import ZuulWeeder.Prelude
 import ZuulWeeder.UI qualified
 
@@ -40,15 +39,9 @@ getEnvArgs =
     envPath :: String -> FilePath -> IO FilePathT
     envPath name def = FilePathT . Text.pack . fromMaybe def <$> lookupEnv name
 
+-- | The main function loads the config, prepare the analysis and serve the UI.
 main :: IO ()
 main = withUtf8 $ withLogger (\l -> getEnvArgs >>= mainWithArgs l)
-
-withLogger :: (Logger -> IO ()) -> IO ()
-withLogger cb = do
-  tc <- System.Log.FastLogger.newTimeCache "%F %T "
-  System.Log.FastLogger.withTimedFastLogger tc l cb
-  where
-    l = System.Log.FastLogger.LogStderr 1024
 
 mainWithArgs :: Logger -> Args -> IO ()
 mainWithArgs logger args = do
@@ -60,57 +53,27 @@ mainWithArgs logger args = do
   config <- configReloader logger configDump configLoader
   runWeb logger config
 
+-- | Start the web interface with the "demoConfig".
+-- This is useful for ghcid powered hot-reload development.
 runDemo :: IO ()
 runDemo = do
-  Prometheus.unregisterAll
-  withLogger $ \l -> runWeb l demoConfig
+  withLogger $ flip runWeb demoConfig
 
 runWeb :: Logger -> IO Analysis -> IO ()
 runWeb logger config = do
   rootUrl <- ensureTrailingSlash . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
   distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
   port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
-  info logger $ "[+] serving 0.0.0.0:" <> toHeader port <> from rootUrl
-  let app = ZuulWeeder.UI.app config (ZuulWeeder.UI.RootURL rootUrl) distPath
+  info logger ("[+] serving 0.0.0.0:" <> toHeader port <> from rootUrl)
+  let app = ZuulWeeder.UI.app config (ZuulWeeder.UI.BasePath rootUrl) distPath
   -- monitornig
-  void $ Prometheus.register Prometheus.Metric.GHC.ghcMetrics
-  counter <- Prometheus.register $ Prometheus.counter (Prometheus.Info "http_request" "")
-  Warp.run port $ monitoring logger counter app
+  monitoring <- ZuulWeeder.Monitoring.mkMonitoring logger
+  Warp.run port (monitoring app)
   where
     ensureTrailingSlash url = case Text.unsnoc url of
       Nothing -> "/"
       Just (x, '/') -> ensureTrailingSlash x
       _ -> Text.snoc url '/'
-
-monitoring :: Logger -> Prometheus.Counter -> Wai.Middleware
-monitoring logger counter baseApp req resp = case Wai.rawPathInfo req of
-  "/health" -> resp $ Wai.responseLBS HTTP.ok200 [] mempty
-  "/metrics" -> resp . Wai.responseLBS HTTP.ok200 [] =<< Prometheus.exportMetricsAsText
-  p | "/dists/" `BS.isPrefixOf` p -> baseApp req resp
-  p -> do
-    measure <- intervalMilliSec
-    baseApp req $ \r -> do
-      Prometheus.incCounter counter
-      result <- resp r
-      elapsed <- measure
-      let statusCode = HTTP.statusCode $ Wai.responseStatus r
-          htmx = any (\h -> fst h == "HX-Request") $ Wai.requestHeaders req
-          client = remoteHash (Wai.remoteHost req) + hash (Wai.requestHeaderUserAgent req)
-          msg =
-            p
-              <> (" code=" <> toHeader statusCode)
-              <> (" ms=" <> toHeader elapsed)
-              <> (" htmx=" <> toHeader htmx)
-              <> (" client=" <> toHeader client)
-              <> "\n"
-      info logger msg
-      pure result
-  where
-    remoteHash :: Network.Socket.SockAddr -> Int
-    remoteHash = \case
-      Network.Socket.SockAddrInet _ h -> hash h
-      Network.Socket.SockAddrInet6 _ h _ _ -> hash h
-      Network.Socket.SockAddrUnix _ -> 0
 
 newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 
@@ -167,14 +130,14 @@ mkConfigLoader logger dataBaseDir configFile = do
       env <- lift $ lookupEnv "ZUUL_WEEDER_NO_ZK"
       case env of
         Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
-        Nothing -> dumpZKConfig logger dataDir serviceConfig.zookeeper
+        Nothing -> Zuul.ZooKeeper.fetchConfigs logger dataDir serviceConfig.zookeeper
     cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
     go :: ServiceConfig -> ConfigLoader
     go serviceConfig = ConfigLoader do
       -- ensure data-dir exists
       whenM (not <$> lift (doesDirectoryExist cp)) (dumpConfig $ configDumper serviceConfig)
       -- read the tenants config from dataDir
-      systemConfig <- readSystemConfig dataDir
+      systemConfig <- readTenantsConfig dataDir
       -- decode the tenants config
       tenantsConfig <- except (decodeTenantsConfig systemConfig `orDie` "Invalid tenant config")
       -- load all the config objects
@@ -182,18 +145,19 @@ mkConfigLoader logger dataBaseDir configFile = do
       config <- lift $ loadConfigFiles serviceConfig.urlBuilders tr dataDir
       pure (tenantsConfig, config)
 
-loadConfigFiles :: UrlBuilder -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
+loadConfigFiles :: ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
 loadConfigFiles ub tr =
   flip execStateT Zuul.ConfigLoader.emptyConfig
     -- StateT Config IO ()
     . S.effects
     -- Apply the loadConfig function to each element
     . S.chain (Zuul.ConfigLoader.loadConfig ub tr)
-    -- Stream (Of ZKConfig) (StateT Config IO)
+    -- Stream (Of ZKFile) (StateT Config IO)
     . hoist lift
-    -- Stream (Of ZKConfig) IO
+    -- Stream (Of ZKFile) IO
     . walkConfigNodes
 
+-- | The demo configuration.
 demoConfig :: IO Analysis
 demoConfig = do
   (tenantsConfig, config) <-
@@ -220,7 +184,7 @@ baseurl=http://localhost/cgit
 |]
             )
         systemConfig <-
-          ZKSystemConfig
+          ZKTenantsConfig
             <$> decodeThrow
               [s|
 unparsed_abide:
@@ -251,7 +215,7 @@ unparsed_abide:
   pure $ analyzeConfig tenantsConfig config
   where
     mkConfigFile conn proj conf =
-      ZKConfig conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
+      ZKFile conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
     configFiles =
       [ mkConfigFile
           "sftests.com"

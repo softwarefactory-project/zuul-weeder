@@ -1,4 +1,14 @@
--- | The Zuul Service configuration (zuul.conf)
+-- |
+-- Module      : Zuul.Serviceconfig
+-- Description : Helper for zuul.conf
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- The Zuul Service configuration (zuul.conf)
 module Zuul.ServiceConfig
   ( ServiceConfig (..),
     readServiceConfig,
@@ -20,14 +30,22 @@ import ZuulWeeder.Prelude
 
 type ConfigSection = (Text, [(Text, Text)])
 
+-- | The zuul.conf content
 data ServiceConfig = ServiceConfig
-  { connections :: Map ConnectionName ProviderName,
+  { -- | The list of connections.
+    connections :: Map ConnectionName ProviderName,
+    -- | The list of connection urls, to build config loc url in the UI.
     urlBuilders :: Map ProviderName ConnectionUrl,
     -- | The dump script parameter: hosts, key, cert, ca
     zookeeper :: ZKConnection
   }
 
-readServiceConfig :: IO Text -> ExceptT Text IO ServiceConfig
+-- | Read the zuul.conf file
+readServiceConfig ::
+  -- | An action to produce the zuul.conf content
+  IO Text ->
+  -- | The decoded config
+  ExceptT Text IO ServiceConfig
 readServiceConfig getContent = do
   content <- lift getContent
   case Data.Ini.parseIni content of

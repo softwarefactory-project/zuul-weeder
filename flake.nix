@@ -10,9 +10,11 @@
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";
+    calligraphy.url = "github:jonascarpay/calligraphy";
+    calligraphy.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils, tailwind }:
+  outputs = { self, nixpkgs, flake-utils, tailwind, calligraphy }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -36,6 +38,14 @@
               # nixpkgs servant somehow doesn't fetch, use direct src
               servant = mk-servant-lib hpPrev "";
               servant-server = mk-servant-lib hpPrev "-server";
+
+              # pull ghc-9.2 support for weeder (https://github.com/ocharles/weeder/pull/94)
+              weeder = pkgs.haskell.lib.justStaticExecutables
+                (hpPrev.callCabal2nix "weeder" (builtins.fetchGit {
+                  url = "https://github.com/ocharles/weeder";
+                  ref = "ghc-9.2";
+                  rev = "c468cd10bfa9776f283512ce92024a4f8c4330bd";
+                }) { });
             };
         };
 
@@ -52,9 +62,15 @@
 
         exe = pkgs.haskell.lib.justStaticExecutables zuulWeederPackage;
 
+        mkApp = script: {
+          type = "app";
+          program =
+            builtins.toString (pkgs.writers.writeBash "app-wrapper.sh" script);
+        };
+
       in {
-        defaultExe = exe;
-        defaultPackage = zuulWeederPackage;
+        apps.default = exe;
+        packages.default = zuulWeederPackage;
 
         packages.containerImage = pkgs.dockerTools.buildLayeredImage {
           name = "quay.io/software-factory/zuul-weeder";
@@ -82,20 +98,23 @@
             ormolu
             cabal-install
             hlint
+            weeder
             pkgs.haskell-language-server
           ];
         };
 
-        apps.tailwind = let
-          script = pkgs.writers.writeBash "tailwind-run.sh" ''
-            set -xe
-            exec ${
-              tailwind.defaultPackage."x86_64-linux"
-            }/bin/tailwind-run -w 'src/ZuulWeeder/UI.hs' -o dists/tailwind.css;
-          '';
-        in {
-          type = "app";
-          program = builtins.toString script;
-        };
+        apps.calligraphy = mkApp ''
+          set -xe
+          exec ${
+            calligraphy.apps."x86_64-linux".calligraphy-ghc922
+          }/bin/calligraphy $*
+        '';
+
+        apps.tailwind = mkApp ''
+          set -xe
+          exec ${
+            tailwind.defaultPackage."x86_64-linux"
+          }/bin/tailwind-run -w 'src/ZuulWeeder/UI.hs' -o dists/tailwind.css;
+        '';
       });
 }

@@ -1,4 +1,23 @@
-module Zuul.Tenant where
+-- |
+-- Module      : Zuul.Tenant
+-- Description : Helper for Zuul tenant config main.yaml
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- The Zuul Tenants configuration (main.yaml)
+module Zuul.Tenant
+  ( TenantsConfig (..),
+    TenantConfig (..),
+    TenantConnectionConfig (..),
+    TenantProject (..),
+    decodeTenantsConfig,
+    tenantResolver,
+  )
+where
 
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
@@ -10,7 +29,7 @@ import Data.Text qualified as Text
 import Data.Vector qualified as V
 import Zuul.Config
 import Zuul.ServiceConfig (ServiceConfig (..))
-import Zuul.ZooKeeper (ZKSystemConfig (..))
+import Zuul.ZooKeeper (ZKTenantsConfig (..))
 import ZuulWeeder.Prelude
 
 allItems :: Set ZuulConfigType
@@ -27,34 +46,44 @@ toItemType name = case name of
   "secret" -> SecretT
   _type -> error $ "Unexpected configuration item type: " <> Text.unpack _type
 
+-- | The project configuration for a tenant.
 data TenantProject = TenantProject
-  { projectName :: ProjectName,
+  { -- | The project name.
+    name :: ProjectName,
+    -- | The list of included elements.
     includedConfigElements :: Set ZuulConfigType,
+    -- | The list of config location prefix, default to: [".zuul.yaml", "zuul.yaml", "zuul.d", ".zuul.d"]
     configPaths :: [FilePathT]
   }
   deriving (Show, Eq, Ord, Generic)
 
-type TenantProjects = [(CanonicalProjectName, [ZuulConfigType])]
-
+-- | The tenant connection source configuration.
 data TenantConnectionConfig = TenantConnectionConfig
-  { configProjects :: [TenantProject],
+  { -- | The config projects
+    configProjects :: [TenantProject],
+    -- | The untrusted projects
     untrustedProjects :: [TenantProject]
   }
   deriving (Show, Eq, Ord, Generic)
 
+-- | Single tenant configuration.
 data TenantConfig = TenantConfig
-  { defaultParent :: JobName,
+  { -- | The default base job name, default to "base".
+    defaultParent :: JobName,
+    -- | The list of project grouped per source connection.
     connections :: Map ConnectionName TenantConnectionConfig
   }
   deriving (Show, Eq, Ord, Generic)
 
+-- | All the tenants configuration.
 newtype TenantsConfig = TenantsConfig
   { tenants :: Map TenantName TenantConfig
   }
   deriving (Show, Eq, Ord, Generic)
 
-decodeTenantsConfig :: ZKSystemConfig -> Maybe TenantsConfig
-decodeTenantsConfig (ZKSystemConfig value) = case value of
+-- | Decode the 'TenantsConfig' from a ZK data file.
+decodeTenantsConfig :: ZKTenantsConfig -> Maybe TenantsConfig
+decodeTenantsConfig (ZKTenantsConfig value) = case value of
   Data.Aeson.Object hm ->
     let abide = unwrapObject $ getObjValue "unparsed_abide" hm
         tenants = HM.toList $ unwrapObject $ getObjValue "tenants" abide
@@ -88,7 +117,7 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
     decodeConnection cnx =
       let configProjects = getProjects "config-projects"
           untrustedProjects = getProjects "untrusted-projects"
-       in TenantConnectionConfig {..}
+       in TenantConnectionConfig {configProjects, untrustedProjects}
       where
         defaultPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]
         getProjects :: Text -> [TenantProject]
@@ -120,48 +149,35 @@ decodeTenantsConfig (ZKSystemConfig value) = case value of
               extraConfigPaths = [] -- TODO: decode attribute
            in TenantProject (ProjectName name) includedElements (extraConfigPaths <> defaultPaths)
 
-getTenantProjects :: ServiceConfig -> TenantsConfig -> TenantName -> Maybe TenantProjects
-getTenantProjects serviceConfig tenantsConfig tenantName =
-  let tenantConfig = Map.lookup tenantName $ tenantsConfig.tenants
-      tenantLayout = Map.toList <$> ((.connections) <$> tenantConfig)
-   in concatMap extractProject <$> tenantLayout
-  where
-    extractProject :: (ConnectionName, TenantConnectionConfig) -> TenantProjects
-    extractProject (connectionName, TenantConnectionConfig {..}) =
-      let projects = configProjects <> untrustedProjects
-          providerName = case Map.lookup connectionName serviceConfig.connections of
-            Just pn -> pn
-            Nothing -> error "Unable to find project connection's provider name"
-       in ( \TenantProject {..} ->
-              ( CanonicalProjectName (providerName, projectName),
-                Set.toList includedConfigElements
-              )
-          )
-            <$> projects
-
-tenantResolver :: ServiceConfig -> TenantsConfig -> ConfigLoc -> ZuulConfigType -> Set TenantName
+-- | Helper function to return the list of tenants matching a 'ConfigLoc'
+tenantResolver ::
+  -- | The zuul.conf for the list of connection names
+  ServiceConfig ->
+  -- | The main.yaml tenants config
+  TenantsConfig ->
+  -- | The config location to resolve
+  ConfigLoc ->
+  -- | The config element type
+  ZuulConfigType ->
+  -- | The list of tenant depending on the element
+  Set TenantName
 tenantResolver serviceConfig tenantsConfig configLoc zct =
   Set.fromList $ map fst $ filter (containsProject . snd) $ Map.toList $ tenantsConfig.tenants
   where
     containsProject :: TenantConfig -> Bool
     containsProject tc = any containsProject' $ Map.toList $ tc.connections
     containsProject' :: (ConnectionName, TenantConnectionConfig) -> Bool
-    containsProject' (cn, TenantConnectionConfig {..}) = any matchProject $ configProjects <> untrustedProjects
+    containsProject' (cn, tcc) = any matchProject $ tcc.configProjects <> tcc.untrustedProjects
       where
         matchProject :: TenantProject -> Bool
-        matchProject TenantProject {..} =
+        matchProject tp =
           let providerName = case Map.lookup cn serviceConfig.connections of
                 Just pn -> pn
                 Nothing -> error "Unable to find project connection's provider name"
            in and
-                [ CanonicalProjectName (providerName, projectName) == configLoc.project,
-                  zct `Set.member` includedConfigElements,
-                  any matchPath configPaths
+                [ CanonicalProjectName providerName tp.name == configLoc.project,
+                  zct `Set.member` tp.includedConfigElements,
+                  any matchPath tp.configPaths
                 ]
         matchPath :: FilePathT -> Bool
-        matchPath fp = getPath fp `Text.isPrefixOf` getPath configLoc.path
-
-getTenantDefaultBaseJob :: TenantsConfig -> TenantName -> Maybe JobName
-getTenantDefaultBaseJob tenantsConfig tenantName =
-  let tenantConfig = Map.lookup tenantName $ tenantsConfig.tenants
-   in (.defaultParent) <$> tenantConfig
+        matchPath fp = from fp `Text.isPrefixOf` from configLoc.path

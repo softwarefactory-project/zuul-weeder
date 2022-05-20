@@ -1,11 +1,22 @@
+-- |
+-- Module      : Zuul.ConfigLoader
+-- Description : Parse configuration items
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- This module contains the logic to decode configuration file content.
 module Zuul.ConfigLoader
   ( -- * The resulting configuration
-    Config (..),
     ConfigMap,
+    Config (..),
     loadConfig,
     emptyConfig,
     TenantResolver,
-    UrlBuilder,
+    ConnectionUrlMap,
 
     -- * Test helper
     decodeConfig,
@@ -19,18 +30,27 @@ import Data.Map qualified as Map
 import Data.Set qualified
 import Data.Vector qualified as V
 import Zuul.Config
-import Zuul.ZooKeeper (ConfigError (..), ZKConfig (..))
+import Zuul.ZooKeeper (ConfigError (..), ZKFile (..))
 import ZuulWeeder.Prelude
 
+-- | A config map contains the list of every variants associated with their location.
 type ConfigMap a b = Map a [(ConfigLoc, b)]
 
+-- | The global configuration map.
 data Config = Config
-  { jobs :: ConfigMap JobName Job,
+  { -- | The jobs.
+    jobs :: ConfigMap JobName Job,
+    -- | The nodesets.
     nodesets :: ConfigMap NodesetName Nodeset,
+    -- | The node labels.
     nodeLabels :: ConfigMap NodeLabelName NodeLabelName,
+    -- | The projects.
     projects :: ConfigMap ProjectName Project,
+    -- | The project-templates.
     projectTemplates :: ConfigMap ProjectTemplateName ProjectTemplate,
+    -- | The pipelines.
     pipelines :: ConfigMap PipelineName Pipeline,
+    -- | Configuration errors.
     configErrors :: [ConfigError]
   }
   deriving (Show, Generic)
@@ -53,8 +73,9 @@ updateTopConfig tenantResolver configLoc ze = case ze of
       | null tenants = id -- The object is not attached to any tenant, we don't add it
       | otherwise = Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
 
+-- | Low level helper to decode a config file into a list of 'ZuulConfigElement'.
 decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
-decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName projectName), _branch) zkJSONData =
+decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName projectName), _branch) zkJSONData =
   let rootObjs = case zkJSONData of
         Array vec -> V.toList vec
         _ -> error $ "Unexpected root data structure on: " <> show rootObjs
@@ -81,7 +102,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
           triggers = case getObjValue "trigger" va of
             Object triggers' -> PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggers'
             _ -> error $ "Unexpected trigger value in: " <> show va
-       in Pipeline {..}
+       in Pipeline {name, triggers}
 
     decodeJob :: Object -> Job
     decodeJob va =
@@ -91,7 +112,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
             branches,
             dependencies
             ) = decodeJobContent va
-       in Job {..}
+       in Job {name, parent, nodeset, branches, dependencies}
 
     decodeJobContent :: Object -> (Maybe JobName, Maybe JobNodeset, [BranchName], [JobName])
     decodeJobContent va =
@@ -142,7 +163,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
               NodeLabelName . getString . getObjValue "label"
                 <$> (unwrapObject <$> sort (V.toList nodes))
             _va -> error $ "Unexpected nodeset nodes structure: " <> show _va
-       in Nodeset {..}
+       in Nodeset {name, labels}
 
     decodeProject :: Object -> Project
     decodeProject va =
@@ -152,7 +173,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
             Just name' -> ProjectName name'
           templates = decodeAsList "templates" ProjectTemplateName va
           pipelines = Data.Set.fromList $ mapMaybe decodeProjectPipeline (HM.toList va)
-       in Project {..}
+       in Project {name, templates, pipelines}
 
     decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe ProjectPipeline
     decodeProjectPipeline (Data.Aeson.Key.toText -> pipelineName', va')
@@ -171,7 +192,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
                   Just (String queueName) -> Just queueName
                   Just _ -> error $ "Unexpected queue name: " <> show inner
                   Nothing -> Nothing
-             in Just $ ProjectPipeline {..}
+             in Just $ ProjectPipeline {name, jobs}
           _ -> error $ "Unexpected pipeline: " <> show va'
       where
         decodeProjectPipelineJob :: Value -> PipelineJob
@@ -184,7 +205,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
                   branches,
                   dependencies
                   ) = decodeJobContent $ unwrapObject $ getObjValue key jobObj
-             in PJJob $ Job {..}
+             in PJJob $ Job {name, parent, nodeset, branches, dependencies}
           String v -> PJName $ JobName v
           _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
 
@@ -194,7 +215,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
         Nothing -> error "Un-named project template"
         Just (ProjectTemplateName -> name) ->
           let pipelines = Data.Set.fromList $ mapMaybe decodeProjectPipeline (HM.toList va)
-           in ProjectTemplate {..}
+           in ProjectTemplate {name, pipelines}
 
     -- Zuul config elements are object with an unique key
     getKey :: Object -> Text
@@ -205,11 +226,22 @@ decodeConfig (CanonicalProjectName (ProviderName providerName, ProjectName proje
     getName :: Object -> Text
     getName = getString . getObjValue "name"
 
-type UrlBuilder = Map ProviderName ConnectionUrl
+-- | Convenient alias
+type ConnectionUrlMap = Map ProviderName ConnectionUrl
 
+-- | Convenient alias
 type TenantResolver = ConfigLoc -> ZuulConfigType -> Set TenantName
 
-loadConfig :: UrlBuilder -> TenantResolver -> Either ConfigError ZKConfig -> StateT Config IO ()
+-- | The main function to decode a 'ZKFile'
+loadConfig ::
+  -- | The map of the connection urls.
+  ConnectionUrlMap ->
+  -- | The helper to resolve the matching tenant list.
+  TenantResolver ->
+  -- | The configuration object file to load.
+  Either ConfigError ZKFile ->
+  -- | The computation to update the config.
+  StateT Config IO ()
 loadConfig urlBuilder tenantResolver zkcE = do
   case zkcE of
     Left e -> #configErrors %= (e :)
@@ -218,9 +250,8 @@ loadConfig urlBuilder tenantResolver zkcE = do
           providerName = ProviderName $ zkc.provider
           canonicalProjectName =
             CanonicalProjectName
-              ( providerName,
-                ProjectName $ zkc.project
-              )
+              providerName
+              (ProjectName zkc.project)
           branchName = BranchName zkc.branch
           configPath = zkc.filePath
           -- tenants info are set in the updateTopConfig function.
@@ -232,8 +263,9 @@ loadConfig urlBuilder tenantResolver zkcE = do
   where
     handler :: FilePathT -> SomeException -> StateT Config IO ()
     handler fp e = do
-      lift $ hPutStrLn stderr $ "Could not decode: " <> getPath' fp <> ": " <> show e
+      lift $ hPutStrLn stderr ("Could not decode: " <> getPath fp <> ": " <> show e)
       error "Aborting"
 
+-- | An empty config.
 emptyConfig :: Config
 emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty

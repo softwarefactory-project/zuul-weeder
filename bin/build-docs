@@ -1,0 +1,11 @@
+#!/bin/sh -xe
+
+# render the module dependencies with calligraphy
+cabal clean # clean to avoid duplicate calligraphy links
+cabal build -O0 lib:zuul-weeder # build the hie files
+MODULES=$(find src/ -name "*.hs" | sed -e 's/^src.//' -e 's/.hs$//' | tr '/' '.' | egrep -v "ZuulWeeder.Prelude|Zuul.Config") # get the module lists, except the common ones
+nix run .#calligraphy -- calligraphy -s doc/modules.svg --collapse-modules $MODULES
+
+# render the docs for local hosting, see: https://stackoverflow.com/questions/57916341/how-to-instruct-haddock-to-link-to-hackage-documentation-for-hackage-packages#58859107
+cabal haddock --haddock-html-location='https://hackage.haskell.org/package/$pkg-$version/docs' --haddock-hyperlink-source --haddock-quickjump
+echo "Publish build directory to pagesuser@softwarefactory-project.io:/var/www/pages/docs.softwarefactory-project.io/zuul-weeder/"

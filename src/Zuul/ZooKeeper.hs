@@ -1,22 +1,34 @@
--- | Data acquisition from ZooKeeper
+-- |
+-- Module      : Zuul.ZooKeeper
+-- Description : Helpers for ZooKeeper
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- This module contains the logic to load data from ZooKeeper
 module Zuul.ZooKeeper
-  ( -- * fetch data
+  ( -- * Data acquision fetcher
     ZKConnection (..),
-    dumpZKConfig,
+    fetchConfigs,
 
-    -- * parser
+    -- * File parser
     walkConfigNodes,
-    mkZKConfig,
-    readSystemConfig,
-    ZKConfig (..),
+    ZKFile (..),
     ConfigError (..),
-    ZKSystemConfig (..),
+
+    -- * Helper to load the tenants configuration
+    readTenantsConfig,
+    ZKTenantsConfig (..),
+
+    -- * Test helpers
+    mkZKFile,
   )
 where
 
-import Control.Exception (try)
-import Data.Aeson (Value, eitherDecodeFileStrict)
-import Data.ByteString (ByteString)
+import Data.Aeson (eitherDecodeFileStrict)
 import Data.Text qualified as Text
 import Data.Yaml qualified
 import Network.URI.Encode qualified
@@ -25,30 +37,41 @@ import System.Directory qualified
 import System.Process.Typed qualified
 import ZuulWeeder.Prelude
 
-data ZKConfig = ZKConfig
-  { provider :: Text,
+-- | A config file read from ZooKeeper.
+data ZKFile = ZKFile
+  { -- | The provider name.
+    provider :: Text,
+    -- | The project name.
     project :: Text,
+    -- | The branch name.
     branch :: Text,
+    -- | The configuration file path, .e.g ".zuul.d/jobs.yaml".
     filePath :: FilePathT,
+    -- | The file path on the host file system, for debugging purpose.
     fullPath :: FilePathT,
+    -- | The JSON Value.
     zkJSONData :: Value
   }
   deriving (Show, Eq)
 
-newtype ZKSystemConfig = ZKSystemConfig Value deriving (Show, Eq)
-
+-- | The list of config error that can happens when loading the configuration.
 data ConfigError
-  = ReadError SomeException
-  | DecodeError Data.Yaml.ParseException
-  | InvalidPath FilePathT
+  = -- | System level exception, e.g. ENOENT
+    ReadError SomeException
+  | -- | YAML decoding error
+    DecodeError Data.Yaml.ParseException
+  | -- | The path is missing component, e.g. branch name
+    InvalidPath
   deriving (Show)
 
-type ZKConfigStream = S.Stream (S.Of (Either ConfigError ZKConfig)) IO ()
-
-walkConfigNodes :: FilePathT -> ZKConfigStream
+-- | Read all the configuration found at the given path
+walkConfigNodes ::
+  -- | The ZooKeeper dump location
+  FilePathT ->
+  -- | A stream of configuration file
+  S.Stream (S.Of (Either ConfigError ZKFile)) IO ()
 walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
   where
-    walkRecursive :: FilePathT -> ZKConfigStream
     walkRecursive curPath = do
       tree <- lift $ listDirectory curPath
       forM_ tree $ \path -> do
@@ -57,19 +80,19 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
         if isDirectory
           then walkRecursive fullPath
           else do
-            when ("/0000000000/ZKDATA" `Text.isSuffixOf` getPath fullPath) $
+            when ("/0000000000/ZKDATA" `Text.isSuffixOf` from fullPath) $
               lift (runExceptT (handleConfig fullPath)) >>= S.yield
 
-    handleConfig :: FilePathT -> ExceptT ConfigError IO ZKConfig
+    handleConfig :: FilePathT -> ExceptT ConfigError IO ZKFile
     handleConfig fullPath = do
       zkData <- readZKData fullPath
       zkJSONData <- case Data.Yaml.decodeEither' zkData of
         Left err -> throwError $ DecodeError err
         Right content -> pure content
 
-      case mkZKConfig zkJSONData fullPath of
+      case mkZKFile zkJSONData fullPath of
         Just config -> pure config
-        Nothing -> throwError $ InvalidPath fullPath
+        Nothing -> throwError InvalidPath
 
     readZKData :: FilePathT -> ExceptT ConfigError IO ByteString
     readZKData path = do
@@ -78,22 +101,31 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
         Left err -> throwError $ ReadError err
         Right content -> pure content
 
-readSystemConfig :: FilePathT -> ExceptT Text IO ZKSystemConfig
-readSystemConfig dumpPath =
-  ZKSystemConfig <$> readC
+-- | The tenant configuration value read from ZooKeeper. To be decoded by 'Zuul.Tenant.decodeTenantsConfig'
+newtype ZKTenantsConfig = ZKTenantsConfig Value deriving (Show, Eq)
+
+-- | Read the main.yaml from the ZooKeeper dump
+readTenantsConfig ::
+  -- | The ZooKeeper dump location
+  FilePathT ->
+  -- | The object to be decoded by "Zuul.Tenant.decodeTenantsConfig"
+  ExceptT Text IO ZKTenantsConfig
+readTenantsConfig dumpPath =
+  ZKTenantsConfig <$> readC
   where
     readC :: ExceptT Text IO Value
     readC = do
-      ve <- lift $ eitherDecodeFileStrict . getPath' $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
+      ve <- lift $ eitherDecodeFileStrict . getPath $ dumpPath </> "zuul/system/conf/0000000000/ZKDATA"
       case ve of
         Left e -> throwError (Text.pack e)
         Right x -> pure x
 
-mkZKConfig :: Value -> FilePathT -> Maybe ZKConfig
-mkZKConfig zkJSONData path = do
+-- | Creates a 'ZKFile' for testing purpose.
+mkZKFile :: Value -> FilePathT -> Maybe ZKFile
+mkZKFile zkJSONData path = do
   [_, _, filePath', _, branch', Network.URI.Encode.decodeText -> providerPath'] <-
     pure $
-      take 6 $ reverse $ Text.split (== '/') (getPath path)
+      take 6 $ reverse $ Text.split (== '/') (from path)
   (provider, project) <- case Text.breakOn "/" providerPath' of
     (_, "") -> Nothing
     (x, xs) -> Just (x, Text.drop 1 xs)
@@ -102,7 +134,7 @@ mkZKConfig zkJSONData path = do
       filePath = FilePathT $ Network.URI.Encode.decodeText filePath'
       fullPath = path
 
-  Just ZKConfig {..}
+  Just ZKFile {provider, project, branch, filePath, fullPath, zkJSONData}
 
 dumpScript :: System.Process.Typed.StreamSpec 'System.Process.Typed.STInput ()
 dumpScript =
@@ -129,20 +161,21 @@ getTree("/zuul/config/cache")
 getTree("/zuul/system/conf")
 |]
 
+-- | The ZooKeeper connection settings: hostname and tls paths.
 newtype ZKConnection = ZKConnection [Text] deriving (Eq, Show)
 
 -- | Dump the configuration found in ZooKeeper
-dumpZKConfig :: Logger -> FilePathT -> ZKConnection -> ExceptT Text IO ()
-dumpZKConfig logger dataDir (ZKConnection zkConf) = do
+fetchConfigs :: Logger -> FilePathT -> ZKConnection -> ExceptT Text IO ()
+fetchConfigs logger dataDir (ZKConnection zkConf) = do
   exitCode <- lift $ do
     whenM (doesDirectoryExist dataDir) $ do
       info logger $ "Removing " <> from (getPath dataDir)
-      System.Directory.removeDirectoryRecursive $ getPath' dataDir
+      System.Directory.removeDirectoryRecursive $ getPath dataDir
     info logger $ "Dumping with " <> from (show zkConf)
     System.Process.Typed.runProcess process
   case exitCode of
     System.Process.Typed.ExitSuccess -> pure ()
-    System.Process.Typed.ExitFailure _ -> throwError "dumpZKConfig failed!"
+    System.Process.Typed.ExitFailure _ -> throwError "fetchConfig failed!"
   where
-    args = "-" : getPath' dataDir : map Text.unpack zkConf
+    args = "-" : getPath dataDir : map Text.unpack zkConf
     process = System.Process.Typed.setStdin dumpScript $ System.Process.Typed.proc "python" args

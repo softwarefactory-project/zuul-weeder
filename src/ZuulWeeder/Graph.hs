@@ -1,15 +1,22 @@
+-- |
+-- Module      : ZuulWeeder.Graph
+-- Description : Configuration graph
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- This module contains the core configuration graph.
 module ZuulWeeder.Graph
-  ( Analysis (..),
-    ConfigGraph,
+  ( ConfigGraph,
+    Analysis (..),
     Vertex (..),
     VertexName (..),
     vertexTypeName,
-
-    -- * Graph functions
     analyzeConfig,
     findReachable,
-    filterTenant,
-    mkVertex,
   )
 where
 
@@ -18,8 +25,6 @@ import Algebra.Graph.ToGraph qualified
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Set qualified as Set
-import Data.Text qualified as Text
-import Data.Text.Lazy.Builder qualified as TB
 import Zuul.Config
 import Zuul.ConfigLoader (Config (..), ConfigMap)
 import Zuul.Tenant
@@ -27,26 +32,30 @@ import ZuulWeeder.Prelude
 
 -- | The graph vertex
 data Vertex = Vertex
-  { tenants :: Set TenantName,
-    name :: VertexName
+  { -- | The vertex identifier
+    name :: VertexName,
+    -- | The list of tenants using that vertex
+    tenants :: Set TenantName
   }
   deriving (Eq, Ord, Show, Generic, Hashable)
 
-instance Display Vertex where
-  displayBuilder v =
-    TB.fromText (Text.pack . show $ v.name)
-
 -- | A Vertex can be a raw zuul config element, or a custom element added through analysis
 data VertexName
-  = VJob JobName
-  | VNodeset NodesetName
-  | VNodeLabel NodeLabelName
-  | VProject ProjectName
-  | VProjectTemplate ProjectTemplateName
-  | VPipeline PipelineName
+  = -- | A job
+    VJob JobName
+  | -- | A nodeset
+    VNodeset NodesetName
+  | -- | A node label
+    VNodeLabel NodeLabelName
+  | -- | A project
+    VProject ProjectName
+  | -- | A project template
+    VProjectTemplate ProjectTemplateName
+  | -- | A pipeline
+    VPipeline PipelineName
   deriving (Eq, Ord, Show, Generic, Hashable)
 
--- | A text representation of a vertex type, useful for /object url piece
+-- | A text representation of a vertex type, useful for /object url piece.
 vertexTypeName :: VertexName -> Text
 vertexTypeName = \case
   VJob _ -> "job"
@@ -84,29 +93,43 @@ instance From NodeLabelName VertexName where
   from = VNodeLabel
 
 mkVertex :: From a VertexName => ConfigLoc -> a -> Vertex
-mkVertex loc x = Vertex loc.tenants (from x)
+mkVertex loc x = Vertex (from x) loc.tenants
 
+-- | A convenient type alias.
 type ConfigGraph = Algebra.Graph.Graph Vertex
 
-findReachable :: NonEmpty Vertex -> ConfigGraph -> Set Vertex
+-- | Return the list of reachable 'Vertex'
+findReachable ::
+  -- | The list of 'Vertex' to search
+  NonEmpty Vertex ->
+  -- | The graph to search in
+  ConfigGraph ->
+  -- | The list of reachable 'Vertex'
+  Set Vertex
 findReachable xs = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.dfs (NE.toList xs)
   where
     v = NE.head xs
 
-filterTenant :: TenantName -> ConfigGraph -> ConfigGraph
-filterTenant tenant = Algebra.Graph.induce $ \vertex -> tenant `elem` vertex.tenants
-
+-- | The config analysis result used by the "ZuulWeeder.UI" module.
 data Analysis = Analysis
-  { configRequireGraph :: ConfigGraph,
+  { -- | The requirements graph
+    configRequireGraph :: ConfigGraph,
+    -- | The depends-on graph
     configDependsOnGraph :: ConfigGraph,
+    -- | The list of vertex, used for displaying search result.
     vertices :: Set Vertex,
+    -- | A map of all the names and their matching tenants, used for searching.
     names :: Map VertexName (Set TenantName),
+    -- | The list of all tenants, for the info page.
     tenants :: Set TenantName,
+    -- | The zuul config.
     config :: Config,
+    -- | A list of error found when building the analysis.
     graphErrors :: [String]
   }
   deriving (Show, Generic)
 
+-- | The main function to build the 'Analysis' .
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
   runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty allTenants config mempty))

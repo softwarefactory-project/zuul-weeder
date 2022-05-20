@@ -1,67 +1,45 @@
--- | The project standard library
+-- |
+-- Module      : ZuulWeeder.Prelude
+-- Description : The project Prelude
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- This module exports common functions and helpers.
 module ZuulWeeder.Prelude
-  ( module Prelude,
-
-    -- * logger
-    Logger,
-    info,
-
-    -- * base
-    Generic,
-    catMaybes,
-    mapMaybe,
-    isJust,
-    fromMaybe,
-    fromRight,
-    (&),
-    traverse_,
-    sort,
-    forM_,
-    runIdentity,
-    liftIO,
-    trace,
-    elemIndex,
-    hPutStrLn,
-    stderr,
-    bool,
-    orDie,
-    fromEither,
-    Int64,
-    unless,
-    when,
-    whenM,
-    nub,
-    lookupEnv,
-    NonEmpty,
-    threadDelay,
-
-    -- * hashable
-    Hashable,
-    hash,
-
-    -- * exceptions
-    SomeException,
-    catchAll,
-
-    -- * clock
+  ( -- * clock
     getSec,
     intervalMilliSec,
+
+    -- * fast-logger
+    Logger,
+    info,
+    withLogger,
+
+    -- * exceptions
+    Control.Exception.SomeException,
+    Control.Exception.try,
+    Control.Monad.Catch.catchAll,
 
     -- * filepath text
     FilePathT (..),
     (</>),
-    getPath',
+    getPath,
     listDirectory,
     doesDirectoryExist,
     readFileBS,
     readFileText,
 
-    -- * text
-    Text,
+    -- * text, bytestring
+    Data.Text.Text,
+    Data.ByteString.ByteString,
 
     -- * containers
-    Map,
-    Set,
+    Data.Map.Map,
+    Data.Set.Set,
 
     -- * witch
     Witch.From,
@@ -70,124 +48,209 @@ module ZuulWeeder.Prelude
     Witch.into,
 
     -- * mtl
-    lift,
-    State,
-    execStateT,
-    StateT,
-    ExceptT,
-    runExceptT,
-    throwError,
-    except,
+    Control.Monad.Trans.lift,
+    Control.Monad.Reader.Reader,
+    Control.Monad.Reader.ReaderT,
+    Control.Monad.Reader.runReaderT,
+    Control.Monad.State.State,
+    Control.Monad.State.StateT,
+    Control.Monad.State.execStateT,
+    Control.Monad.Except.ExceptT,
+    Control.Monad.Except.runExceptT,
+    Control.Monad.Except.throwError,
+    Control.Monad.Trans.Except.except,
+    Data.Functor.Identity.runIdentity,
 
     -- * lens
-    Control.Lens.over,
     Control.Lens.set,
-    Control.Lens.element,
-    Control.Lens.preview,
+    Control.Lens.over,
     Control.Lens.use,
     (%=),
-    safeGet,
 
-    -- * aeson helpers
+    -- * aeson
+    Data.Aeson.Value,
     decodeAsList,
     unwrapObject,
     getObjValue,
     getString,
 
-    -- * text-display
-    module Data.Text.Display,
-
     -- * qq
     Data.String.QQ.s,
+
+    -- * with-utf8
+    Main.Utf8.withUtf8,
+
+    -- * utilities
+    whenM,
+    orDie,
+    fromEither,
+
+    -- * base concurrent
+    Control.Concurrent.forkIO,
+    Control.Concurrent.threadDelay,
+    Data.IORef.IORef,
+    Data.IORef.newIORef,
+    Data.IORef.readIORef,
+    Data.IORef.writeIORef,
+    Control.Concurrent.MVar.MVar,
+    Control.Concurrent.MVar.newMVar,
+    Control.Concurrent.MVar.modifyMVar,
+
+    -- * base list
+    Data.List.sort,
+    Data.List.nub,
+    Data.List.NonEmpty.NonEmpty,
+    Data.List.NonEmpty.nonEmpty,
+
+    -- * base data
+    Int64,
+    (&),
+    Data.Bool.bool,
+    Data.Foldable.traverse_,
+    Data.Maybe.catMaybes,
+    Data.Maybe.mapMaybe,
+    Data.Maybe.isJust,
+    Data.Maybe.isNothing,
+    Data.Maybe.fromMaybe,
+    Data.Either.fromRight,
+
+    -- * base control
+    Control.Monad.forM_,
+    Control.Monad.unless,
+    Control.Monad.when,
+    Control.Monad.void,
+    Control.Monad.IO.Class.liftIO,
+
+    -- * base debug
+    Debug.Trace.trace,
+    System.IO.hPutStrLn,
+    System.IO.stderr,
+
+    -- * base system
+    System.Environment.lookupEnv,
+    System.Environment.getArgs,
+    System.Timeout.timeout,
+
+    -- * hashable
+    Data.Hashable.hash,
+    Data.Hashable.Hashable,
+
+    -- * base
+    module Prelude,
+    Generic,
   )
 where
 
-import Control.Concurrent (threadDelay)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar qualified
+import Control.Exception qualified
 import Control.Lens ((%=))
 import Control.Lens qualified
-import Control.Monad (forM_, unless, when)
-import Control.Monad.Catch (SomeException, catchAll)
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (State, StateT, execStateT)
-import Control.Monad.Trans (lift)
-import Control.Monad.Trans.Except (except)
+import Control.Monad qualified
+import Control.Monad.Catch qualified
+import Control.Monad.Except qualified
+import Control.Monad.IO.Class qualified
+import Control.Monad.Reader qualified
+import Control.Monad.State qualified
+import Control.Monad.Trans qualified
+import Control.Monad.Trans.Except qualified
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM
-import Data.Bool (bool)
+import Data.Bool qualified
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
-import Data.Either (fromRight)
-import Data.Foldable (traverse_)
+import Data.Either qualified
+import Data.Foldable qualified
 import Data.Function ((&))
-import Data.Functor.Identity (runIdentity)
+import Data.Functor.Identity qualified
 import Data.Generics.Labels ()
-import Data.Hashable (Hashable, hash)
-import Data.Int (Int64)
-import Data.List (elemIndex, nub, sort)
-import Data.List.NonEmpty (NonEmpty)
+import Data.Hashable qualified
+import Data.IORef qualified
+import Data.Int
+import Data.List qualified
+import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.Map (Map)
-import Data.Maybe (catMaybes, fromMaybe, isJust, mapMaybe)
+import Data.Maybe qualified
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified as Text
-import Data.Text.Display
 import Data.Text.IO qualified as Text (readFile)
 import Data.Vector qualified as V
-import Debug.Trace (trace)
+import Debug.Trace qualified
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
+import Main.Utf8 qualified (withUtf8)
 import System.Clock qualified
 import System.Directory qualified
-import System.Environment (lookupEnv)
+import System.Environment qualified
 import System.FilePath qualified
-import System.IO (hPutStrLn, stderr)
+import System.IO qualified
 import System.Log.FastLogger qualified
+import System.Timeout qualified (timeout)
 import Witch qualified
 
-newtype FilePathT = FilePathT {getPath :: Text}
-  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Hashable)
-  deriving (Display) via (ShowInstance Text)
+-- | The fast-logger.
+newtype Logger = Logger System.Log.FastLogger.TimedFastLogger
 
-type Logger = System.Log.FastLogger.TimedFastLogger
+-- | Create the logger.
+withLogger :: (Logger -> IO a) -> IO a
+withLogger cb = do
+  tc <- System.Log.FastLogger.newTimeCache "%F %T "
+  System.Log.FastLogger.withTimedFastLogger tc l (cb . Logger)
+  where
+    l = System.Log.FastLogger.LogStderr 1024
 
+-- | Log a message.
 info :: Logger -> ByteString -> IO ()
-info logger msg = logger (\time -> System.Log.FastLogger.toLogStr $ time <> msg <> "\n")
+info (Logger logger) msg = logger (\time -> System.Log.FastLogger.toLogStr $ time <> msg <> "\n")
 
+-- | lifted 'Control.Monad.when'
 whenM :: Monad m => m Bool -> m () -> m ()
 whenM test action = do
   res <- test
-  when res action
+  Control.Monad.when res action
 
-safeGet :: Int -> [a] -> Maybe a
-safeGet pos xs = Control.Lens.element pos `Control.Lens.preview` xs
+-- | A FilePath encoded with UTF-8.
+newtype FilePathT = FilePathT Text
+  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Data.Hashable.Hashable)
 
-getPath' :: FilePathT -> FilePath
-getPath' = unpack . getPath
+instance Witch.From FilePathT Text where
+  from (FilePathT fp) = fp
 
+-- | Get the string FilePath for external libraries.
+getPath :: FilePathT -> FilePath
+getPath = unpack . Witch.from
+
+-- | Combine two files path with 'System.FilePath.combine'
 (</>) :: FilePathT -> FilePathT -> FilePathT
-FilePathT a </> FilePathT b = FilePathT (pack $ unpack a `System.FilePath.combine` unpack b)
+a </> b = FilePathT . pack $ getPath a `System.FilePath.combine` getPath b
 
+-- | Wrapper for 'System.Directory.listDirectory'.
 listDirectory :: FilePathT -> IO [FilePathT]
-listDirectory (FilePathT fp) = map (FilePathT . pack) <$> System.Directory.listDirectory (unpack fp)
+listDirectory fp = map (FilePathT . pack) <$> System.Directory.listDirectory (getPath fp)
 
+-- | Wrapper for 'System.Directory.doesDirectoryExist'
 doesDirectoryExist :: FilePathT -> IO Bool
-doesDirectoryExist (FilePathT fp) = System.Directory.doesDirectoryExist (unpack fp)
+doesDirectoryExist = System.Directory.doesDirectoryExist . getPath
 
+-- | Wrapper for 'Data.ByteString.readFile'
 readFileBS :: FilePathT -> IO BS.ByteString
-readFileBS (FilePathT fp) = BS.readFile (unpack fp)
+readFileBS = BS.readFile . getPath
 
+-- | Wrapper for 'Data.Text.IO.readFile'
 readFileText :: FilePathT -> IO Text
-readFileText (FilePathT fp) = Text.readFile (unpack fp)
+readFileText = Text.readFile . getPath
 
+-- | Get the clock seconds.
 getSec :: IO Int64
 getSec = do
   System.Clock.TimeSpec sec _ <- System.Clock.getTime System.Clock.Monotonic
   pure sec
 
+-- | Compute the time interval in milli-seconds ellapsed between now and the provided action.
 intervalMilliSec :: IO (IO Int64)
 intervalMilliSec = do
   start <- System.Clock.getTime System.Clock.Monotonic
@@ -201,29 +264,34 @@ orDie :: Maybe a -> b -> Either b a
 Just a `orDie` _ = Right a
 Nothing `orDie` err = Left err
 
+-- | Die with on the Left case
 fromEither :: Show a => Either a b -> b
 fromEither e = case e of
   Left x -> error (show x)
   Right x -> x
 
-decodeAsList :: Text -> (Text -> a) -> Object -> [a]
+-- | Decode a list of values.
+decodeAsList :: HasCallStack => Text -> (Text -> a) -> Object -> [a]
 decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
   Just (String x) -> [build x]
-  Just (Array xs) -> build . getString <$> sort (V.toList xs)
+  Just (Array xs) -> build . getString <$> Data.List.sort (V.toList xs)
   Just _va -> error $ "Unexpected " <> Text.unpack k <> " structure: " <> show _va
   Nothing -> []
 
+-- | Unwrap a json object
 unwrapObject :: HasCallStack => Value -> Object
 unwrapObject va = case va of
   Object hm -> hm
   _ -> error $ "Expecting an Object out of JSON Value: " <> show va
 
-getObjValue :: Text -> Object -> Value
+-- | Get an json object attribute value.
+getObjValue :: HasCallStack => Text -> Object -> Value
 getObjValue k hm = case HM.lookup (Data.Aeson.Key.fromText k) hm of
   Just va -> va
   Nothing -> error $ "Unable to get " <> Text.unpack k <> " from Object: " <> show (HM.keys hm)
 
-getString :: Value -> Text
+-- | Get a json string.
+getString :: HasCallStack => Value -> Text
 getString va = case va of
   String str -> str
   _ -> error $ "Expected a String out of JSON value: " <> show va

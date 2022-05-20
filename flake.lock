@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "calligraphy": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1653064852,
+        "narHash": "sha256-ur1plGAqV7QEcGv5KBAYxz59szMg0B2bB3Ap44AbKVA=",
+        "owner": "jonascarpay",
+        "repo": "calligraphy",
+        "rev": "5bae4927c85c1afad46e1005c07312e1da3c880a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jonascarpay",
+        "repo": "calligraphy",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -18,6 +39,21 @@
     },
     "flake-utils": {
       "locked": {
+        "lastModified": 1644229661,
+        "narHash": "sha256-1YdnJAsNy69bpcjuoKdOYQX0YxZBiCYZo4Twxerqv7k=",
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "rev": "3cecb5b042f7f209c56ffd8371b2711a290ec797",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "flake-utils_2": {
+      "locked": {
         "lastModified": 1652372896,
         "narHash": "sha256-lURGussfF3mGrFPQT3zgW7+RC0pBhbHzco0C7I+ilow=",
         "owner": "numtide",
@@ -31,7 +67,7 @@
         "type": "github"
       }
     },
-    "flake-utils_2": {
+    "flake-utils_3": {
       "locked": {
         "lastModified": 1642700792,
         "narHash": "sha256-XqHrk7hFb+zBvRg6Ghl+AZDq03ov6OshJLiSWOoX5es=",
@@ -63,7 +99,8 @@
     },
     "root": {
       "inputs": {
-        "flake-utils": "flake-utils",
+        "calligraphy": "calligraphy",
+        "flake-utils": "flake-utils_2",
         "nixpkgs": "nixpkgs",
         "tailwind": "tailwind"
       }
@@ -71,7 +108,7 @@
     "tailwind": {
       "inputs": {
         "flake-compat": "flake-compat",
-        "flake-utils": "flake-utils_2",
+        "flake-utils": "flake-utils_3",
         "nixpkgs": [
           "nixpkgs"
         ]

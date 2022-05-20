@@ -1,7 +1,18 @@
--- | The Zuul Configuration data types
+-- |
+-- Module      : Zuul.Config
+-- Description : Configuration data types
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
+--
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- The Zuul Configuration data types.
+--
 -- See: https://zuul-ci.org/docs/zuul/latest/project-config.html#configuration-items
 module Zuul.Config
-  ( -- * Newtype wrapper
+  ( -- * Newtype wrappers
     TenantName (..),
     JobName (..),
     ProjectName (..),
@@ -10,14 +21,14 @@ module Zuul.Config
     NodeLabelName (..),
     ProjectTemplateName (..),
 
-    -- * Project identifier
+    -- * Project identifiers
     BranchName (..),
     ProviderName (..),
     ConnectionName (..),
     ConnectionUrl (..),
     CanonicalProjectName (..),
 
-    -- * Configuration data type
+    -- * Configuration data types
     Job (..),
     JobNodeset (..),
     Project (..),
@@ -28,14 +39,13 @@ module Zuul.Config
     Nodeset (..),
     ProjectTemplate (..),
 
-    -- * Configuration identifier
+    -- * Configuration identifiers
     ConfigLoc (..),
     ZuulConfigElement (..),
     ZuulConfigType (..),
   )
 where
 
-import Data.Text.Lazy.Builder qualified as TB
 import ZuulWeeder.Prelude
 
 newtype BranchName = BranchName Text
@@ -44,7 +54,6 @@ newtype BranchName = BranchName Text
 
 newtype JobName = JobName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving (Display) via (ShowInstance JobName)
   deriving newtype (Hashable)
 
 newtype PipelineName = PipelineName Text
@@ -58,12 +67,10 @@ newtype ProjectName = ProjectName Text
 newtype NodesetName = NodesetName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
-  deriving (Display) via (ShowInstance NodesetName)
 
 newtype NodeLabelName = NodeLabelName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
-  deriving (Display) via (ShowInstance NodeLabelName)
 
 newtype ProviderName = ProviderName Text
   deriving (Eq, Ord, Show, Generic)
@@ -73,18 +80,19 @@ newtype ProjectTemplateName = ProjectTemplateName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
-newtype CanonicalProjectName = CanonicalProjectName (ProviderName, ProjectName)
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
-
-instance Display CanonicalProjectName where
-  displayBuilder (CanonicalProjectName (_, ProjectName projectName)) =
-    TB.fromText projectName
+data CanonicalProjectName = CanonicalProjectName
+  { provider :: ProviderName,
+    project :: ProjectName
+  }
+  deriving (Eq, Ord, Show, Generic, Hashable)
 
 newtype ConnectionName = ConnectionName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
+-- TODO: use Network.URI.URI instead of Text
+
+-- | The sum of all the possible connection urls
 data ConnectionUrl
   = GerritUrl Text
   | GitlabUrl Text
@@ -160,6 +168,7 @@ data Queue = Queue {name :: Text, perBranch :: Bool}
 data Semaphore = Semaphore {name :: Text, max :: Int}
   deriving (Show, Eq, Ord, Generic, Hashable)
 
+-- | The sum of all the configuration elements.
 data ZuulConfigElement
   = ZJob Job
   | ZProject Project
@@ -180,12 +189,7 @@ instance From ZuulConfigElement ZuulConfigType where
     ZQueue _ -> QueueT
     ZSemaphore _ -> SemaphoreT
 
-instance Display ZuulConfigElement where
-  displayBuilder zce = case zce of
-    ZJob job -> displayBuilder $ job.name
-    ZNodeset ns -> displayBuilder $ ns.name
-    _ -> error "display instance todo"
-
+-- | The sum of all the configuration types.
 data ZuulConfigType
   = PipelineT
   | JobT
@@ -197,6 +201,7 @@ data ZuulConfigType
   | QueueT
   deriving (Show, Eq, Ord, Enum, Bounded)
 
+-- | The configuration source context location
 data ConfigLoc = ConfigLoc
   { project :: CanonicalProjectName,
     branch :: BranchName,
@@ -205,14 +210,3 @@ data ConfigLoc = ConfigLoc
     tenants :: Set TenantName
   }
   deriving (Show, Eq, Ord, Generic)
-
-instance Display ConfigLoc where
-  displayBuilder loc =
-    displayBuilder loc.project
-      <> branchBuilder
-      <> TB.fromText ": "
-      <> displayBuilder loc.path
-    where
-      branchBuilder = case loc.branch of
-        BranchName "master" -> ""
-        BranchName n -> TB.fromText $ "[" <> n <> "]"

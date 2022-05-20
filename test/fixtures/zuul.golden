@@ -1,70 +1,109 @@
 Just
-    [
-        ( CanonicalProjectName
-            ( ProviderName "sftests.com"
-            , ProjectName "config"
-            )
-        ,
-            [ PipelineT
-            , JobT
-            , SemaphoreT
-            , ProjectT
-            , ProjectTemplateT
-            , NodesetT
-            , SecretT
-            , QueueT
+    ( TenantsConfig
+        { tenants = fromList
+            [
+                ( TenantName "local"
+                , TenantConfig
+                    { defaultParent = JobName "base"
+                    , connections = fromList
+                        [
+                            ( ConnectionName "gerrit"
+                            , TenantConnectionConfig
+                                { configProjects =
+                                    [ TenantProject
+                                        { name = ProjectName "config"
+                                        , includedConfigElements = fromList
+                                            [ PipelineT
+                                            , JobT
+                                            , SemaphoreT
+                                            , ProjectT
+                                            , ProjectTemplateT
+                                            , NodesetT
+                                            , SecretT
+                                            , QueueT
+                                            ]
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
+                                    , TenantProject
+                                        { name = ProjectName "project-config"
+                                        , includedConfigElements = fromList
+                                            [ PipelineT
+                                            , JobT
+                                            , SemaphoreT
+                                            , ProjectT
+                                            , ProjectTemplateT
+                                            , NodesetT
+                                            , SecretT
+                                            , QueueT
+                                            ]
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
+                                    ]
+                                , untrustedProjects =
+                                    [ TenantProject
+                                        { name = ProjectName "sf-jobs"
+                                        , includedConfigElements = fromList
+                                            [ JobT
+                                            , SemaphoreT
+                                            , ProjectT
+                                            , ProjectTemplateT
+                                            , NodesetT
+                                            , SecretT
+                                            , QueueT
+                                            ]
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
+                                    , TenantProject
+                                        { name = ProjectName "zuul-jobs"
+                                        , includedConfigElements = fromList [ JobT ]
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
+                                    , TenantProject
+                                        { name = ProjectName "zuul-distro-jobs"
+                                        , includedConfigElements = fromList []
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
+                                    , TenantProject
+                                        { name = ProjectName "no-include-proj"
+                                        , includedConfigElements = fromList []
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            )
+                        ]
+                    }
+                )
             ]
-        )
-    ,
-        ( CanonicalProjectName
-            ( ProviderName "sftests.com"
-            , ProjectName "project-config"
-            )
-        ,
-            [ PipelineT
-            , JobT
-            , SemaphoreT
-            , ProjectT
-            , ProjectTemplateT
-            , NodesetT
-            , SecretT
-            , QueueT
-            ]
-        )
-    ,
-        ( CanonicalProjectName
-            ( ProviderName "sftests.com"
-            , ProjectName "sf-jobs"
-            )
-        ,
-            [ JobT
-            , SemaphoreT
-            , ProjectT
-            , ProjectTemplateT
-            , NodesetT
-            , SecretT
-            , QueueT
-            ]
-        )
-    ,
-        ( CanonicalProjectName
-            ( ProviderName "sftests.com"
-            , ProjectName "zuul-jobs"
-            )
-        , [ JobT ]
-        )
-    ,
-        ( CanonicalProjectName
-            ( ProviderName "sftests.com"
-            , ProjectName "zuul-distro-jobs"
-            )
-        , []
-        )
-    ,
-        ( CanonicalProjectName
-            ( ProviderName "sftests.com"
-            , ProjectName "no-include-proj"
-            )
-        , []
-        )
-    ]
+        }
+    )

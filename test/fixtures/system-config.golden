@@ -8,7 +8,7 @@
                 , TenantConnectionConfig
                     { configProjects =
                         [ TenantProject
-                            { projectName = ProjectName "config"
+                            { name = ProjectName "config"
                             , includedConfigElements = fromList
                                 [ PipelineT
                                 , JobT
@@ -27,7 +27,7 @@
                                 ]
                             }
                         , TenantProject
-                            { projectName = ProjectName "project-config"
+                            { name = ProjectName "project-config"
                             , includedConfigElements = fromList
                                 [ PipelineT
                                 , JobT
@@ -48,7 +48,7 @@
                         ]
                     , untrustedProjects =
                         [ TenantProject
-                            { projectName = ProjectName "sf-jobs"
+                            { name = ProjectName "sf-jobs"
                             , includedConfigElements = fromList
                                 [ JobT
                                 , SemaphoreT
@@ -66,7 +66,7 @@
                                 ]
                             }
                         , TenantProject
-                            { projectName = ProjectName "zuul-jobs"
+                            { name = ProjectName "zuul-jobs"
                             , includedConfigElements = fromList [ JobT ]
                             , configPaths =
                                 [ ".zuul.yaml"
@@ -76,7 +76,7 @@
                                 ]
                             }
                         , TenantProject
-                            { projectName = ProjectName "zuul-distro-jobs"
+                            { name = ProjectName "zuul-distro-jobs"
                             , includedConfigElements = fromList []
                             , configPaths =
                                 [ ".zuul.yaml"
@@ -86,7 +86,7 @@
                                 ]
                             }
                         , TenantProject
-                            { projectName = ProjectName "no-include-proj"
+                            { name = ProjectName "no-include-proj"
                             , includedConfigElements = fromList []
                             , configPaths =
                                 [ ".zuul.yaml"

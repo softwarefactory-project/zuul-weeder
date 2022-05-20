@@ -1,10 +1,29 @@
--- | The web interface for zuul-weeder
--- The UI is implemented with
--- * htmx - https://htmx.org/docs/#introduction
--- * tailwind - https://tailwindcss.com/docs/utility-first  (use Ctrl-K to search documentation)
+-- |
+-- Module      : ZuulWeeder.UI
+-- Description : The User Interface
+-- Copyright   : (c) Red Hat, 2022
+-- License     : Apache-2.0
 --
+-- Maintainer  : tdecacqu@redhat.com, fboucher@redhat.com
+-- Stability   : provisional
+-- Portability : portable
+--
+-- The web interface for zuul-weeder.
+--
+-- The UI is implemented with
+--
+--   * [htmx](https://htmx.org/docs/#introduction)
+--   * [tailwind](https://tailwindcss.com/docs/utility-first) (use Ctrl-K to search documentation)
+module ZuulWeeder.UI
+  ( app,
+    BasePath (..),
+
+    -- * Test helpers
+    configLocUrl,
+  )
+where
+
 -- After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
-module ZuulWeeder.UI where
 
 import Algebra.Graph qualified
 import Data.Aeson qualified
@@ -27,10 +46,14 @@ import ZuulWeeder.Prelude
 -- | The request context
 data Scope = UnScoped | Scoped (Set TenantName) deriving (Show)
 
-newtype RootURL = RootURL {rootUrl :: Text} deriving newtype (Show)
+-- | The base path of the web interface, when served behing a sub path proxy.
+newtype BasePath = BasePath
+  { basePath :: Text
+  }
+  deriving newtype (Show)
 
 data Context = Context
-  { rootURL :: RootURL,
+  { rootURL :: BasePath,
     scope :: Scope
   }
   deriving (Show)
@@ -94,7 +117,7 @@ navComponent ctx page =
        in hxNavLinkWithAttr [id_ $ "nav-" <> path] (base <> path) (Just linkClass)
     exitScope =
       case ctx.scope of
-        Scoped tenants -> hxNavLink (rootUrl ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
+        Scoped tenants -> hxNavLink (basePath ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
         UnScoped -> pure ()
       where
         tenantClass = "my-4 p-1 text-white font-semibold "
@@ -134,17 +157,18 @@ tenantsList :: Set TenantName -> Text
 tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)
 
 distUrl :: Context -> Text -> Text
-distUrl ctx x = rootUrl ctx.rootURL <> "dists/" <> x
+distUrl ctx x = basePath ctx.rootURL <> "dists/" <> x
 
-tenantUrl :: RootURL -> TenantName -> Text
-tenantUrl (RootURL rootURL) (TenantName name) = rootURL <> "tenant/" <> name <> "/"
+tenantUrl :: BasePath -> TenantName -> Text
+tenantUrl (BasePath rootURL) (TenantName name) = rootURL <> "tenant/" <> name <> "/"
 
 baseUrl :: Context -> Text
 baseUrl ctx =
-  rootUrl ctx.rootURL <> case ctx.scope of
+  basePath ctx.rootURL <> case ctx.scope of
     UnScoped -> ""
     Scoped tenants -> "tenant/" <> tenantsList tenants <> "/"
 
+-- | Get the URL of a configuration element location
 configLocUrl :: ConfigLoc -> Text
 configLocUrl loc = case loc.url of
   GerritUrl url -> trimedUrl url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
@@ -158,7 +182,7 @@ configLocUrl loc = case loc.url of
     | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
   GitUrl url -> trimedUrl url <> "/cgit/" <> name <> "/tree/" <> path <> "?h=" <> branch
   where
-    CanonicalProjectName (_, ProjectName name) = loc.project
+    CanonicalProjectName _ (ProjectName name) = loc.project
     BranchName branch = loc.branch
     FilePathT path = loc.path
     trimedUrl = Text.dropWhileEnd (== '/')
@@ -255,12 +279,12 @@ vertexLink ctx name = hxNavLink ref Nothing
           Network.URI.Encode.encodeText (from name)
         ]
 
-tenantBaseLink :: RootURL -> TenantName -> Html ()
+tenantBaseLink :: BasePath -> TenantName -> Html ()
 tenantBaseLink rootURL tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
     hxNavLink (tenantUrl rootURL tenant) Nothing (toHtml (into @Text tenant))
 
-tenantLink :: RootURL -> VertexName -> TenantName -> Html ()
+tenantLink :: BasePath -> VertexName -> TenantName -> Html ()
 tenantLink rootURL name tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
     vertexLink (Context rootURL (Scoped $ Set.singleton tenant)) name (toHtml (into @Text tenant))
@@ -325,13 +349,11 @@ searchComponent ctx queryM result = do
       Just q -> value_ q
       Nothing -> placeholder_ "Begin Typing To Search Config..."
 
-hxTrigger, hxTarget, hxSwap, hxGet, hxPost, hxBoost, hxIndicator :: Text -> Attribute
+hxTrigger, hxTarget, hxGet, hxPost, hxIndicator :: Text -> Attribute
 hxTrigger = makeAttribute "hx-trigger"
 hxTarget = makeAttribute "hx-target"
-hxSwap = makeAttribute "hx-swap"
 hxGet = makeAttribute "hx-get"
 hxPost = makeAttribute "hx-post"
-hxBoost = makeAttribute "hx-boost"
 hxIndicator = makeAttribute "hx-indicator"
 
 hxPushUrl :: Attribute
@@ -381,31 +403,6 @@ locLink loc =
     -- TODO: render valid link based on config connection
     url = configLocUrl loc
     locPath = Text.drop 8 url
-
-locComponent :: ConfigLoc -> Html ()
-locComponent loc = do
-  locLink loc
-  traverse_ tenantBox loc.tenants
-  where
-    tenantBox (TenantName tenant) = with' span_ "rounded bg-slate-200 text-slate-700 p-1" (toHtml tenant)
-
-dl :: Html () -> [(Text, Html ())] -> Html ()
-dl title xs =
-  with' div_ "bg-white shadow overflow-hidden sm:rounded-lg" do
-    with' div_ "px-4 py-5 sm:px-6" do
-      with' h3_ "text-lg leading-6 font-medium text-gray-900" title
-    with' div_ "border-t border-gray-200" do
-      dl_ (traverse_ go (zip [0 ..] xs))
-  where
-    go :: (Int, (Text, Html ())) -> Html ()
-    go (pos, (k, v)) =
-      with' div_ (bgColor <> " px-1 py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6") do
-        with' dt_ "text-sm font-medium text-gray-500" (toHtml k)
-        with' dd_ "mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2" v
-      where
-        bgColor
-          | even pos = "bg-gray-50"
-          | otherwise = "bg-white"
 
 objectInfo :: Context -> NonEmpty Vertex -> Analysis -> Html ()
 objectInfo ctx vertices analysis = do
@@ -475,15 +472,6 @@ newtype TenantsUrl = TNU {getTNU :: Set TenantName}
 instance FromHttpApiData TenantsUrl where
   parseUrlPiece piece = pure . TNU $ Set.fromList (TenantName <$> Text.split (== ',') piece)
 
-type ObjectPath =
-  Capture "type" VertexTypeUrl
-    :> Capture "name" VertexNameUrl
-    :> Get '[HTML] (Html ())
-
-type SearchPath =
-  ReqBody '[FormUrlEncoded] SearchForm
-    :> Post '[HTML] (Headers '[Header "HX-Push" Text] (Html ()))
-
 type GetRequest = Header "HX-Request" Text :> Get '[HTML] (Html ())
 
 -- | The zuul-weeder base HTTP API.
@@ -493,10 +481,14 @@ type BaseAPI =
     :<|> "about" :> GetRequest
     :<|> "search" :> GetRequest
     :<|> "info" :> GetRequest
-    :<|> "object" :> Header "HX-Request" Text :> ObjectPath
+    :<|> "object" :> Capture "type" VertexTypeUrl :> Capture "name" VertexNameUrl :> GetRequest
     :<|> "search_results" :> SearchPath
     :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
     :<|> "data.json" :> Get '[JSON] D3Graph
+
+type SearchPath =
+  ReqBody '[FormUrlEncoded] SearchForm
+    :> Post '[HTML] (Headers '[Header "HX-Push" Text] (Html ()))
 
 type TenantAPI = "tenant" :> Capture "tenant" TenantsUrl :> BaseAPI
 
@@ -504,7 +496,16 @@ type StaticAPI = "dists" :> Raw
 
 type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 
-app :: IO Analysis -> RootURL -> FilePath -> Application
+-- | Creates the Web Application Interface (wai).
+app ::
+  -- | An action to refresh the analysis
+  IO Analysis ->
+  -- | The base path of the interface, used to render absolute links
+  BasePath ->
+  -- | The location of the static files
+  FilePath ->
+  -- | The application to serve
+  Application
 app config rootURL distPath = serve (Proxy @API) rootServer
   where
     rootServer :: Server API
@@ -533,7 +534,7 @@ app config rootURL distPath = serve (Proxy @API) rootServer
             navComponent ctx name
             componentHtml
 
-        objectRoute htmxRequest (VTU mkName) (CNU name) = do
+        objectRoute (VTU mkName) (CNU name) htmxRequest = do
           analysis <- liftIO config
           let vname = mkName name
           let vertices = Set.toList $ Set.filter matchVertex analysis.vertices
