@@ -59,9 +59,11 @@ data ConfigError
   = -- | System level exception, e.g. ENOENT
     ReadError SomeException
   | -- | YAML decoding error
-    DecodeError Data.Yaml.ParseException
+    YamlError Data.Yaml.ParseException
   | -- | The path is missing component, e.g. branch name
     InvalidPath
+  | -- | A decoding error
+    DecodeError FilePathT Text Value
   deriving (Show)
 
 -- | Read all the configuration found at the given path
@@ -87,7 +89,7 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
     handleConfig fullPath = do
       zkData <- readZKData fullPath
       zkJSONData <- case Data.Yaml.decodeEither' zkData of
-        Left err -> throwError $ DecodeError err
+        Left err -> throwError $ YamlError err
         Right content -> pure content
 
       case mkZKFile zkJSONData fullPath of

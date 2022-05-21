@@ -19,6 +19,7 @@ module Zuul.Tenant
   )
 where
 
+import Data.Aeson (Object)
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (lookup, toList)
@@ -26,7 +27,6 @@ import Data.Aeson.Types qualified
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
-import Data.Vector qualified as V
 import Zuul.Config
 import Zuul.ServiceConfig (ServiceConfig (..))
 import Zuul.ZooKeeper (ZKTenantsConfig (..))
@@ -82,72 +82,77 @@ newtype TenantsConfig = TenantsConfig
   deriving (Show, Eq, Ord, Generic)
 
 -- | Decode the 'TenantsConfig' from a ZK data file.
-decodeTenantsConfig :: ZKTenantsConfig -> Maybe TenantsConfig
-decodeTenantsConfig (ZKTenantsConfig value) = case value of
-  Data.Aeson.Object hm ->
-    let abide = unwrapObject $ getObjValue "unparsed_abide" hm
-        tenants = HM.toList $ unwrapObject $ getObjValue "tenants" abide
-     in Just $ insertTenants (TenantsConfig Map.empty) tenants
-  _ -> Nothing
+decodeTenantsConfig :: ZKTenantsConfig -> Either Text TenantsConfig
+decodeTenantsConfig (ZKTenantsConfig value) = case decoded of
+  (Decoder (Right x)) -> Right x
+  (Decoder (Left e)) -> Left $ from ("Decode error:" <> show e)
   where
-    insertTenants :: TenantsConfig -> [(Data.Aeson.Key.Key, Data.Aeson.Value)] -> TenantsConfig
-    insertTenants tc assocs = case assocs of
-      [] -> tc
-      (Data.Aeson.Key.toText -> tName, tData) : xs ->
-        let new = tc & #tenants `over` Map.insert (TenantName tName) (decodeTenant tData)
-         in insertTenants new xs
+    decoded :: Decoder TenantsConfig
+    decoded = case value of
+      Data.Aeson.Object hm -> do
+        abide <- decodeObject =<< decodeObjectAttribute "unparsed_abide" hm
+        tenantsValues <- HM.toList <$> (decodeObject =<< decodeObjectAttribute "tenants" abide)
+        tenants <- traverse decodeTenant (first Data.Aeson.Key.toText <$> tenantsValues)
+        pure $ TenantsConfig $ Map.fromList tenants
+      _ -> decodeFail "Invalid root tenants config" value
 
-    decodeTenant :: Data.Aeson.Value -> TenantConfig
-    decodeTenant tenant =
-      let tenantObject = unwrapObject tenant
-          source = HM.toList $ unwrapObject $ getObjValue "source" tenantObject
-          defaultParent = JobName $ case HM.lookup "default-parent" tenantObject of
-            Just (Data.Aeson.String txt) -> txt
-            _ -> "base"
-       in insertTenantConnections defaultParent (TenantConfig defaultParent Map.empty) source
+    decodeTenant :: (Text, Data.Aeson.Value) -> Decoder (TenantName, TenantConfig)
+    decodeTenant (TenantName -> name, v) = do
+      obj <- decodeObject v
+      config <- decodeTenantConfig obj
+      pure (name, config)
 
-    insertTenantConnections :: JobName -> TenantConfig -> [(Data.Aeson.Key.Key, Data.Aeson.Value)] -> TenantConfig
-    insertTenantConnections defaultParent tc assocs = case assocs of
-      [] -> tc
-      (Data.Aeson.Key.toText -> cName, cData) : xs ->
-        let new = tc & #connections `over` Map.insert (ConnectionName cName) (decodeConnection cData)
-         in insertTenantConnections defaultParent new xs
+    decodeTenantConfig :: Object -> Decoder TenantConfig
+    decodeTenantConfig obj = do
+      sources <- decodeObject =<< decodeObjectAttribute "source" obj
+      connections <- Map.fromList <$> traverse decodeConnection (first Data.Aeson.Key.toText <$> HM.toList sources)
+      defaultParent <-
+        JobName <$> case HM.lookup "default-parent" obj of
+          Just (Data.Aeson.String n) -> pure n
+          Just v -> decodeFail "Invalid default-parent value" v
+          Nothing -> pure "base"
+      pure $ TenantConfig {defaultParent, connections}
 
-    decodeConnection :: Data.Aeson.Value -> TenantConnectionConfig
-    decodeConnection cnx =
-      let configProjects = getProjects "config-projects"
-          untrustedProjects = getProjects "untrusted-projects"
-       in TenantConnectionConfig {configProjects, untrustedProjects}
+    decodeConnection :: (Text, Data.Aeson.Value) -> Decoder (ConnectionName, TenantConnectionConfig)
+    decodeConnection (ConnectionName -> cname, v) = do
+      va <- decodeObject v
+      configProjects <- getProjects "config-projects" va
+      untrustedProjects <- getProjects "untrusted-projects" va
+      pure (cname, TenantConnectionConfig {configProjects, untrustedProjects})
       where
         defaultPaths = [".zuul.yaml", "zuul.yaml", ".zuul.d/", "zuul.d/"]
-        getProjects :: Text -> [TenantProject]
-        getProjects ptype = case HM.lookup (Data.Aeson.Key.fromText ptype) $ unwrapObject cnx of
-          Just (Data.Aeson.String name) -> [TenantProject (ProjectName name) mempty defaultPaths]
-          Just (Data.Aeson.Array vec) -> getProject <$> concatMap decodeProjectItems (V.toList vec)
-          _ -> []
 
-        decodeProjectItems :: Data.Aeson.Value -> [(Data.Aeson.Key.Key, Data.Aeson.Value)]
-        decodeProjectItems x = case x of
-          Data.Aeson.Object o
-            | isJust (HM.lookup "projects" o) -> map (getProjectGroup x) (decodeAsList "projects" id o)
-            | otherwise -> HM.toList o
-          Data.Aeson.String v -> [(Data.Aeson.Key.fromText v, Data.Aeson.Types.emptyObject)]
-          _ -> error $ "Invalid object definition: " <> show x
+        getProjects :: Text -> Object -> Decoder [TenantProject]
+        getProjects (Data.Aeson.Key.fromText -> k) o =
+          case HM.lookup k o of
+            Just projectList ->
+              (traverse decodeProjects =<< decodeList projectList)
+                >>= traverse decodeProject . concat
+            Nothing -> pure []
 
-        getProjectGroup :: Data.Aeson.Value -> Text -> (Data.Aeson.Key.Key, Data.Aeson.Value)
-        getProjectGroup v n = (Data.Aeson.Key.fromText n, v)
+        -- Decode a single project or a project configuration list
+        decodeProjects :: Value -> Decoder [(Text, Value)]
+        decodeProjects = \case
+          x@(Data.Aeson.Object o)
+            -- Project configuration is a list of project name with a shared config
+            | isJust (HM.lookup "projects" o) -> map (,x) <$> decodeAsList "projects" id o
+            -- It's a single project with a custom config
+            | otherwise -> pure $ first Data.Aeson.Key.toText <$> HM.toList o
+          -- Project configuration is a single name
+          Data.Aeson.String name -> pure [(name, Data.Aeson.Types.emptyObject)]
+          anyOther -> decodeFail "Invalid project definition" anyOther
 
-        getProject :: (Data.Aeson.Key.Key, Data.Aeson.Value) -> TenantProject
-        getProject (Data.Aeson.Key.toText -> name, options') =
-          let options = unwrapObject options'
-              included = Set.fromList $ toItemType <$> decodeAsList "include" id options
-              excluded = Set.fromList $ toItemType <$> decodeAsList "exclude" id options
-              includedElements
+        decodeProject :: (Text, Value) -> Decoder TenantProject
+        decodeProject (name, options') = do
+          options <- decodeObject options'
+          included <- Set.fromList <$> decodeAsList "include" toItemType options
+          excluded <- Set.fromList <$> decodeAsList "exclude" toItemType options
+          let includedElements
                 | isJust $ HM.lookup "include" options = included
                 | isJust $ HM.lookup "exclude" options = Set.difference allItems excluded
                 | otherwise = allItems
               extraConfigPaths = [] -- TODO: decode attribute
-           in TenantProject (ProjectName name) includedElements (extraConfigPaths <> defaultPaths)
+          pure $ TenantProject (ProjectName name) includedElements (extraConfigPaths <> defaultPaths)
 
 -- | Helper function to return the list of tenants matching a 'ConfigLoc'
 tenantResolver ::

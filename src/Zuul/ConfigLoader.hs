@@ -23,7 +23,7 @@ module Zuul.ConfigLoader
   )
 where
 
-import Data.Aeson (Object, Value (Array, Object, String))
+import Data.Aeson (Object, Value (Array, Null, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Map qualified as Map
@@ -55,8 +55,8 @@ data Config = Config
   }
   deriving (Show, Generic)
 
-updateTopConfig :: TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
-updateTopConfig tenantResolver configLoc ze = case ze of
+updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
+updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
   ZJob job -> #jobs %= insertConfig job.name job
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
@@ -72,159 +72,147 @@ updateTopConfig tenantResolver configLoc ze = case ze of
     insertConfig k v
       | null tenants = id -- The object is not attached to any tenant, we don't add it
       | otherwise = Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
+updateTopConfig _ configLoc (Decoder (Left (e, v))) =
+  #configErrors %= (DecodeError configLoc.path e v :)
 
 -- | Low level helper to decode a config file into a list of 'ZuulConfigElement'.
-decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [ZuulConfigElement]
+decodeConfig :: (CanonicalProjectName, BranchName) -> Value -> [Decoder ZuulConfigElement]
 decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName projectName), _branch) zkJSONData =
-  let rootObjs = case zkJSONData of
-        Array vec -> V.toList vec
-        _ -> error $ "Unexpected root data structure on: " <> show rootObjs
-   in mapMaybe getConfigElement rootObjs
+  case zkJSONData of
+    Array vec -> mapMaybe (sequence . getConfigElement) $ V.toList vec
+    _ -> [decodeFail "Unexpected root data structure" zkJSONData]
   where
-    getConfigElement :: Value -> Maybe ZuulConfigElement
-    getConfigElement rootObj =
-      let obj = unwrapObject rootObj
-       in case getKey obj of
-            "job" -> Just . ZJob . decodeJob $ getE "job" obj
-            "nodeset" -> Just . ZNodeset . decodeNodeset $ getE "nodeset" obj
-            "project" -> Just . ZProject . decodeProject $ getE "project" obj
-            -- We use the same decoder as for "project" as the structure is slightly the same
-            "project-template" -> Just . ZProjectTemplate . decodeProjectTemplate $ getE "project-template" obj
-            "pipeline" -> Just . ZPipeline . decodePipeline $ getE "pipeline" obj
-            _ -> Nothing
+    getConfigElement :: Value -> Decoder (Maybe ZuulConfigElement)
+    getConfigElement rootObj = do
+      (k, obj) <- getObjectKey =<< decodeObject rootObj
+      case k of
+        "job" -> Just . ZJob <$> decodeJob obj
+        "nodeset" -> Just . ZNodeset <$> decodeNodeset obj
+        "project" -> Just . ZProject <$> decodeProject obj
+        "project-template" -> Just . ZProjectTemplate <$> decodeProjectTemplate obj
+        "pipeline" -> Just . ZPipeline <$> decodePipeline obj
+        "queue" -> Just <$> decodeQueue obj
+        "pragma" -> pure Nothing
+        _ -> decodeFail "Unknown root object" (Object obj)
+
+    decodeQueue = error "Queue decode not implemented"
+
+    decodePipeline :: Object -> Decoder Pipeline
+    decodePipeline va = do
+      name <- PipelineName <$> getName va
+      triggersObj <- decodeObject =<< decodeObjectAttribute "trigger" va
+      let triggers = PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggersObj
+      pure $ Pipeline {name, triggers}
+
+    decodeJob :: Object -> Decoder Job
+    decodeJob va = do
+      name <- JobName <$> getName va
+      decodeJobContent name va
+
+    decodeJobContent :: JobName -> Object -> Decoder Job
+    decodeJobContent name va = do
+      Job name
+        <$> decodeJobParent
+        <*> decodeJobNodeset
+        <*> decodeAsList "branches" BranchName va
+        <*> decodeJobDependencies
       where
-        getE :: Text -> Object -> Object
-        getE k o = unwrapObject $ getObjValue k o
+        decodeJobParent :: Decoder (Maybe JobName)
+        decodeJobParent = case HM.lookup "parent" va of
+          Just (String p) -> pure $ Just $ JobName p
+          Just Data.Aeson.Null -> pure Nothing
+          Just x -> decodeFail "Invalid parent key" x
+          Nothing -> pure Nothing
 
-    decodePipeline :: Object -> Pipeline
-    decodePipeline va =
-      let name = PipelineName $ getName va
-          triggers = case getObjValue "trigger" va of
-            Object triggers' -> PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggers'
-            _ -> error $ "Unexpected trigger value in: " <> show va
-       in Pipeline {name, triggers}
-
-    decodeJob :: Object -> Job
-    decodeJob va =
-      let name = JobName $ getName va
-          ( parent,
-            nodeset,
-            branches,
-            dependencies
-            ) = decodeJobContent va
-       in Job {name, parent, nodeset, branches, dependencies}
-
-    decodeJobContent :: Object -> (Maybe JobName, Maybe JobNodeset, [BranchName], [JobName])
-    decodeJobContent va =
-      let jobParent = case HM.lookup "parent" va of
-            Just (String p) -> Just $ JobName p
-            _ -> Nothing
-          jobNodeset = decodeJobNodeset
-          jobBranches = decodeJobBranches
-          jobDependencies = decodeJobDependencies
-       in (jobParent, jobNodeset, jobBranches, jobDependencies)
-      where
-        decodeJobNodeset :: Maybe JobNodeset
+        decodeJobNodeset :: Decoder (Maybe JobNodeset)
         decodeJobNodeset = case HM.lookup "nodeset" va of
-          Just (String n) -> Just . JobNodeset $ NodesetName n
-          Just (Object nObj) -> case getObjValue "nodes" nObj of
-            Array nodes -> decodeJobNodesetNodes (V.toList nodes)
-            o@(Object _) -> decodeJobNodesetNodes [o]
-            _ -> error $ "Unexpected nodeset nodes structure: " <> show nObj
-          Just _va -> error $ "Unexpected nodeset structure: " <> show _va
-          Nothing -> Nothing
+          Just (String n) -> pure $ Just . JobNodeset $ NodesetName n
+          Just (Object nObj) -> do
+            v <- decodeObjectAttribute "nodes" nObj
+            case v of
+              Array nodes -> Just <$> decodeJobNodesetNodes (V.toList nodes)
+              -- that's weird, nodeset.nodes does not have to be a list
+              o@(Object _) -> Just <$> decodeJobNodesetNodes [o]
+              _ -> decodeFail "Unexpected nodes structure" (Object nObj)
+          Just _va -> decodeFail "Unexpected nodeset structure" _va
+          Nothing -> pure Nothing
 
-        decodeJobNodesetNodes :: [Value] -> Maybe JobNodeset
-        decodeJobNodesetNodes xs =
-          Just $
-            JobAnonymousNodeset $
-              NodeLabelName . getString . getObjValue "label"
-                <$> (unwrapObject <$> sort xs)
-
-        decodeJobBranches :: [BranchName]
-        decodeJobBranches = decodeAsList "branches" BranchName va
-        decodeJobDependencies :: [JobName]
+        decodeJobDependencies :: Decoder [JobName]
         decodeJobDependencies = case HM.lookup "dependencies" va of
-          Just (String v) -> [JobName v]
-          Just (Array xs) -> map decodeJobDependency (V.toList xs)
-          Just _ -> error $ "Unexpected job dependencies value: " <> show va
-          Nothing -> []
-        decodeJobDependency :: Value -> JobName
+          Just (String v) -> pure [JobName v]
+          Just (Array xs) -> traverse decodeJobDependency (V.toList xs)
+          Just _ -> decodeFail "Unexpected job dependencies value" (Object va)
+          Nothing -> pure []
+
+        decodeJobDependency :: Value -> Decoder JobName
         decodeJobDependency = \case
-          String v -> JobName v
-          Object (HM.lookup "name" -> Just (String v)) -> JobName v
-          anyOther -> error $ "Unexpected job dependency value: " <> show anyOther
+          String v -> pure $ JobName v
+          Object v -> JobName <$> getName v
+          anyOther -> decodeFail "Unexpected job dependency value" anyOther
 
-    decodeNodeset :: Object -> Nodeset
-    decodeNodeset va =
-      let name = NodesetName . getString $ getObjValue "name" va
-          labels = case getObjValue "nodes" va of
-            Array nodes ->
-              NodeLabelName . getString . getObjValue "label"
-                <$> (unwrapObject <$> sort (V.toList nodes))
-            _va -> error $ "Unexpected nodeset nodes structure: " <> show _va
-       in Nodeset {name, labels}
+        decodeJobNodesetNodes xs = do
+          names <- decodeNodesetNodes xs
+          pure $ JobAnonymousNodeset names
 
-    decodeProject :: Object -> Project
-    decodeProject va =
-      let name = case getString <$> HM.lookup "name" va of
-            -- project name default to the name of the project where the config is found
-            Nothing -> ProjectName (providerName <> "/" <> projectName)
-            Just name' -> ProjectName name'
-          templates = decodeAsList "templates" ProjectTemplateName va
-          pipelines = Data.Set.fromList $ mapMaybe decodeProjectPipeline (HM.toList va)
-       in Project {name, templates, pipelines}
+    decodeNodesetNodes :: [Value] -> Decoder [NodeLabelName]
+    decodeNodesetNodes xs = do
+      names <- traverse (decodeString <=< decodeObjectAttribute "label" <=< decodeObject) xs
+      pure $ NodeLabelName <$> names
 
-    decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe ProjectPipeline
+    decodeNodeset :: Object -> Decoder Nodeset
+    decodeNodeset va = do
+      name <- NodesetName <$> getName va
+      labels <- decodeNodesetNodes =<< decodeList =<< decodeObjectAttribute "nodes" va
+      pure $ Nodeset {name, labels}
+
+    decodeProject :: Object -> Decoder Project
+    decodeProject va = do
+      name <- case HM.lookup "name" va of
+        (Just x) -> ProjectName <$> decodeString x
+        Nothing -> pure $ ProjectName (providerName <> "/" <> projectName)
+      templates <- decodeAsList "templates" ProjectTemplateName va
+      pipelines <- Data.Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
+      pure $ Project {name, templates, pipelines}
+
+    decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe (Decoder ProjectPipeline)
     decodeProjectPipeline (Data.Aeson.Key.toText -> pipelineName', va')
+      -- These project configuration attribute are not pipelines
       | pipelineName' `elem` ["name", "vars", "description", "default-branch", "merge-mode", "squash-merge"] = Nothing
       | pipelineName' == "templates" = Nothing -- TODO: decode templates
       | pipelineName' == "queue" = Nothing -- TODO: decode project queues
-      | otherwise = case va' of
-          Object inner ->
+      | otherwise = Just $ case va' of
+          Object inner -> do
             let name = PipelineName pipelineName'
-                jobs = case HM.lookup "jobs" inner of
-                  -- Just (String name') -> [PJName $ JobName name']
-                  Just (Array jobElems) -> decodeProjectPipelineJob <$> V.toList jobElems
-                  _ -> [] -- pipeline has no jobs
-                  -- TODO: decode pipeline queue
-                _queue = case HM.lookup "queue" inner of
-                  Just (String queueName) -> Just queueName
-                  Just _ -> error $ "Unexpected queue name: " <> show inner
-                  Nothing -> Nothing
-             in Just $ ProjectPipeline {name, jobs}
-          _ -> error $ "Unexpected pipeline: " <> show va'
+            jobs <- case HM.lookup "jobs" inner of
+              Just (Array jobElems) -> traverse decodeProjectPipelineJob (V.toList jobElems)
+              _ -> pure [] -- pipeline has no jobs
+            pure $ ProjectPipeline {name, jobs}
+          _ -> decodeFail "Unexpected pipeline" va'
       where
-        decodeProjectPipelineJob :: Value -> PipelineJob
-        decodeProjectPipelineJob jobElem = case jobElem of
-          Object jobObj ->
-            let key = getKey jobObj
-                name = JobName key
-                ( parent,
-                  nodeset,
-                  branches,
-                  dependencies
-                  ) = decodeJobContent $ unwrapObject $ getObjValue key jobObj
-             in PJJob $ Job {name, parent, nodeset, branches, dependencies}
-          String v -> PJName $ JobName v
-          _ -> error $ "Unexpected project pipeline jobs format: " <> show jobElem
+        decodeProjectPipelineJob :: Value -> Decoder PipelineJob
+        decodeProjectPipelineJob = \case
+          String v -> pure $ PJName (JobName v)
+          Object jobObj -> do
+            (name, obj) <- getObjectKey jobObj
+            PJJob <$> decodeJobContent (JobName name) obj
+          v -> decodeFail "Unexpected project pipeline jobs format" v
 
-    decodeProjectTemplate :: Object -> ProjectTemplate
-    decodeProjectTemplate va =
-      case getString <$> HM.lookup "name" va of
-        Nothing -> error "Un-named project template"
-        Just (ProjectTemplateName -> name) ->
-          let pipelines = Data.Set.fromList $ mapMaybe decodeProjectPipeline (HM.toList va)
-           in ProjectTemplate {name, pipelines}
+    decodeProjectTemplate :: Object -> Decoder ProjectTemplate
+    decodeProjectTemplate va = do
+      name <- ProjectTemplateName <$> getName va
+      pipelines <- Data.Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
+      pure $ ProjectTemplate {name, pipelines}
 
     -- Zuul config elements are object with an unique key
-    getKey :: Object -> Text
-    getKey hm = case take 1 $ HM.keys hm of
-      (keyName : _) -> Data.Aeson.Key.toText keyName
-      [] -> error $ "Unable to get Object key on: " <> show hm
+    getObjectKey :: Object -> Decoder (Text, Object)
+    getObjectKey hm = case HM.toList hm of
+      [(Data.Aeson.Key.toText -> keyName, keyValue)] -> do
+        obj <- decodeObject keyValue
+        pure (keyName, obj)
+      _ -> decodeFail "Top level zuul attribute is not a single key object" (Object hm)
 
-    getName :: Object -> Text
-    getName = getString . getObjValue "name"
+    getName :: Object -> Decoder Text
+    getName = decodeString <=< decodeObjectAttribute "name"
 
 -- | Convenient alias
 type ConnectionUrlMap = Map ProviderName ConnectionUrl
@@ -245,8 +233,8 @@ loadConfig ::
 loadConfig urlBuilder tenantResolver zkcE = do
   case zkcE of
     Left e -> #configErrors %= (e :)
-    Right zkc -> flip catchAll (handler zkc.fullPath) do
-      let zkcDecoded = decodeConfig (canonicalProjectName, branchName) $ zkJSONData zkc
+    Right zkc ->
+      let decodedResults = decodeConfig (canonicalProjectName, branchName) zkc.zkJSONData
           providerName = ProviderName $ zkc.provider
           canonicalProjectName =
             CanonicalProjectName
@@ -259,12 +247,7 @@ loadConfig urlBuilder tenantResolver zkcE = do
           tenants = mempty
           url = fromMaybe (error "Missing connection provider?!") $ Map.lookup providerName urlBuilder
           configLoc = ConfigLoc canonicalProjectName branchName configPath url tenants
-       in traverse_ (updateTopConfig tenantResolver configLoc) zkcDecoded
-  where
-    handler :: FilePathT -> SomeException -> StateT Config IO ()
-    handler fp e = do
-      lift $ hPutStrLn stderr ("Could not decode: " <> getPath fp <> ": " <> show e)
-      error "Aborting"
+       in traverse_ (updateTopConfig tenantResolver configLoc) decodedResults
 
 -- | An empty config.
 emptyConfig :: Config

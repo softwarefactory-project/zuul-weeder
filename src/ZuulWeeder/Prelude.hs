@@ -68,11 +68,16 @@ module ZuulWeeder.Prelude
     (%=),
 
     -- * aeson
-    Data.Aeson.Value,
+    Data.Aeson.Value (Object),
+
+    -- * aeson helpers
+    Decoder (..),
+    decodeFail,
+    decodeObject,
+    decodeObjectAttribute,
     decodeAsList,
-    unwrapObject,
-    getObjValue,
-    getString,
+    decodeString,
+    decodeList,
 
     -- * qq
     Data.String.QQ.s,
@@ -105,6 +110,7 @@ module ZuulWeeder.Prelude
     -- * base data
     Int64,
     (&),
+    Data.Bifunctor.first,
     Data.Bool.bool,
     Data.Foldable.traverse_,
     Data.Maybe.catMaybes,
@@ -120,11 +126,14 @@ module ZuulWeeder.Prelude
     Control.Monad.when,
     Control.Monad.void,
     Control.Monad.IO.Class.liftIO,
+    (<=<),
+    (>=>),
 
     -- * base debug
     Debug.Trace.trace,
     System.IO.hPutStrLn,
     System.IO.stderr,
+    GHC.Stack.HasCallStack,
 
     -- * base system
     System.Environment.lookupEnv,
@@ -146,6 +155,7 @@ import Control.Concurrent.MVar qualified
 import Control.Exception qualified
 import Control.Lens ((%=))
 import Control.Lens qualified
+import Control.Monad ((<=<), (>=>))
 import Control.Monad qualified
 import Control.Monad.Catch qualified
 import Control.Monad.Except qualified
@@ -157,6 +167,7 @@ import Control.Monad.Trans.Except qualified
 import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM
+import Data.Bifunctor qualified
 import Data.Bool qualified
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -176,7 +187,6 @@ import Data.Set (Set)
 import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
-import Data.Text qualified as Text
 import Data.Text.IO qualified as Text (readFile)
 import Data.Vector qualified as V
 import Debug.Trace qualified
@@ -270,28 +280,43 @@ fromEither e = case e of
   Left x -> error (show x)
   Right x -> x
 
--- | Decode a list of values.
-decodeAsList :: HasCallStack => Text -> (Text -> a) -> Object -> [a]
-decodeAsList k build va = case HM.lookup (Data.Aeson.Key.fromText k) va of
-  Just (String x) -> [build x]
-  Just (Array xs) -> build . getString <$> Data.List.sort (V.toList xs)
-  Just _va -> error $ "Unexpected " <> Text.unpack k <> " structure: " <> show _va
-  Nothing -> []
+-- | A convenient wrapper to decode json value with custom error message.
+newtype Decoder a = Decoder (Either (Text, Value) a)
+  deriving (Traversable)
+  deriving newtype (Functor, Applicative, Monad, Show, Foldable)
 
--- | Unwrap a json object
-unwrapObject :: HasCallStack => Value -> Object
-unwrapObject va = case va of
-  Object hm -> hm
-  _ -> error $ "Expecting an Object out of JSON Value: " <> show va
+-- | Decode a json object.
+decodeObject :: Value -> Decoder Object
+decodeObject = \case
+  (Object o) -> pure o
+  x -> decodeFail "expecting an object" x
 
--- | Get an json object attribute value.
-getObjValue :: HasCallStack => Text -> Object -> Value
-getObjValue k hm = case HM.lookup (Data.Aeson.Key.fromText k) hm of
-  Just va -> va
-  Nothing -> error $ "Unable to get " <> Text.unpack k <> " from Object: " <> show (HM.keys hm)
+-- | Decode a json object attribute value.
+decodeObjectAttribute :: Data.Aeson.Key.Key -> Object -> Decoder Value
+decodeObjectAttribute k o = case HM.lookup k o of
+  Just v -> pure v
+  Nothing -> decodeFail ("can't find key:" <> Data.Aeson.Key.toText k) (Object o)
 
--- | Get a json string.
-getString :: HasCallStack => Value -> Text
-getString va = case va of
-  String str -> str
-  _ -> error $ "Expected a String out of JSON value: " <> show va
+-- | Decode a json list.
+decodeList :: Value -> Decoder [Value]
+decodeList = \case
+  (Array v) -> pure (V.toList v)
+  v -> decodeFail "expected a list" v
+
+-- | Decode a json string.
+decodeString :: Value -> Decoder Text
+decodeString = \case
+  (String v) -> pure v
+  v -> decodeFail "Expected a string" v
+
+-- | Decode a json object attribute value as a list.
+decodeAsList :: Data.Aeson.Key.Key -> (Text -> a) -> Object -> Decoder [a]
+decodeAsList k build va = case HM.lookup k va of
+  Just (String x) -> pure [build x]
+  Just (Array xs) -> fmap build <$> traverse decodeString (V.toList xs)
+  Just _va -> decodeFail ("Unexpected " <> Data.Aeson.Key.toText k) (Object va)
+  Nothing -> pure []
+
+-- | Abort a decoder.
+decodeFail :: Text -> Value -> Decoder a
+decodeFail t v = Decoder (Left (t, v))

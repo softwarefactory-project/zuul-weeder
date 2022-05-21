@@ -1,4 +1,4 @@
-Just
+Right
     ( TenantsConfig
         { tenants = fromList
             [

@@ -53,11 +53,11 @@ tests demo =
   [ testGroup
       "ZooKeeper module"
       [ testCase "Extract data from ZK path" extractDataZKPath,
-        goldenTest "Decode Jobs config" "jobs" decodeJobsConfig,
-        goldenTest "Decode Projects config" "projects" decodeProjectsConfig,
-        goldenTest "Decode Nodesets config" "nodesets" decodeNodesetsConfig,
-        goldenTest "Decode Project templates config" "project-templates" decodeProjectTemplatesConfig,
-        goldenTest "Decode Pipeline config" "pipelines" decodeProjectPipeline,
+        goldenTest "Decode Jobs config" "jobs" (decodeConfigFixture "jobs"),
+        goldenTest "Decode Projects config" "projects" (decodeConfigFixture "projects"),
+        goldenTest "Decode Nodesets config" "nodesets" (decodeConfigFixture "nodesets"),
+        goldenTest "Decode Project templates config" "project-templates" (decodeConfigFixture "project-templates"),
+        goldenTest "Decode Pipeline config" "pipelines" (decodeConfigFixture "pipelines"),
         goldenTest "Decode Tenant config" "system-config" decodeTenants,
         testCase "Decode Connections config" decodeServiceConfig,
         goldenTest "Get Tenant projects" "zuul" testGetTenantProjects,
@@ -89,34 +89,17 @@ tests demo =
             )
     fakeProject = (CanonicalProjectName (ProviderName "") (ProjectName ""), BranchName "")
 
-    decodeJobsConfig = do
-      json <- loadFixture "jobs"
-      let decoded = decodeConfig fakeProject json
-      pure $ sort decoded
-
-    decodeProjectsConfig = do
-      json <- loadFixture "projects"
-      let decoded = decodeConfig fakeProject json
-      pure $ sort decoded
-
-    decodeNodesetsConfig = do
-      json <- loadFixture "nodesets"
-      let decoded = decodeConfig fakeProject json
-      pure $ sort decoded
-
-    decodeProjectTemplatesConfig = do
-      json <- loadFixture "project-templates"
-      let decoded = decodeConfig fakeProject json
-      pure $ sort decoded
-
-    decodeProjectPipeline = do
-      json <- loadFixture "pipelines"
-      let decoded = decodeConfig fakeProject json
-      pure $ sort decoded
+    decodeConfigFixture :: FilePathT -> IO [ZuulConfigElement]
+    decodeConfigFixture fp = do
+      json <- loadFixture fp
+      pure (unwrap <$> decodeConfig fakeProject json)
+      where
+        unwrap (Decoder (Left e)) = error $ "Decoding fail: " <> show e
+        unwrap (Decoder (Right x)) = x
 
     decodeTenants = do
       json <- loadJSONFixture "system-config"
-      let decoded = fromMaybe (error "oops") $ decodeTenantsConfig (ZKTenantsConfig json)
+      let decoded = fromEither $ decodeTenantsConfig (ZKTenantsConfig json)
       pure $ Map.toList decoded.tenants
 
     decodeServiceConfig = do

@@ -139,7 +139,7 @@ mkConfigLoader logger dataBaseDir configFile = do
       -- read the tenants config from dataDir
       systemConfig <- readTenantsConfig dataDir
       -- decode the tenants config
-      tenantsConfig <- except (decodeTenantsConfig systemConfig `orDie` "Invalid tenant config")
+      tenantsConfig <- except (decodeTenantsConfig systemConfig)
       -- load all the config objects
       let tr = Zuul.Tenant.tenantResolver serviceConfig tenantsConfig
       config <- lift $ loadConfigFiles serviceConfig.urlBuilders tr dataDir
@@ -205,7 +205,7 @@ unparsed_abide:
                 include: [job]
                 shadow: sf-jobs
 |]
-        tenantsConfig <- except (decodeTenantsConfig systemConfig `orDie` "Invalid tenant config")
+        tenantsConfig <- except (decodeTenantsConfig systemConfig)
         let tr = Zuul.Tenant.tenantResolver serviceConfig tenantsConfig
         conf <- lift $ flip execStateT Zuul.ConfigLoader.emptyConfig do
           xs <- sequence configFiles
