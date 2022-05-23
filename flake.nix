@@ -43,8 +43,8 @@
               weeder = pkgs.haskell.lib.justStaticExecutables
                 (hpPrev.callCabal2nix "weeder" (builtins.fetchGit {
                   url = "https://github.com/ocharles/weeder";
-                  ref = "ghc-9.2";
-                  rev = "c468cd10bfa9776f283512ce92024a4f8c4330bd";
+                  ref = "master";
+                  rev = "c58ed2a8c66dcf0b469f8343efb6b6f61c7c40f3";
                 }) { });
             };
         };
