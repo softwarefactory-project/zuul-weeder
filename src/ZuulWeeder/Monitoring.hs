@@ -48,7 +48,6 @@ monitoring logger counter baseApp req resp = case Wai.rawPathInfo req of
               <> (" ms=" <> toHeader elapsed)
               <> (" htmx=" <> toHeader htmx)
               <> (" client=" <> toHeader client)
-              <> "\n"
       info logger msg
       pure result
   where

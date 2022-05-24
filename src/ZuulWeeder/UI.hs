@@ -369,7 +369,7 @@ infoComponent ctx analysis = do
       unless (Set.null otherTenants) $ do
         "Available tenants:"
         traverse_ (tenantBaseLink ctx.rootURL) otherTenants
-    with' div_ "not-prose bg-slate-50 border rounded-xl" do
+    with' div_ "not-prose bg-slate-50 border rounded-xl w-80" do
       with' table_ "table-auto border-collapse w-80" do
         thead_ $ with' tr_ "border-b text-left" $ traverse_ (with' th_ "p-1") ["Object", "Count"]
         with' tbody_ "bg-white" do

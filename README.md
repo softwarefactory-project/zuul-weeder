@@ -26,13 +26,13 @@ The service provide two functions:
   - the list of configuration file url that directly defines or uses the object,
   - the list of related objects that are reachable, either by requirement or by dependency.
 
-For example, by visiting `/query/centos`, the service returns:
+For example, by visiting `/search/centos`, the service returns:
 
 - job tripleo-centos
 - nodeset centos
 - label cloud-centos
 
-And by visiting `/query/nodeset/centos`, the service returns:
+And by visiting `/object/nodeset/centos`, the service returns:
 
 - The list of zuul.yaml file url that contains a nodeset named `centos`.
 - The list of jobs and project that depends on this nodeset.
