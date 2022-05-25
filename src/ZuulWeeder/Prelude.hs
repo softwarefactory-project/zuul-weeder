@@ -49,6 +49,8 @@ module ZuulWeeder.Prelude
     -- * containers
     Data.Map.Map,
     Data.Set.Set,
+    Data.Tree.Forest,
+    Data.Tree.Tree (..),
 
     -- * witch
     Witch.From,
@@ -198,6 +200,7 @@ import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
 import Data.Text.IO qualified as Text (readFile)
+import Data.Tree qualified
 import Data.Vector qualified as V
 import Data.Version qualified
 import Debug.Trace qualified

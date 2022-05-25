@@ -226,3 +226,6 @@ data ConfigLoc = ConfigLoc
     tenants :: Set TenantName
   }
   deriving (Show, Eq, Ord, Generic)
+
+instance From ConfigLoc ProjectName where
+  from loc = loc.project.project

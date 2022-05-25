@@ -79,12 +79,17 @@ tests demo =
     validateGitConfig = pure $ Map.lookup (NodeLabelName "cloud-rhel-7") demo.config.nodeLabels
 
     validatePipelineConfig = do
-      pure $
-        ZuulWeeder.Graph.findReachable
-          ( NE.singleton
-              (Vertex (VPipeline (PipelineName "periodic-pipeline")) (Set.fromList [TenantName "local"]))
-          )
-          demo.configRequireGraph
+      let mkInfo n =
+            let f = ZuulWeeder.Graph.findReachableForest Nothing (NE.singleton $ Vertex n (Set.fromList [TenantName "local"]))
+             in ( from n <> " is needed by" :: Text,
+                  f demo.dependentGraph,
+                  from n <> " requires" :: Text,
+                  f demo.dependencyGraph
+                )
+      pure
+        [ mkInfo (VPipeline (PipelineName "check")),
+          mkInfo (VJob (JobName "wallaby-job"))
+        ]
 
     extractDataZKPath =
       let path = "/tmp/zk-dump/zuul/config/cache/sftests.com%2Fzuul-jobs/master/files/zuul.d%2Fhaskell-jobs.yaml/0000000000/ZKDATA"

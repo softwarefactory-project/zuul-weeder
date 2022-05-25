@@ -1,44 +1,108 @@
-fromList
-    [ Vertex
-        { name = VJob
-            ( JobName "base" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    , Vertex
-        { name = VJob
-            ( JobName "linter" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    , Vertex
-        { name = VJob
-            ( JobName "wallaby-job" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    , Vertex
-        { name = VJob
-            ( JobName "zena-job" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    , Vertex
-        { name = VNodeset
-            ( NodesetName "centos" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    , Vertex
-        { name = VNodeLabel
-            ( NodeLabelName "cloud-centos-7" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    , Vertex
-        { name = VNodeLabel
-            ( NodeLabelName "pod-centos-7" )
-        , tenants = fromList
-            [ TenantName "local" ]
-        }
-    ]
+[
+    ( "check is needed by"
+    , []
+    , "check requires"
+    ,
+        [ Node
+            { rootLabel = VProjectPipeline
+                ( ProjectName "sftests.com/config" )
+                ( PipelineName "check" )
+            , subForest =
+                [ Node
+                    { rootLabel = VJob
+                        ( JobName "config-check" )
+                    , subForest =
+                        [ Node
+                            { rootLabel = VJob
+                                ( JobName "base" )
+                            , subForest =
+                                [ Node
+                                    { rootLabel = VNodeset
+                                        ( NodesetName "centos" )
+                                    , subForest =
+                                        [ Node
+                                            { rootLabel = VNodeLabel
+                                                ( NodeLabelName "cloud-centos-7" )
+                                            , subForest = []
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        , Node
+            { rootLabel = VProjectPipeline
+                ( ProjectName "triple-o" )
+                ( PipelineName "check" )
+            , subForest =
+                [ Node
+                    { rootLabel = VJob
+                        ( JobName "linter" )
+                    , subForest =
+                        [ Node
+                            { rootLabel = VNodeLabel
+                                ( NodeLabelName "pod-centos-7" )
+                            , subForest = []
+                            }
+                        ]
+                    }
+                , Node
+                    { rootLabel = VJob
+                        ( JobName "wallaby-job" )
+                    , subForest = []
+                    }
+                , Node
+                    { rootLabel = VJob
+                        ( JobName "zena-job" )
+                    , subForest = []
+                    }
+                ]
+            }
+        ]
+    )
+,
+    ( "wallaby-job is needed by"
+    ,
+        [ Node
+            { rootLabel = VProjectPipeline
+                ( ProjectName "triple-o" )
+                ( PipelineName "check" )
+            , subForest =
+                [ Node
+                    { rootLabel = VProject
+                        ( ProjectName "triple-o" )
+                    , subForest = []
+                    }
+                , Node
+                    { rootLabel = VPipeline
+                        ( PipelineName "check" )
+                    , subForest = []
+                    }
+                ]
+            }
+        ]
+    , "wallaby-job requires"
+    ,
+        [ Node
+            { rootLabel = VJob
+                ( JobName "base" )
+            , subForest =
+                [ Node
+                    { rootLabel = VNodeset
+                        ( NodesetName "centos" )
+                    , subForest =
+                        [ Node
+                            { rootLabel = VNodeLabel
+                                ( NodeLabelName "cloud-centos-7" )
+                            , subForest = []
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    )
+]

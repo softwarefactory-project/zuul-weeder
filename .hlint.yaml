@@ -1,2 +1,4 @@
 - arguments: [-XQuasiQuotes]
 - ignore: {name: "Use &&"}
+- ignore: {name: "Use uncurry"}
+- ignore: {name: "Avoid lambda using `infix`"}

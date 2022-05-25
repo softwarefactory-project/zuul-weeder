@@ -17,6 +17,7 @@ module ZuulWeeder.Graph
     vertexTypeName,
     analyzeConfig,
     findReachable,
+    findReachableForest,
   )
 where
 
@@ -53,6 +54,10 @@ data VertexName
     VProjectTemplate ProjectTemplateName
   | -- | A pipeline
     VPipeline PipelineName
+  | -- | A project pipeline config
+    VProjectPipeline ProjectName PipelineName
+  | -- | A template pipeline config
+    VTemplatePipeline ProjectTemplateName PipelineName
   deriving (Eq, Ord, Show, Generic, Hashable)
 
 -- | A text representation of a vertex type, useful for /object url piece.
@@ -64,6 +69,8 @@ vertexTypeName = \case
   VProject _ -> "project"
   VProjectTemplate _ -> "project-template"
   VPipeline _ -> "pipeline"
+  VProjectPipeline _ _ -> "project-pipeline"
+  VTemplatePipeline _ _ -> "template-pipeline"
 
 instance From VertexName Text where
   from = \case
@@ -73,6 +80,8 @@ instance From VertexName Text where
     VProject (ProjectName n) -> n
     VProjectTemplate (ProjectTemplateName n) -> n
     VPipeline (PipelineName n) -> n
+    VProjectPipeline (ProjectName n) (PipelineName v) -> n <> ":" <> v
+    VTemplatePipeline (ProjectTemplateName n) (PipelineName v) -> n <> ":" <> v
 
 instance From Job VertexName where
   from job = VJob job.name
@@ -110,12 +119,34 @@ findReachable xs = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.dfs (NE.
   where
     v = NE.head xs
 
+-- | Return the forest of reachable 'Vertex'
+findReachableForest ::
+  Maybe (Set TenantName) ->
+  -- | The list of 'Vertex' to search
+  NonEmpty Vertex ->
+  -- | The graph to search in
+  ConfigGraph ->
+  -- | The forest
+  Forest VertexName
+findReachableForest scope xs = concatMap goRoot . Algebra.Graph.ToGraph.dfsForestFrom vertices
+  where
+    vertices = NE.toList xs
+    goRoot (Node _ child) = concatMap go child
+    go :: Tree Vertex -> [Tree VertexName]
+    go tree@(Node root _) = case scope of
+      Just tenants
+        | tenants `Set.isSubsetOf` root.tenants -> go' tree
+        | otherwise -> []
+      Nothing -> go' tree
+    go' :: Tree Vertex -> [Tree VertexName]
+    go' (Node root childs) = [Node root.name (concatMap go childs)]
+
 -- | The config analysis result used by the "ZuulWeeder.UI" module.
 data Analysis = Analysis
-  { -- | The requirements graph
-    configRequireGraph :: ConfigGraph,
-    -- | The depends-on graph
-    configDependsOnGraph :: ConfigGraph,
+  { -- | The requirements graph, e.g. job requires nodeset.
+    dependencyGraph :: ConfigGraph,
+    -- | The dependents graph, e.g. nodeset allows job.
+    dependentGraph :: ConfigGraph,
     -- | The list of vertex, used for displaying search result.
     vertices :: Set Vertex,
     -- | A map of all the names and their matching tenants, used for searching.
@@ -135,6 +166,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
   runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty allTenants config mempty))
   where
     allTenants = Set.fromList $ Map.keys tenantsConfig
+
     -- All the default base jobs defined by the tenants
     -- Given:
     -- - tenant1, tenant2 default base job is 'base'
@@ -183,104 +215,161 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       traverse_ goProject $ concat $ Map.elems config.projects
       traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
       traverse_ goPipeline $ concat $ Map.elems config.pipelines
-    -- look for semaphore, secret, ...
+    -- TODO: handles semaphores, queues and secrets
 
-    lookupTenant :: Ord a => Set TenantName -> a -> ConfigMap a b -> Maybe [(ConfigLoc, b)]
+    -- get the list of vertex matching a given name and set of tenants
+    lookupTenant :: (Ord a, From b VertexName) => Set TenantName -> a -> ConfigMap a b -> Maybe (Set Vertex)
     lookupTenant tenants key cm = filterTenants =<< Map.lookup key cm
       where
         filterTenants xs = case filter (matchingTenant . fst) xs of
           [] -> Nothing
-          xs' -> Just xs'
+          xs' -> Just (toVertices xs')
         matchingTenant :: ConfigLoc -> Bool
         matchingTenant loc = any (`elem` loc.tenants) tenants
+        toVertices = Set.fromList . map (\(loc, dst) -> mkVertex loc dst)
 
     goPipeline :: (ConfigLoc, Pipeline) -> State Analysis ()
-    goPipeline (loc, pipeline) = insertVertex $ mkVertex loc pipeline
+    goPipeline (loc, pipeline) = do
+      let vPipeline = mkVertex loc pipeline
+      insertVertex loc vPipeline
+    -- TODO: handles triggers and reporters
 
-    goProjectPipeline :: ConfigLoc -> Vertex -> Set ProjectPipeline -> State Analysis ()
-    goProjectPipeline loc src projectPipelines = do
-      forM_ projectPipelines $ \pipeline -> do
-        let psrc = Vertex (VPipeline pipeline.name) loc.tenants
-        case lookupTenant loc.tenants pipeline.name config.pipelines of
-          Just xs -> goFeedState src xs
-          Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
-        forM_ (filter (\j -> from j /= JobName "noop") pipeline.jobs) $ \pJob -> do
-          case lookupTenant loc.tenants (from pJob) config.jobs of
-            Just xs -> do
-              -- Create link with the project
-              goFeedState src xs
-              -- Create link with the pipeline
-              goFeedState psrc xs
-            Nothing -> #graphErrors %= (("Can't find : " <> show (into @JobName pJob)) :)
-          case pJob of
-            PJName _ -> pure ()
-            PJJob job -> goJob (loc, job)
+    goPipelineConfig :: ConfigLoc -> Vertex -> (PipelineName -> VertexName) -> ProjectPipeline -> State Analysis ()
+    goPipelineConfig loc vProject mk pipeline = do
+      -- pipeline config is a list of jobs attached to a project pipeline
+      let vPipelineConfig = Vertex (mk pipeline.name) loc.tenants
+      insertVertex loc vPipelineConfig
+
+      -- pipeline is the global pipeline object
+      let vPipeline = Vertex (VPipeline pipeline.name) loc.tenants
+
+      vProject `connect` vPipelineConfig
+      vPipeline `connect` vPipelineConfig
+
+      -- handle pipeline jobs
+      forM_ (filter (\j -> from j /= JobName "noop") pipeline.jobs) $ \pJob -> do
+        case lookupTenant loc.tenants (from pJob) config.jobs of
+          Just jobs -> vPipelineConfig `connects` jobs
+          Nothing -> #graphErrors %= (("Can't find : " <> show (into @JobName pJob)) :)
+        case pJob of
+          PJName _ ->
+            -- job referenced by name does not need to be processed.
+            pure ()
+          PJJob job ->
+            -- job that are overriden are handled as a new job.
+            goJob (loc, job)
 
     goProject :: (ConfigLoc, Project) -> State Analysis ()
     goProject (loc, project) = do
-      let src = mkVertex loc project
-      insertVertex src
+      let vProject = mkVertex loc project
+      insertVertex loc vProject
+
+      -- handle templates
       forM_ project.templates $ \templateName -> do
         case lookupTenant loc.tenants templateName config.projectTemplates of
-          Just xs -> goFeedState src xs
+          Just templates -> vProject `connects` templates
           Nothing -> #graphErrors %= (("Can't find : " <> show templateName) :)
-      goProjectPipeline loc src project.pipelines
+
+      -- handle project pipeline configs
+      traverse_ (goPipelineConfig loc vProject (VProjectPipeline project.name)) project.pipelines
 
     goProjectTemplate :: (ConfigLoc, ProjectTemplate) -> State Analysis ()
     goProjectTemplate (loc, tmpl) = do
       let src = mkVertex loc tmpl
-      insertVertex src
-      goProjectPipeline loc src tmpl.pipelines
+      insertVertex loc src
+
+      -- handle template pipeline config
+      traverse_ (goPipelineConfig loc src (VTemplatePipeline tmpl.name)) tmpl.pipelines
 
     goNodeset :: (ConfigLoc, Nodeset) -> State Analysis ()
     goNodeset (loc, nodeset) = do
       let src = mkVertex loc nodeset
-      insertVertex src
+      insertVertex loc src
+
+      -- handle labels
       forM_ nodeset.labels $ \label -> do
         let dst = mkVertex loc label
-        insertVertex dst
-        feedState (src, dst)
+        insertVertex loc dst
+        src `connect` dst
 
     goJob :: (ConfigLoc, Job) -> State Analysis ()
     goJob (loc, job) = do
-      let src = mkVertex loc job
-      insertVertex src
-      -- look for nodeset location
+      let vJob = mkVertex loc job
+      insertVertex loc vJob
+
+      -- handle nodesets and anonymous node label
       case job.nodeset of
         Just (JobNodeset nodeset) -> case lookupTenant loc.tenants nodeset config.nodesets of
-          Just xs -> goFeedState src xs
+          Just vNodesets -> vJob `connects` vNodesets
           Nothing -> #graphErrors %= (("Can't find : " <> show nodeset) :)
         Just (JobAnonymousNodeset nodeLabels) -> do
           forM_ nodeLabels $ \nodeLabel -> do
-            let dst = mkVertex loc nodeLabel
-            insertVertex dst
-            feedState (src, dst)
-        _ -> pure ()
+            let vLabel = mkVertex loc nodeLabel
+            insertVertex loc vLabel
+            vJob `connect` vLabel
+        Nothing -> pure ()
 
-      -- look for job parent
+      -- handle job parent
       case job.parent of
         Just parent -> do
           case lookupTenant loc.tenants parent allJobs of
-            Just xs -> goFeedState src xs
+            Just vParentJobs -> vJob `connects` vParentJobs
             Nothing -> #graphErrors %= (("Can't find : " <> show parent) :)
         Nothing -> pure ()
 
-      -- look for job dependencies
-      forM_ job.dependencies $ \dJob' -> do
-        case lookupTenant loc.tenants dJob' allJobs of
-          -- TODO: look in priority for PJJob defined in the same loc
-          Just xs -> goFeedState src xs
-          Nothing -> #graphErrors %= (("Can't find : " <> show dJob') :)
+      -- handle job dependencies
+      forM_ job.dependencies $ \dJob -> do
+        case lookupTenant loc.tenants dJob allJobs of
+          Just vDependencyJobs -> vJob `connects` vDependencyJobs
+          Nothing -> #graphErrors %= (("Can't find : " <> show dJob) :)
 
-    goFeedState :: From a VertexName => Vertex -> [(ConfigLoc, a)] -> State Analysis ()
-    goFeedState src = traverse_ (\(loc, dst) -> feedState (src, mkVertex loc dst))
+    -- connect two vertices: src and dst, where src requires dst and dst allows src.
+    -- see https://english.stackexchange.com/questions/248642/inverse-of-dependency
+    --
+    -- This function is used for most elements, e.g.: job <-> nodeset <-> label
+    --
+    -- However there are a few exceptions where the relationship is restricted:
+    --
+    -- - Project pipelines are not directly attached to avoid un-necessary interconnections.
+    --   For example, instead of:
+    --
+    --     project1 <-> check <-> job1
+    --     project2 <-> check <-> job2
+    --
+    --   We don't connect through the global check to avoid having the job2 to be a requirement of project1:
+    --
+    --     project1 <-> project1:check <-> job1
+    --        check <-> project1:check
+    --     project2 <-> project2:check <-> job2
+    --        check <-> project2:check
+    --
+    --   That way there is no connection between job2 and project1
+    --
+    -- - Project containing configuration allows the element, but the project is not a requirements.
+    connect :: Vertex -> Vertex -> State Analysis ()
+    connect src dst = do
+      src `requires` dst
+      dst `allows` src
 
-    feedState :: (Vertex, Vertex) -> State Analysis ()
-    feedState (a, b) = do
-      #configRequireGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
-      #configDependsOnGraph %= Algebra.Graph.overlay (Algebra.Graph.edge b a)
+    -- see https://english.stackexchange.com/questions/248642/inverse-of-dependency
+    requires, allows :: Vertex -> Vertex -> State Analysis ()
+    a `requires` b = #dependencyGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
+    a `allows` b = #dependentGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
 
-    insertVertex :: Vertex -> State Analysis ()
-    insertVertex v = do
+    -- connects one vertex to a set of vertex, such as the object founds in different tenants.
+    connects :: Vertex -> Set Vertex -> State Analysis ()
+    connects src = traverse_ (connect src)
+
+    -- insert a vertex and connect the config loc to the vertex.
+    insertVertex :: ConfigLoc -> Vertex -> State Analysis ()
+    insertVertex loc v = do
       #vertices %= Set.insert v
       #names %= Map.insertWith Set.union v.name v.tenants
+
+      let vProject = Vertex (VProject (from loc)) loc.tenants
+      vProject `allows` v
+
+      -- Ensure the project exist in the global list and the lookup names.
+      -- TODO: do that only once when starting the analysis
+      #vertices %= Set.insert vProject
+      #names %= Map.insertWith Set.union vProject.name vProject.tenants

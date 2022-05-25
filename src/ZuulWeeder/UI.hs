@@ -225,6 +225,8 @@ vertexGroup = \case
   VProjectTemplate _ -> 4
   VPipeline _ -> 5
   VNodeLabel _ -> 6
+  VProjectPipeline _ _ -> 7
+  VTemplatePipeline _ _ -> 8
 
 -- Keep in sync with graph.js getColor function
 d3Color :: VertexName -> Text
@@ -235,6 +237,8 @@ d3Color = \case
   VProjectTemplate _ -> "#ffbb78"
   VPipeline _ -> "#2ca02c"
   VNodeLabel _ -> "#98df8a"
+  VProjectPipeline _ _ -> "pink"
+  VTemplatePipeline _ _ -> "pink"
 
 vertexTypeIcon :: VertexName -> Html ()
 vertexTypeIcon vn = with div_ [style_ ("color: " <> d3Color vn), class_ "font-bold w-5 inline-block"] $
@@ -245,6 +249,8 @@ vertexTypeIcon vn = with div_ [style_ ("color: " <> d3Color vn), class_ "font-bo
     VProjectTemplate _ -> "🎛"
     VPipeline _ -> "ǁ"
     VNodeLabel _ -> "🏷"
+    VProjectPipeline _ _ -> "🎛"
+    VTemplatePipeline _ _ -> "🎛"
 
 data D3Node = D3Node
   { name :: Text,
@@ -303,7 +309,7 @@ searchResults :: Context -> Text -> Map VertexName (Set TenantName) -> (Maybe Te
 searchResults ctx (Text.strip -> query) names
   | Text.null query = (Nothing, pure ())
   | otherwise = case mapMaybe matchQuery (Map.toList names) of
-      [] -> (Nothing, div_ "no results :(")
+      [] -> trace (from $ pShowNoColor names) (Nothing, div_ "no results :(")
       results -> (Just query, ul_ $ traverse_ renderResult results)
   where
     renderResult :: (VertexName, Set TenantName) -> Html ()
@@ -429,11 +435,11 @@ objectInfo ctx vertices analysis = do
     traverse_ renderConfigLink configComponents
   with' div_ "grid grid-cols-2 gap-1 m-4" do
     div_ do
-      h3_ "Depends-On"
-      renderVertexes dependsOn
+      h3_ "Dependents"
+      traverse_ (renderTree 0) dependents
     div_ do
-      h3_ "Requires"
-      renderVertexes required
+      h3_ "Dependencies"
+      traverse_ (renderTree 0) dependencies
   where
     renderConfigLink loc =
       li_ do
@@ -456,15 +462,31 @@ objectInfo ctx vertices analysis = do
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
       VNodeset name -> getLocs $ Map.lookup name analysis.config.nodesets
       VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
-    dependsOn = Set.toList $ findReachable vertices analysis.configDependsOnGraph
-    required = Set.toList $ findReachable vertices analysis.configRequireGraph
-    renderVertexes :: [Vertex] -> Html ()
-    renderVertexes xs = do
-      ul_ do
-        traverse_ renderVertex xs
-    renderVertex v =
-      li_ do
-        vertexLink ctx v.name (vertexName v.name)
+      VProjectPipeline name _ -> getLocs $ Map.lookup name analysis.config.projects
+      VTemplatePipeline name _ -> getLocs $ Map.lookup name analysis.config.projectTemplates
+    dependencies = getForest analysis.dependencyGraph
+    dependents = getForest analysis.dependentGraph
+    getForest = ZuulWeeder.Graph.findReachableForest tenantsM vertices
+      where
+        tenantsM = case ctx.scope of
+          UnScoped -> Nothing
+          Scoped xs -> Just xs
+
+    renderTree :: Int -> Tree VertexName -> Html ()
+    renderTree depth (Node root childs) = do
+      let listStyle
+            | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
+            | otherwise = ""
+      with' ul_ listStyle do
+        li_ $ vertexLink ctx root (vertexName root)
+        traverse_ (renderTree (depth + 1)) childs
+
+vertexScope :: Scope -> Set Vertex -> [Vertex]
+vertexScope scope vertices = Set.toList $ case scope of
+  UnScoped -> vertices
+  Scoped tenants -> Set.filter (matchTenant tenants) vertices
+  where
+    matchTenant tenants v = tenants `Set.isSubsetOf` v.tenants
 
 newtype VertexTypeUrl = VTU (Text -> VertexName)
 
@@ -476,7 +498,13 @@ instance FromHttpApiData VertexTypeUrl where
     "project" -> VProject . ProjectName
     "project-template" -> VProjectTemplate . ProjectTemplateName
     "pipeline" -> VPipeline . PipelineName
+    "project-pipeline" -> brk VProjectPipeline ProjectName
+    "template-pipeline" -> brk VTemplatePipeline ProjectTemplateName
     _ -> error $ "Unknown obj type: " <> from txt
+    where
+      brk vType nType t =
+        let (a, Text.tail -> b) = Text.span (/= ':') t
+         in vType (nType a) (PipelineName b)
 
 newtype VertexNameUrl = CNU Text
 
@@ -561,12 +589,9 @@ app config rootURL distPath = serve (Proxy @API) rootServer
         objectRoute (VTU mkName) (CNU name) htmxRequest = do
           analysis <- liftIO config
           let vname = mkName name
-          let vertices = Set.toList $ Set.filter matchVertex analysis.vertices
+          let vertices = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
                 where
-                  matchVertex v = v.name == vname && matchTenant v
-                  matchTenant v = case ctx.scope of
-                    Scoped xs -> xs `Set.isSubsetOf` v.tenants
-                    UnScoped -> True
+                  matchVertex v = v.name == vname
           let component = case NE.nonEmpty vertices of
                 Just xs -> pure (objectInfo ctx xs analysis)
                 Nothing -> pure "not found!"
@@ -590,5 +615,5 @@ app config rootURL distPath = serve (Proxy @API) rootServer
 
         d3Route = do
           analysis <- liftIO config
-          let graph = configRequireGraph analysis
+          let graph = dependencyGraph analysis
           pure (toD3Graph ctx.scope graph)

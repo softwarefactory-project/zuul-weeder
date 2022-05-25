@@ -212,6 +212,9 @@ unparsed_abide:
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
         pure (tenantsConfig, conf)
 
+  -- let a = analyzeConfig tenantsConfig config
+  -- pPrint (Algebra.Graph.edgeList a.dependentGraph)
+
   pure $ analyzeConfig tenantsConfig config
   where
     mkConfigFile conn proj conf =
@@ -232,7 +235,7 @@ unparsed_abide:
         label: cloud-centos-7
 
 - pipeline:
-    name: periodic-pipeline
+    name: check
 
 - job:
     name: wallaby-job
@@ -240,9 +243,17 @@ unparsed_abide:
 - job:
     name: zena-job
 
+- job:
+    name: config-check
+
+- project:
+    check:
+      jobs:
+        - config-check
+
 - project:
     name: triple-o
-    periodic-pipeline:
+    check:
       jobs:
         - wallaby-job
         - zena-job
