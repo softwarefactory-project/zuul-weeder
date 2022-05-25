@@ -120,6 +120,7 @@ library
                      , servant-lucid
                      , string-qq
                      , http-api-data
+                     , wai-app-static
   hs-source-dirs:      src
   exposed-modules:     Zuul.ZooKeeper
                      , Zuul.Config

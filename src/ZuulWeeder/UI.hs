@@ -38,6 +38,8 @@ import Paths_zuul_weeder (version)
 import Servant hiding (Context)
 import Servant.HTML.Lucid (HTML)
 import Servant.Server.StaticFiles qualified
+import WaiAppStatic.Storage.Filesystem qualified
+import WaiAppStatic.Types qualified
 import Web.FormUrlEncoded (FromForm)
 import Zuul.Config
 import Zuul.ConfigLoader (Config (..), ConfigMap)
@@ -525,9 +527,15 @@ app config rootURL distPath = serve (Proxy @API) rootServer
   where
     rootServer :: Server API
     rootServer =
-      Servant.Server.StaticFiles.serveDirectoryWebApp distPath
+      Servant.Server.StaticFiles.serveDirectoryWith staticSettings
         :<|> server (Context rootURL UnScoped)
         :<|> server . Context rootURL . Scoped . getTNU
+
+    staticSettings =
+      (WaiAppStatic.Storage.Filesystem.defaultWebAppSettings distPath)
+        { WaiAppStatic.Types.ssMaxAge = WaiAppStatic.Types.NoMaxAge
+        }
+
     server :: Context -> Server BaseAPI
     server ctx =
       indexRoute "" (pure $ welcomeComponent ctx)
