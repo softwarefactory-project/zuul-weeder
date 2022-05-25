@@ -68,9 +68,7 @@ updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
-  ZProject project ->
-    -- TODO: add PJJob to the list of jobs?
-    #projects %= insertConfig project.name project
+  ZProject project -> #projects %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
   ZSecret secret -> #secrets %= insertConfig secret secret

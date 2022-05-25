@@ -53,7 +53,7 @@ Serve behind a sub-path using this argument `-e WEEDER_ROOT_URL=/weeder/` and th
 
 ```
 <Location "/weeder">
-    ProxyPass http://weeder-host:9001
+    ProxyPass http://weeder-host:9001 nocanon
     ProxyPassReverse http://weeder-host:9001
 </Location>
 ```
