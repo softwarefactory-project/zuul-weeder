@@ -100,8 +100,11 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
     decodePipeline :: Object -> Decoder Pipeline
     decodePipeline va = do
       name <- PipelineName <$> getName va
-      triggersObj <- decodeObject =<< decodeObjectAttribute "trigger" va
-      let triggers = PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggersObj
+      triggers <- case decodeObject =<< decodeObjectAttribute "trigger" va of
+        Decoder (Left _) -> pure mempty
+        Decoder (Right triggersObj) ->
+          pure $
+            PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggersObj
       pure $ Pipeline {name, triggers}
 
     decodeJob :: Object -> Decoder Job
