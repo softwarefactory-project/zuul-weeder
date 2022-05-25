@@ -233,14 +233,14 @@ d3Color = \case
   VNodeLabel _ -> "#98df8a"
 
 vertexTypeIcon :: VertexName -> Html ()
-vertexTypeIcon vn = with span_ [style_ ("color: " <> d3Color vn)] $
+vertexTypeIcon vn = with div_ [style_ ("color: " <> d3Color vn), class_ "font-bold w-5 inline-block"] $
   toHtml @Text $ case vn of
     VJob _ -> "⚙"
-    VProject _ -> "P"
-    VNodeset _ -> "N"
+    VProject _ -> "🧱"
+    VNodeset _ -> "🖥"
     VProjectTemplate _ -> "🎛"
-    VPipeline _ -> "P"
-    VNodeLabel _ -> "L"
+    VPipeline _ -> "ǁ"
+    VNodeLabel _ -> "🏷"
 
 data D3Node = D3Node
   { name :: Text,
