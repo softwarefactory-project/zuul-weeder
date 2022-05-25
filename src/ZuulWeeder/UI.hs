@@ -186,9 +186,9 @@ configLocUrl loc = case loc.url of
     BranchName branch = loc.branch
     FilePathT path = loc.path
     trimedUrl = Text.dropWhileEnd (== '/')
-    buildGitlabUrl url = trimedUrl url <> name <> "/-/blob/" <> branch <> "/" <> path
-    buildPagureUrl url = trimedUrl url <> name <> "/blob/" <> branch <> "/f/" <> path
-    buildGithubUrl url = trimedUrl url <> name <> "/blob/" <> branch <> "/" <> path
+    buildGitlabUrl url = trimedUrl url <> "/" <> name <> "/-/blob/" <> branch <> "/" <> path
+    buildPagureUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/f/" <> path
+    buildGithubUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/" <> path
 
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
