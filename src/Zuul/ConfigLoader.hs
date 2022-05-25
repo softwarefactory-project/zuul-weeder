@@ -50,6 +50,12 @@ data Config = Config
     projectTemplates :: ConfigMap ProjectTemplateName ProjectTemplate,
     -- | The pipelines.
     pipelines :: ConfigMap PipelineName Pipeline,
+    -- | The secrets.
+    secrets :: ConfigMap SecretName SecretName,
+    -- | The queues.
+    queues :: ConfigMap QueueName QueueName,
+    -- | The semaphores.
+    semaphores :: ConfigMap SemaphoreName SemaphoreName,
     -- | Configuration errors.
     configErrors :: [ConfigError]
   }
@@ -66,7 +72,9 @@ updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
     #projects %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
-  _ -> error "Not implemented"
+  ZSecret secret -> #secrets %= insertConfig secret secret
+  ZQueue queue -> #queues %= insertConfig queue queue
+  ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
   where
     tenants = tenantResolver configLoc (from ze)
     insertConfig k v
@@ -91,11 +99,11 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
         "project" -> Just . ZProject <$> decodeProject obj
         "project-template" -> Just . ZProjectTemplate <$> decodeProjectTemplate obj
         "pipeline" -> Just . ZPipeline <$> decodePipeline obj
-        "queue" -> Just <$> decodeQueue obj
+        "queue" -> Just . ZQueue . QueueName <$> getName obj
+        "semaphore" -> Just . ZSemaphore . SemaphoreName <$> getName obj
         "pragma" -> pure Nothing
+        "secret" -> Just . ZSecret . SecretName <$> getName obj
         _ -> decodeFail "Unknown root object" (Object obj)
-
-    decodeQueue = error "Queue decode not implemented"
 
     decodePipeline :: Object -> Decoder Pipeline
     decodePipeline va = do
@@ -254,4 +262,4 @@ loadConfig urlBuilder tenantResolver zkcE = do
 
 -- | An empty config.
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty

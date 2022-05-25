@@ -20,6 +20,9 @@ module Zuul.Config
     NodesetName (..),
     NodeLabelName (..),
     ProjectTemplateName (..),
+    SecretName (..),
+    QueueName (..),
+    SemaphoreName (..),
 
     -- * Project identifiers
     BranchName (..),
@@ -77,6 +80,18 @@ newtype ProviderName = ProviderName Text
   deriving newtype (Hashable)
 
 newtype ProjectTemplateName = ProjectTemplateName Text
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Hashable)
+
+newtype SecretName = SecretName Text
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Hashable)
+
+newtype QueueName = QueueName Text
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Hashable)
+
+newtype SemaphoreName = SemaphoreName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
@@ -167,12 +182,6 @@ data Pipeline = Pipeline
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
-data Queue = Queue {name :: Text, perBranch :: Bool}
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
-data Semaphore = Semaphore {name :: Text, max :: Int}
-  deriving (Show, Eq, Ord, Generic, Hashable)
-
 -- | The sum of all the configuration elements.
 data ZuulConfigElement
   = ZJob Job
@@ -180,8 +189,9 @@ data ZuulConfigElement
   | ZNodeset Nodeset
   | ZProjectTemplate ProjectTemplate
   | ZPipeline Pipeline
-  | ZQueue Queue
-  | ZSemaphore Semaphore
+  | ZQueue QueueName
+  | ZSemaphore SemaphoreName
+  | ZSecret SecretName
   deriving (Show, Eq, Ord)
 
 instance From ZuulConfigElement ZuulConfigType where
@@ -193,6 +203,7 @@ instance From ZuulConfigElement ZuulConfigType where
     ZPipeline _ -> PipelineT
     ZQueue _ -> QueueT
     ZSemaphore _ -> SemaphoreT
+    ZSecret _ -> SecretT
 
 -- | The sum of all the configuration types.
 data ZuulConfigType
