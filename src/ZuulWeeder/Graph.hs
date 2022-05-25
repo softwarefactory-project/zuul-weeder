@@ -204,19 +204,17 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         case lookupTenant loc.tenants pipeline.name config.pipelines of
           Just xs -> goFeedState src xs
           Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
-        forM_ pipeline.jobs $ \pJob -> do
+        forM_ (filter (\j -> from j /= JobName "noop") pipeline.jobs) $ \pJob -> do
+          case lookupTenant loc.tenants (from pJob) config.jobs of
+            Just xs -> do
+              -- Create link with the project
+              goFeedState src xs
+              -- Create link with the pipeline
+              goFeedState psrc xs
+            Nothing -> #graphErrors %= (("Can't find : " <> show (into @JobName pJob)) :)
           case pJob of
-            pj@(PJName jobName) -> do
-              case lookupTenant loc.tenants jobName config.jobs of
-                Just xs -> do
-                  -- Create link with the project
-                  goFeedState src xs
-                  -- Create link with the pipeline
-                  goFeedState psrc xs
-                Nothing -> #graphErrors %= (("Can't find : " <> show pj) :)
-            PJJob _job -> do
-              -- TODO: handle inline job
-              pure ()
+            PJName _ -> pure ()
+            PJJob job -> goJob (loc, job)
 
     goProject :: (ConfigLoc, Project) -> State Analysis ()
     goProject (loc, project) = do

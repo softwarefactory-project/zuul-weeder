@@ -246,6 +246,8 @@ unparsed_abide:
       jobs:
         - wallaby-job
         - zena-job
+        - linter:
+            nodeset: centos
 |],
         mkConfigFile
           "sftests.com"

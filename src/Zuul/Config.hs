@@ -133,6 +133,11 @@ data PipelineJob
   | PJJob Job
   deriving (Show, Eq, Ord, Generic, Hashable)
 
+instance From PipelineJob JobName where
+  from = \case
+    PJName name -> name
+    PJJob job -> job.name
+
 data ProjectPipeline = ProjectPipeline
   { name :: PipelineName,
     jobs :: [PipelineJob]
