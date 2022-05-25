@@ -34,6 +34,7 @@ import Data.Text qualified as Text
 import Lucid
 import Lucid.Base (makeAttribute)
 import Network.URI.Encode qualified
+import Paths_zuul_weeder (version)
 import Servant hiding (Context)
 import Servant.HTML.Lucid (HTML)
 import Servant.Server.StaticFiles qualified
@@ -152,6 +153,7 @@ aboutComponent :: Html ()
 aboutComponent = do
   h2_ "Welcome"
   p_ "Zuul Weeder is a web service to inspect Zuul configuration"
+  div_ . toHtml $ "Version: " <> from (showVersion version) <> " (" <> gitVersion <> ")"
 
 tenantsList :: Set TenantName -> Text
 tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)

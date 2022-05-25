@@ -53,7 +53,9 @@
 
         haskellPackages =
           pkgs.haskell.packages.ghc922.override haskellOverrides;
-        zuulWeederPackage = haskellPackages.callCabal2nix packageName self { };
+        zuulWeederPackage =
+          (haskellPackages.callCabal2nix packageName self { }).overrideAttrs
+          (_: { GIT_COMMIT = self.rev or "dirty"; });
 
         distFiles = pkgs.runCommand "copy-dists" { } ''
           mkdir $out
@@ -91,6 +93,7 @@
 
           # disable zookeeper in devel mode
           ZUUL_WEEDER_NO_ZK = "1";
+          GIT_COMMIT = self.rev or "dirty";
 
           buildInputs = with haskellPackages; [
             python

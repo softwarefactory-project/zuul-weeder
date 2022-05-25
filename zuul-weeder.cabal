@@ -106,6 +106,7 @@ library
                      , http-types
                      , wai
                      , with-utf8
+                     , th-env
                      -- Monitoring
                      , pretty-simple
                      , fast-logger
@@ -130,6 +131,9 @@ library
                      , ZuulWeeder.Graph
                      , ZuulWeeder.Monitoring
                      , ZuulWeeder.UI
+  other-modules:       Paths_zuul_weeder
+  autogen-modules:     Paths_zuul_weeder
+
 
 executable zuul-weeder
   import:              common-options

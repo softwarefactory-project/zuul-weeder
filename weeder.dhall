@@ -1,3 +1,3 @@
-{ roots = [ "ZuulWeeder.main", "ZuulWeeder.runDemo", "Main.main" ]
+{ roots = [ "ZuulWeeder.main", "ZuulWeeder.runDemo", "Main.main", "^Paths_.*" ]
 , type-class-roots = True
 }

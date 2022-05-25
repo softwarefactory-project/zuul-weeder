@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 -- |
 -- Module      : ZuulWeeder.Prelude
 -- Description : The project Prelude
@@ -13,6 +15,9 @@ module ZuulWeeder.Prelude
   ( -- * clock
     getSec,
     intervalMilliSec,
+
+    -- * th-env
+    gitVersion,
 
     -- * fast-logger
     Logger,
@@ -140,6 +145,7 @@ module ZuulWeeder.Prelude
     GHC.Stack.HasCallStack,
 
     -- * base system
+    Data.Version.showVersion,
     System.Environment.lookupEnv,
     System.Environment.getArgs,
     System.Timeout.timeout,
@@ -193,9 +199,11 @@ import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
 import Data.Text.IO qualified as Text (readFile)
 import Data.Vector qualified as V
+import Data.Version qualified
 import Debug.Trace qualified
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)
+import Language.Haskell.TH.Env qualified
 import Main.Utf8 qualified (withUtf8)
 import System.Clock qualified
 import System.Directory qualified
@@ -206,6 +214,10 @@ import System.Log.FastLogger qualified
 import System.Timeout qualified (timeout)
 import Text.Pretty.Simple qualified
 import Witch qualified
+
+-- | The content of the GIT_COMMIT environment variable, default to HEAD.
+gitVersion :: Text
+gitVersion = Data.Maybe.fromMaybe "HEAD" $$(Language.Haskell.TH.Env.envQ "GIT_COMMIT")
 
 -- | The fast-logger.
 newtype Logger = Logger System.Log.FastLogger.TimedFastLogger
