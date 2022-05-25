@@ -19,6 +19,10 @@ module ZuulWeeder.Prelude
     info,
     withLogger,
 
+    -- * pretty-simple
+    Text.Pretty.Simple.pPrint,
+    Text.Pretty.Simple.pShowNoColor,
+
     -- * exceptions
     Control.Exception.SomeException,
     Control.Exception.try,
@@ -200,6 +204,7 @@ import System.FilePath qualified
 import System.IO qualified
 import System.Log.FastLogger qualified
 import System.Timeout qualified (timeout)
+import Text.Pretty.Simple qualified
 import Witch qualified
 
 -- | The fast-logger.

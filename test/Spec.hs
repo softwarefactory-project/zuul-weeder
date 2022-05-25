@@ -7,7 +7,6 @@ import Data.Yaml qualified as Y (decodeFileEither)
 import Test.Tasty
 import Test.Tasty.Golden (goldenVsString)
 import Test.Tasty.HUnit
-import Text.Pretty.Simple (pShowNoColor)
 import Zuul.Config
 import Zuul.ConfigLoader
 import Zuul.ServiceConfig
