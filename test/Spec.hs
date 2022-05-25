@@ -1,7 +1,10 @@
 module Main (main) where
 
 import Data.Aeson (eitherDecodeFileStrict, object)
+import Data.List qualified as List
+import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Data.Text.Lazy.Encoding qualified as LText
 import Data.Yaml qualified as Y (decodeFileEither)
 import Test.Tasty
@@ -64,10 +67,24 @@ tests demo =
       ],
     testGroup
       "Integration"
-      [goldenTest "Git Nodelabel test" "vertex-git" validateGitConfig]
+      [ goldenTest "Git Nodelabel test" "vertex-git" validateGitConfig,
+        goldenTest "Pipeline jobs are linked" "vertex-pipeline" validatePipelineConfig,
+        testCase "Demo graph errors" validateNoGraphError,
+        testCase "Demo config errors" validateNoConfigError
+      ]
   ]
   where
+    validateNoGraphError = assertEqual "graph error" [] demo.graphErrors
+    validateNoConfigError = assertBool ("config error: " <> show demo.config.configErrors) (List.null demo.config.configErrors)
     validateGitConfig = pure $ Map.lookup (NodeLabelName "cloud-rhel-7") demo.config.nodeLabels
+
+    validatePipelineConfig = do
+      pure $
+        ZuulWeeder.Graph.findReachable
+          ( NE.singleton
+              (Vertex (VPipeline (PipelineName "periodic-pipeline")) (Set.fromList [TenantName "local"]))
+          )
+          demo.configRequireGraph
 
     extractDataZKPath =
       let path = "/tmp/zk-dump/zuul/config/cache/sftests.com%2Fzuul-jobs/master/files/zuul.d%2Fhaskell-jobs.yaml/0000000000/ZKDATA"

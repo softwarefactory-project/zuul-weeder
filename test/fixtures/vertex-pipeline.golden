@@ -1,0 +1,14 @@
+fromList
+    [ Vertex
+        { name = VJob
+            ( JobName "wallaby-job" )
+        , tenants = fromList
+            [ TenantName "local" ]
+        }
+    , Vertex
+        { name = VJob
+            ( JobName "zena-job" )
+        , tenants = fromList
+            [ TenantName "local" ]
+        }
+    ]

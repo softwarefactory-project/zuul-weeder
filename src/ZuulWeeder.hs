@@ -230,6 +230,22 @@ unparsed_abide:
     nodes:
       - name: runner
         label: cloud-centos-7
+
+- pipeline:
+    name: periodic-pipeline
+
+- job:
+    name: wallaby-job
+
+- job:
+    name: zena-job
+
+- project:
+    name: triple-o
+    periodic-pipeline:
+      jobs:
+        - wallaby-job
+        - zena-job
 |],
         mkConfigFile
           "sftests.com"

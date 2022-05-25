@@ -200,6 +200,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goProjectPipeline :: ConfigLoc -> Vertex -> Set ProjectPipeline -> State Analysis ()
     goProjectPipeline loc src projectPipelines = do
       forM_ projectPipelines $ \pipeline -> do
+        let psrc = Vertex (VPipeline pipeline.name) loc.tenants
         case lookupTenant loc.tenants pipeline.name config.pipelines of
           Just xs -> goFeedState src xs
           Nothing -> #graphErrors %= (("Can't find : " <> show pipeline) :)
@@ -207,7 +208,11 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           case pJob of
             pj@(PJName jobName) -> do
               case lookupTenant loc.tenants jobName config.jobs of
-                Just xs -> goFeedState src xs
+                Just xs -> do
+                  -- Create link with the project
+                  goFeedState src xs
+                  -- Create link with the pipeline
+                  goFeedState psrc xs
                 Nothing -> #graphErrors %= (("Can't find : " <> show pj) :)
             PJJob _job -> do
               -- TODO: handle inline job
