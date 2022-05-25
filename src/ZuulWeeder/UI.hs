@@ -394,6 +394,18 @@ infoComponent ctx analysis = do
     keepTenants :: Set TenantName -> ConfigLoc -> Bool
     keepTenants tenants loc = tenants `Set.isSubsetOf` loc.tenants
 
+debugComponent :: Analysis -> Html ()
+debugComponent analysis = do
+  with' h2_ "font-bold" "Debug Info"
+  unless (null analysis.config.configErrors) do
+    with' div_ "font-semibold py-3" "Config Error"
+    ul_ do
+      traverse_ (li_ . toHtml . take 512 . show) analysis.config.configErrors
+  unless (null analysis.graphErrors) do
+    with' div_ "font-semibold py-3" "Graph Error"
+    ul_ do
+      traverse_ (li_ . toHtml . take 512) analysis.graphErrors
+
 locLink :: ConfigLoc -> Html ()
 locLink loc =
   with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
@@ -481,6 +493,7 @@ type BaseAPI =
     :<|> "about" :> GetRequest
     :<|> "search" :> GetRequest
     :<|> "info" :> GetRequest
+    :<|> "debug" :> GetRequest
     :<|> "object" :> Capture "type" VertexTypeUrl :> Capture "name" VertexNameUrl :> GetRequest
     :<|> "search_results" :> SearchPath
     :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
@@ -519,6 +532,7 @@ app config rootURL distPath = serve (Proxy @API) rootServer
         :<|> indexRoute "about" (pure aboutComponent)
         :<|> flip searchRoute Nothing
         :<|> indexRoute "info" (infoComponent ctx <$> liftIO config)
+        :<|> indexRoute "debug" (debugComponent <$> liftIO config)
         :<|> objectRoute
         :<|> searchResultRoute
         :<|> searchRouteWithQuery

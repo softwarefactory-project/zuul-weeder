@@ -13,6 +13,7 @@ module Zuul.ConfigLoader
   ( -- * The resulting configuration
     ConfigMap,
     Config (..),
+    ConfigError,
     loadConfig,
     emptyConfig,
     TenantResolver,
