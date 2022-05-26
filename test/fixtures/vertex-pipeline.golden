@@ -1,6 +1,12 @@
 fromList
     [ Vertex
         { name = VJob
+            ( JobName "base" )
+        , tenants = fromList
+            [ TenantName "local" ]
+        }
+    , Vertex
+        { name = VJob
             ( JobName "linter" )
         , tenants = fromList
             [ TenantName "local" ]
@@ -26,6 +32,12 @@ fromList
     , Vertex
         { name = VNodeLabel
             ( NodeLabelName "cloud-centos-7" )
+        , tenants = fromList
+            [ TenantName "local" ]
+        }
+    , Vertex
+        { name = VNodeLabel
+            ( NodeLabelName "pod-centos-7" )
         , tenants = fromList
             [ TenantName "local" ]
         }

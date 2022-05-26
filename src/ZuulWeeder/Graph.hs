@@ -153,9 +153,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     -- - job1: parent is Nothing
     -- - job2: parent is Just job1
     -- Then: allJobs = fromList
-    --   [ (job1, [ (loc {tenants = [tenant1, tenant2]}, job1 {parent = Just base})
-    --            , (loc {tenants = [tenant3]}, job1 {parent = Just base-minimal}) ])
-    --   , (job2, [ (loc, [job2]) ]) ]
+    --   [ (job1, [ (loc, job1 {parent = Just base})
+    --            , (loc, job1 {parent = Just base-minimal}) ])
+    --   , (job2, [ (loc, job2) ]) ]
     allJobs :: Zuul.ConfigLoader.ConfigMap JobName Job
     allJobs = Map.map (concatMap expandBaseJobs) config.jobs
       where
@@ -174,7 +174,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           -- This job is the base job, we don't set it's parent
           | job.name == parent = Just (loc, job)
           -- We create a new job with the parent set to the list of tenants defining it
-          | otherwise = Just (loc & (#tenants `set` tenants), job {parent = Just parent})
+          | otherwise = Just (loc & (#tenants `set` (Set.intersection loc.tenants tenants)), job {parent = Just parent})
 
     go :: State Analysis ()
     go = do
