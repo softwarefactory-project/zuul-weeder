@@ -139,6 +139,7 @@ module ZuulWeeder.Prelude
     Control.Monad.IO.Class.liftIO,
     (<=<),
     (>=>),
+    (<|>),
 
     -- * base debug
     Debug.Trace.trace,
@@ -162,6 +163,7 @@ module ZuulWeeder.Prelude
   )
 where
 
+import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar qualified
 import Control.Exception qualified

@@ -16,6 +16,8 @@
                             , branches = []
                             , dependencies =
                                 [ JobName "sf-rpm-build" ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     , PJJob
@@ -27,6 +29,8 @@
                             , branches = []
                             , dependencies =
                                 [ JobName "sf-rpm-build" ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     , PJJob
@@ -38,6 +42,8 @@
                             , branches = []
                             , dependencies =
                                 [ JobName "sf-rpm-build" ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     ]
@@ -56,6 +62,8 @@
                             , branches = []
                             , dependencies =
                                 [ JobName "sf-rpm-build" ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     , PJJob
@@ -67,6 +75,8 @@
                             , branches = []
                             , dependencies =
                                 [ JobName "sf-rpm-build" ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     , PJJob
@@ -80,6 +90,8 @@
                                 [ JobName "sf-ci-functional-minimal"
                                 , JobName "sf-ci-functional-allinone"
                                 ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     ]

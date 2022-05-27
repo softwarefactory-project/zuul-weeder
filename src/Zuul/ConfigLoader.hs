@@ -142,6 +142,8 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
         <*> decodeJobNodeset
         <*> decodeAsList "branches" BranchName va
         <*> decodeJobDependencies
+        <*> decodeSemaphores
+        <*> decodeSecrets
       where
         decodeJobAbstract :: Decoder Bool
         decodeJobAbstract = pure $ case HM.lookup "abstract" va of
@@ -185,6 +187,26 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
           names <- decodeNodesetNodes xs
           pure $ JobAnonymousNodeset names
 
+        getListNames :: Text -> Object -> Decoder [Text]
+        getListNames (Data.Aeson.Key.fromText -> key) obj = case HM.lookup key obj of
+          Just (String v) -> pure [v]
+          Just v -> traverse stringOrName =<< decodeList v
+          Nothing -> pure []
+          where
+            stringOrName = \case
+              String v -> pure v
+              v -> decodeString =<< decodeObjectAttribute "name" =<< decodeObject v
+
+        decodeSecrets = fmap SecretName <$> getListNames "secrets" va
+
+        decodeSemaphores = fmap SemaphoreName . concat <$> sequence [deprecatedSemaphore, getListNames "semaphores" va]
+          where
+            deprecatedSemaphore = case HM.lookup "semaphore" va of
+              Just (String v) -> pure [v]
+              Just v -> do
+                x <- decodeString =<< decodeObjectAttribute "name" =<< decodeObject v
+                pure [x]
+              Nothing -> pure []
     decodeNodesetNodes :: [Value] -> Decoder [NodeLabelName]
     decodeNodesetNodes xs = do
       names <- traverse (decodeString <=< decodeObjectAttribute "label" <=< decodeObject) xs

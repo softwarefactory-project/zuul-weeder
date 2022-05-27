@@ -131,6 +131,8 @@ navComponent ctx page =
 data VertexType
   = VAbstractJobT
   | VJobT
+  | VSemaphoreT
+  | VSecretT
   | VNodesetT
   | VNodeLabelT
   | VProjectT
@@ -146,6 +148,8 @@ instance From VertexName VertexType where
   from = \case
     VAbstractJob _ -> VAbstractJobT
     VJob _ -> VJobT
+    VSemaphore _ -> VSemaphoreT
+    VSecret _ -> VSecretT
     VProject _ -> VProjectT
     VNodeset _ -> VNodesetT
     VProjectTemplate _ -> VProjectTemplateT
@@ -186,6 +190,8 @@ vertexTypeName :: VertexType -> Text
 vertexTypeName = \case
   VAbstractJobT -> "abstract-job"
   VJobT -> "job"
+  VSemaphoreT -> "semaphore"
+  VSecretT -> "secret"
   VNodesetT -> "nodeset"
   VNodeLabelT -> "label"
   VProjectT -> "project"
@@ -311,6 +317,8 @@ vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
     iconName = case vt of
       VAbstractJobT -> "file-text-line"
       VJobT -> "file-text-line"
+      VSemaphoreT -> "lock-line"
+      VSecretT -> "key-2-line"
       VProjectT -> "folder-open-line"
       VProjectTemplateT -> "draft-line"
       VPipelineT -> "git-merge-line"
@@ -527,6 +535,8 @@ objectInfo ctx vertices analysis = do
     configComponents = case vertex.name of
       VAbstractJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
+      VSecret name -> getLocs $ Map.lookup name analysis.config.secrets
+      VSemaphore name -> getLocs $ Map.lookup name analysis.config.semaphores
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
@@ -566,6 +576,8 @@ instance FromHttpApiData VertexTypeUrl where
   parseUrlPiece txt = pure . VTU $ case txt of
     "abstract-job" -> VAbstractJob . JobName
     "job" -> VJob . JobName
+    "semaphore" -> VSemaphore . SemaphoreName
+    "secret" -> VSecret . SecretName
     "nodeset" -> VNodeset . NodesetName
     "label" -> VNodeLabel . NodeLabelName
     "project" -> VProject . ProjectName

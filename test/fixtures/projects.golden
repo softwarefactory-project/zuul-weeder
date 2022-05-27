@@ -47,6 +47,8 @@
                                 )
                             , branches = []
                             , dependencies = []
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     ]
@@ -65,6 +67,8 @@
                             , branches = []
                             , dependencies =
                                 [ JobName "sf-rpm-build" ]
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     ]
@@ -83,6 +87,8 @@
                                 )
                             , branches = []
                             , dependencies = []
+                            , semaphores = []
+                            , secrets = []
                             }
                         )
                     ]

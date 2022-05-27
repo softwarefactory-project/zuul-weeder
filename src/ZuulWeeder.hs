@@ -228,6 +228,10 @@ unparsed_abide:
     name: base
     abstract: true
     nodeset: centos
+    secrets: log-key
+
+- secret:
+    name: log-key
 
 - nodeset:
     name: centos

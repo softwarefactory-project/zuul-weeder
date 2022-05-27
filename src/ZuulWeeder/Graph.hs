@@ -47,6 +47,10 @@ data VertexName
     VAbstractJob JobName
   | -- | A job
     VJob JobName
+  | -- | A secret
+    VSecret SecretName
+  | -- | A semaphore
+    VSemaphore SemaphoreName
   | -- | A nodeset
     VNodeset NodesetName
   | -- | A node label
@@ -71,6 +75,8 @@ instance From VertexName Text where
   from = \case
     VAbstractJob (JobName n) -> n
     VJob (JobName n) -> n
+    VSecret (SecretName n) -> n
+    VSemaphore (SemaphoreName n) -> n
     VNodeset (NodesetName n) -> n
     VNodeLabel (NodeLabelName n) -> n
     VProject (ProjectName n) -> n
@@ -85,6 +91,12 @@ instance From Job VertexName where
   from job
     | job.abstract = VAbstractJob job.name
     | otherwise = VJob job.name
+
+instance From SecretName VertexName where
+  from = VSecret
+
+instance From SemaphoreName VertexName where
+  from = VSemaphore
 
 instance From Project VertexName where
   from pp = VProject pp.name
@@ -215,7 +227,6 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       traverse_ goProject $ concat $ Map.elems config.projects
       traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
       traverse_ goPipeline $ concat $ Map.elems config.pipelines
-    -- TODO: handles semaphores, queues and secrets
 
     -- get the list of vertex matching a given name and set of tenants
     lookupTenant :: (Ord a, From b VertexName) => Set TenantName -> a -> ConfigMap a b -> Maybe (Set Vertex)
@@ -329,6 +340,18 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         case lookupTenant loc.tenants dJob allJobs of
           Just vDependencyJobs -> vJob `connects` vDependencyJobs
           Nothing -> #graphErrors %= (("Can't find : " <> show dJob) :)
+
+      -- handle job secrets
+      forM_ job.secrets $ \secret -> do
+        case lookupTenant loc.tenants secret config.secrets of
+          Just vSecrets -> vJob `connects` vSecrets
+          Nothing -> #graphErrors %= (("Can't find : " <> show secret) :)
+
+      -- handle job semaphores
+      forM_ job.semaphores $ \semaphore -> do
+        case lookupTenant loc.tenants semaphore config.semaphores of
+          Just vSemaphores -> vJob `connects` vSemaphores
+          Nothing -> #graphErrors %= (("Can't find : " <> show semaphore) :)
 
     -- connect two vertices: src and dst, where src requires dst and dst allows src.
     -- see https://english.stackexchange.com/questions/248642/inverse-of-dependency

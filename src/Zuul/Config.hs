@@ -141,7 +141,9 @@ data Job = Job
     parent :: Maybe JobName,
     nodeset :: Maybe JobNodeset,
     branches :: [BranchName],
-    dependencies :: [JobName]
+    dependencies :: [JobName],
+    semaphores :: [SemaphoreName],
+    secrets :: [SecretName]
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 

@@ -28,6 +28,11 @@
                                 ( JobName "base" )
                             , subForest =
                                 [ Node
+                                    { rootLabel = VSecret
+                                        ( SecretName "log-key" )
+                                    , subForest = []
+                                    }
+                                , Node
                                     { rootLabel = VNodeset
                                         ( NodesetName "centos" )
                                     , subForest =
@@ -113,6 +118,11 @@
                 ( JobName "base" )
             , subForest =
                 [ Node
+                    { rootLabel = VSecret
+                        ( SecretName "log-key" )
+                    , subForest = []
+                    }
+                , Node
                     { rootLabel = VNodeset
                         ( NodesetName "centos" )
                     , subForest =

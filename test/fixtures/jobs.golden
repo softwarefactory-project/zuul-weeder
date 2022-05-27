@@ -9,6 +9,9 @@
             )
         , branches = []
         , dependencies = []
+        , semaphores = []
+        , secrets =
+            [ SecretName "site_sflogs" ]
         }
     )
 , ZJob
@@ -27,6 +30,9 @@
             [ JobName "job1"
             , JobName "job2"
             ]
+        , semaphores = []
+        , secrets =
+            [ SecretName "service_user" ]
         }
     )
 , ZJob
@@ -40,6 +46,10 @@
         , branches =
             [ BranchName "master" ]
         , dependencies = []
+        , semaphores =
+            [ SemaphoreName "semaphore-config-update" ]
+        , secrets =
+            [ SecretName "site_install_server" ]
         }
     )
 , ZJob
@@ -53,6 +63,8 @@
             )
         , branches = []
         , dependencies = []
+        , semaphores = []
+        , secrets = []
         }
     )
 ]
