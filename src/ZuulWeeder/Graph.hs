@@ -14,7 +14,6 @@ module ZuulWeeder.Graph
     Analysis (..),
     Vertex (..),
     VertexName (..),
-    vertexTypeName,
     analyzeConfig,
     findReachable,
     findReachableForest,
@@ -59,18 +58,6 @@ data VertexName
   | -- | A template pipeline config
     VTemplatePipeline ProjectTemplateName PipelineName
   deriving (Eq, Ord, Show, Generic, Hashable)
-
--- | A text representation of a vertex type, useful for /object url piece.
-vertexTypeName :: VertexName -> Text
-vertexTypeName = \case
-  VJob _ -> "job"
-  VNodeset _ -> "nodeset"
-  VNodeLabel _ -> "label"
-  VProject _ -> "project"
-  VProjectTemplate _ -> "project-template"
-  VPipeline _ -> "pipeline"
-  VProjectPipeline _ _ -> "project-pipeline"
-  VTemplatePipeline _ _ -> "template-pipeline"
 
 instance From VertexName Text where
   from = \case

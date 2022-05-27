@@ -19,31 +19,6 @@ const clampY = (y) => Math.max(minY, Math.min(y, maxY));
 setSize();
 window.addEventListener("resize", setSize);
 
-const getColor = (group) => {
-  switch (group) {
-    case 1:
-      return "#1f77b4";
-    case 2:
-      return "#aec6e8";
-    case 3:
-      return "#ff7f0e";
-    case 4:
-      return "#ffbb78";
-    case 5:
-      return "#2ca02c";
-    case 6:
-      return "#98df8a";
-    case 7:
-      return "#d62728";
-    case 8:
-      return "#ff9896";
-    case 9:
-      return "#ffeeaa";
-    case _:
-      return "pink";
-  }
-};
-
 function renderToy(url) {
   console.log("Rendeing toy", url);
   d3.json(url, function (error, graph) {

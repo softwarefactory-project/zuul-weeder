@@ -68,11 +68,12 @@ mainBody ctx page mainComponent =
       title_ "Zuul Weeder"
       meta_ [charset_ "utf-8"]
       meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1.0"]
+      script_ jsColors
+      style_ css
       link_ [href_ $ distUrl ctx "tailwind.css", rel_ "stylesheet"]
       with (script_ mempty) [src_ $ distUrl ctx "d3.v4.min.js"]
       with (script_ mempty) [src_ $ distUrl ctx "graph.js"]
       with (script_ mempty) [src_ $ distUrl ctx "htmx.min.js"]
-      style_ css
     with body_ [id_ "main"] do
       navComponent ctx page
       with div_ [class_ "container grid p-4"] mainComponent
@@ -94,6 +95,7 @@ svg#d3 {
   z-index: -1;
 }
 |]
+        <> cssColors
 
 navComponent :: Context -> Text -> Html ()
 navComponent ctx page =
@@ -124,6 +126,65 @@ navComponent ctx page =
         UnScoped -> pure ()
       where
         tenantClass = "my-4 p-1 text-white font-semibold "
+
+data VertexType
+  = VJobT
+  | VNodesetT
+  | VNodeLabelT
+  | VProjectT
+  | VProjectTemplateT
+  | VPipelineT
+  | VProjectPipelineT
+  | VTemplatePipelineT
+  deriving (Enum, Bounded)
+
+instance From VertexName VertexType where
+  from = \case
+    VJob _ -> VJobT
+    VProject _ -> VProjectT
+    VNodeset _ -> VNodesetT
+    VProjectTemplate _ -> VProjectTemplateT
+    VPipeline _ -> VPipelineT
+    VNodeLabel _ -> VNodeLabelT
+    VProjectPipeline _ _ -> VProjectPipelineT
+    VTemplatePipeline _ _ -> VTemplatePipelineT
+
+vertexColor :: VertexType -> Text
+vertexColor = \case
+  VJobT -> "#1f77b4"
+  VProjectT -> "#aec6e8"
+  VNodesetT -> "#ff7f0e"
+  VProjectTemplateT -> "#ffbb78"
+  VPipelineT -> "#2ca02c"
+  VNodeLabelT -> "#98df8a"
+  VProjectPipelineT -> "pink"
+  VTemplatePipelineT -> "pink"
+
+cssColors :: Text
+cssColors = Text.unlines $ map mkCssColor [minBound .. maxBound]
+  where
+    mkCssColor :: VertexType -> Text
+    mkCssColor vt =
+      "." <> vertexTypeName vt <> " { color: " <> vertexColor vt <> ";}"
+
+jsColors :: Text
+jsColors =
+  "const getColor = (group) => { switch (group) {\n" <> Text.unlines (map mkJsColor [minBound .. maxBound]) <> "}};"
+  where
+    mkJsColor :: VertexType -> Text
+    mkJsColor vt = "case " <> from (show (fromEnum vt)) <> ": return \"" <> vertexColor vt <> "\";"
+
+-- | A text representation of a vertex type, useful for /object url piece.
+vertexTypeName :: VertexType -> Text
+vertexTypeName = \case
+  VJobT -> "job"
+  VNodesetT -> "nodeset"
+  VNodeLabelT -> "label"
+  VProjectT -> "project"
+  VProjectTemplateT -> "project-template"
+  VPipelineT -> "pipeline"
+  VProjectPipelineT -> "project-pipeline"
+  VTemplatePipelineT -> "template-pipeline"
 
 spinner :: Html ()
 spinner = with span_ [class_ "htmx-indicator font-semibold text-white", id_ "spinner"] "◌"
@@ -212,36 +273,13 @@ toD3Graph scope g =
     vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
 
     toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    toNodes v = ZuulWeeder.UI.D3Node (from v.name) (hash v) $ vertexGroup v.name
+    toNodes v = ZuulWeeder.UI.D3Node (from v.name) (hash v) $ fromEnum (into @VertexType v.name)
 
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
     toLinks (a, b) = ZuulWeeder.UI.D3Link (hash a) (hash b)
 
-vertexGroup :: VertexName -> Int
-vertexGroup = \case
-  VJob _ -> 1
-  VProject _ -> 2
-  VNodeset _ -> 3
-  VProjectTemplate _ -> 4
-  VPipeline _ -> 5
-  VNodeLabel _ -> 6
-  VProjectPipeline _ _ -> 7
-  VTemplatePipeline _ _ -> 8
-
--- Keep in sync with graph.js getColor function
-d3Color :: VertexName -> Text
-d3Color = \case
-  VJob _ -> "#1f77b4"
-  VProject _ -> "#aec6e8"
-  VNodeset _ -> "#ff7f0e"
-  VProjectTemplate _ -> "#ffbb78"
-  VPipeline _ -> "#2ca02c"
-  VNodeLabel _ -> "#98df8a"
-  VProjectPipeline _ _ -> "pink"
-  VTemplatePipeline _ _ -> "pink"
-
 vertexTypeIcon :: VertexName -> Html ()
-vertexTypeIcon vn = with div_ [style_ ("color: " <> d3Color vn), class_ "font-bold w-5 inline-block"] $
+vertexTypeIcon vn = with' div_ ("font-bold w-5 inline-block " <> vertexTypeName (from vn)) do
   toHtml @Text $ case vn of
     VJob _ -> "⚙"
     VProject _ -> "🧱"
@@ -284,7 +322,7 @@ vertexLink ctx name = hxNavLink ref Nothing
       Text.intercalate
         "/"
         [ baseUrl ctx <> "object",
-          vertexTypeName name,
+          vertexTypeName (from name),
           -- TODO: url encode name
           Network.URI.Encode.encodeText (from name)
         ]
