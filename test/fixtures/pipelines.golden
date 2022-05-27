@@ -7,6 +7,12 @@
             , PipelineTrigger
                 { connectionName = ConnectionName "my_gitlab" }
             ]
+        , reporters =
+            [ PipelineReporter
+                { connectionName = ConnectionName "elasticsearch" }
+            , PipelineReporter
+                { connectionName = ConnectionName "my_gerrit" }
+            ]
         }
     )
 ]

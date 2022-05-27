@@ -38,6 +38,7 @@ module Zuul.Config
     ProjectPipeline (..),
     PipelineJob (..),
     PipelineTrigger (..),
+    PipelineReporter (..),
     Pipeline (..),
     Nodeset (..),
     ProjectTemplate (..),
@@ -177,9 +178,14 @@ newtype PipelineTrigger = PipelineTrigger {connectionName :: ConnectionName}
   deriving (Show, Ord, Eq, Generic)
   deriving newtype (Hashable)
 
+newtype PipelineReporter = PipelineReporter {connectionName :: ConnectionName}
+  deriving (Show, Ord, Eq, Generic)
+  deriving newtype (Hashable)
+
 data Pipeline = Pipeline
   { name :: PipelineName,
-    triggers :: [PipelineTrigger]
+    triggers :: [PipelineTrigger],
+    reporters :: [PipelineReporter]
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 

@@ -59,6 +59,8 @@ data Config = Config
     semaphores :: ConfigMap SemaphoreName SemaphoreName,
     -- | The pipeline triggers.
     triggers :: ConfigMap ConnectionName ConnectionName,
+    -- | The pipeline reporters.
+    reporters :: ConfigMap ConnectionName ConnectionName,
     -- | Configuration errors.
     configErrors :: [ConfigError]
   }
@@ -75,6 +77,7 @@ updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
   ZPipeline pipeline -> do
     #pipelines %= insertConfig pipeline.name pipeline
     traverse_ (\(PipelineTrigger v) -> #triggers %= insertConfig v v) pipeline.triggers
+    traverse_ (\(PipelineReporter v) -> #reporters %= insertConfig v v) pipeline.reporters
   ZSecret secret -> #secrets %= insertConfig secret secret
   ZQueue queue -> #queues %= insertConfig queue queue
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
@@ -111,12 +114,20 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
     decodePipeline :: Object -> Decoder Pipeline
     decodePipeline va = do
       name <- PipelineName <$> getName va
-      triggers <- case decodeObject =<< decodeObjectAttribute "trigger" va of
-        Decoder (Left _) -> pure mempty
-        Decoder (Right triggersObj) ->
-          pure $
-            PipelineTrigger . ConnectionName . Data.Aeson.Key.toText <$> HM.keys triggersObj
-      pure $ Pipeline {name, triggers}
+      triggers <- fmap PipelineTrigger <$> getPipelineConnections "trigger"
+      reporters <-
+        fmap PipelineReporter . concat
+          <$> sequence
+            [ getPipelineConnections "success",
+              getPipelineConnections "failure"
+            ]
+      pure $ Pipeline {name, triggers, reporters}
+      where
+        getPipelineConnections key = case HM.lookup key va of
+          Just v -> do
+            obj <- decodeObject v
+            pure $ ConnectionName . Data.Aeson.Key.toText <$> HM.keys obj
+          Nothing -> pure []
 
     decodeJob :: Object -> Decoder Job
     decodeJob va = do
@@ -271,4 +282,4 @@ loadConfig urlBuilder tenantResolver zkcE = do
 
 -- | An empty config.
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty

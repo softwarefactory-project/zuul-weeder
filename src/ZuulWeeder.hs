@@ -239,6 +239,8 @@ unparsed_abide:
     name: check
     trigger:
       timer: {}
+    success:
+      elastic:
 
 - job:
     name: wallaby-job

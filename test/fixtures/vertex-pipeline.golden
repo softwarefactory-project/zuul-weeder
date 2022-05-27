@@ -6,6 +6,11 @@
                 ( ConnectionName "timer" )
             , subForest = []
             }
+        , Node
+            { rootLabel = VReporter
+                ( ConnectionName "elastic" )
+            , subForest = []
+            }
         ]
     , "check requires"
     ,
@@ -89,6 +94,11 @@
                         [ Node
                             { rootLabel = VTrigger
                                 ( ConnectionName "timer" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VReporter
+                                ( ConnectionName "elastic" )
                             , subForest = []
                             }
                         ]

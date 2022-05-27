@@ -139,6 +139,7 @@ data VertexType
   | VProjectPipelineT
   | VTemplatePipelineT
   | VTriggerT
+  | VReporterT
   deriving (Enum, Bounded)
 
 instance From VertexName VertexType where
@@ -153,6 +154,7 @@ instance From VertexName VertexType where
     VProjectPipeline _ _ -> VProjectPipelineT
     VTemplatePipeline _ _ -> VTemplatePipelineT
     VTrigger _ -> VTriggerT
+    VReporter _ -> VReporterT
 
 vertexColor :: VertexType -> Text
 vertexColor vt = "hsl(" <> from (show hue) <> ", 50%, 50%)"
@@ -192,6 +194,7 @@ vertexTypeName = \case
   VProjectPipelineT -> "project-pipeline"
   VTemplatePipelineT -> "template-pipeline"
   VTriggerT -> "trigger"
+  VReporterT -> "reporter"
 
 spinner :: Html ()
 spinner = with span_ [class_ "htmx-indicator font-semibold text-white", id_ "spinner"] "◌"
@@ -316,6 +319,7 @@ vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
       VTemplatePipelineT -> "git-merge-line"
       VNodesetT -> "server-line"
       VTriggerT -> "download-fill"
+      VReporterT -> "upload-fill"
 
 data D3Node = D3Node
   { name :: Text,
@@ -531,6 +535,7 @@ objectInfo ctx vertices analysis = do
       VProjectPipeline name _ -> getLocs $ Map.lookup name analysis.config.projects
       VTemplatePipeline name _ -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
+      VReporter name -> getLocs $ Map.lookup name analysis.config.reporters
     dependencies = getForest analysis.dependencyGraph
     dependents = getForest analysis.dependentGraph
     getForest = ZuulWeeder.Graph.findReachableForest tenantsM vertices
@@ -569,6 +574,7 @@ instance FromHttpApiData VertexTypeUrl where
     "project-pipeline" -> brk VProjectPipeline ProjectName
     "template-pipeline" -> brk VTemplatePipeline ProjectTemplateName
     "trigger" -> VTrigger . ConnectionName
+    "reporter" -> VReporter . ConnectionName
     _ -> error $ "Unknown obj type: " <> from txt
     where
       brk vType nType t =

@@ -3,3 +3,7 @@
     trigger:
       my_gerrit: []
       my_gitlab: []
+    success:
+      elasticsearch:
+    failure:
+      my_gerrit:

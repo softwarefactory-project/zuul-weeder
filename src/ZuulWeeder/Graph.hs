@@ -63,6 +63,8 @@ data VertexName
     VTemplatePipeline ProjectTemplateName PipelineName
   | -- | A pipeline trigger
     VTrigger ConnectionName
+  | -- | A pipeline reporter
+    VReporter ConnectionName
   deriving (Eq, Ord, Show, Generic, Hashable)
 
 instance From VertexName Text where
@@ -77,6 +79,7 @@ instance From VertexName Text where
     VProjectPipeline (ProjectName n) (PipelineName v) -> n <> ":" <> v
     VTemplatePipeline (ProjectTemplateName n) (PipelineName v) -> n <> ":" <> v
     VTrigger (ConnectionName n) -> n
+    VReporter (ConnectionName n) -> n
 
 instance From Job VertexName where
   from job
@@ -233,7 +236,10 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         let vTrigger = Vertex (VTrigger trigger) loc.tenants
         vTrigger `connect` vPipeline
         insertVertex loc vTrigger
-    -- TODO: handles reporters
+      forM_ pipeline.reporters $ \(PipelineReporter trigger) -> do
+        let vReporter = Vertex (VReporter trigger) loc.tenants
+        vReporter `connect` vPipeline
+        insertVertex loc vReporter
 
     goPipelineConfig :: ConfigLoc -> Vertex -> (PipelineName -> VertexName) -> ProjectPipeline -> State Analysis ()
     goPipelineConfig loc vProject mk pipeline = do
