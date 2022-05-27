@@ -62,6 +62,7 @@ data ConfigError
     YamlError Data.Yaml.ParseException
   | -- | The path is missing component, e.g. branch name
     InvalidPath
+  | AmbiguousName Text
   | -- | A decoding error
     DecodeError FilePathT Text Value
   deriving (Show)

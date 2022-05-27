@@ -16,6 +16,7 @@ module Zuul.Config
     TenantName (..),
     JobName (..),
     ProjectName (..),
+    ProjectRegex (..),
     PipelineName (..),
     NodesetName (..),
     NodeLabelName (..),
@@ -68,6 +69,16 @@ newtype ProjectName = ProjectName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
 
+instance From ProjectName Text where
+  from (ProjectName n) = n
+
+newtype ProjectRegex = ProjectRegex Text
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Hashable)
+
+instance From ProjectName ProjectRegex where
+  from (ProjectName n) = ProjectRegex n
+
 newtype NodesetName = NodesetName Text
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable)
@@ -101,6 +112,9 @@ data CanonicalProjectName = CanonicalProjectName
     project :: ProjectName
   }
   deriving (Eq, Ord, Show, Generic, Hashable)
+
+instance From CanonicalProjectName Text where
+  from (CanonicalProjectName (ProviderName p) (ProjectName n)) = p <> "/" <> n
 
 newtype ConnectionName = ConnectionName Text
   deriving (Eq, Ord, Show, Generic)
@@ -238,5 +252,5 @@ data ConfigLoc = ConfigLoc
   }
   deriving (Show, Eq, Ord, Generic)
 
-instance From ConfigLoc ProjectName where
-  from loc = loc.project.project
+instance From ConfigLoc CanonicalProjectName where
+  from loc = loc.project

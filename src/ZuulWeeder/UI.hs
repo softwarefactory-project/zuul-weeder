@@ -545,8 +545,8 @@ objectInfo ctx vertices analysis = do
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
       VNodeset name -> getLocs $ Map.lookup name analysis.config.nodesets
       VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
-      VProjectPipeline name _ -> getLocs $ Map.lookup name analysis.config.projects
-      VTemplatePipeline name _ -> getLocs $ Map.lookup name analysis.config.projectTemplates
+      VProjectPipeline _ name -> getLocs $ Map.lookup name analysis.config.projects
+      VTemplatePipeline _ name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
       VReporter name -> getLocs $ Map.lookup name analysis.config.reporters
     dependencies = getForest analysis.dependencyGraph
@@ -575,6 +575,8 @@ vertexScope scope vertices = Set.toList $ case scope of
 
 newtype VertexTypeUrl = VTU (Text -> VertexName)
 
+data DecodeProject = DecodeCanonical | DecodeTemplate
+
 instance FromHttpApiData VertexTypeUrl where
   parseUrlPiece txt = pure . VTU $ case txt of
     "abstract-job" -> VAbstractJob . JobName
@@ -584,18 +586,28 @@ instance FromHttpApiData VertexTypeUrl where
     "nodeset" -> VNodeset . NodesetName
     "label" -> VNodeLabel . NodeLabelName
     "queue" -> VQueue . QueueName
-    "project" -> VProject . ProjectName
+    "project" -> VProject . decodeCanonical
     "project-template" -> VProjectTemplate . ProjectTemplateName
     "pipeline" -> VPipeline . PipelineName
-    "project-pipeline" -> brk VProjectPipeline ProjectName
-    "template-pipeline" -> brk VTemplatePipeline ProjectTemplateName
+    "project-pipeline" -> splitPipeline DecodeCanonical
+    "template-pipeline" -> splitPipeline DecodeTemplate
     "trigger" -> VTrigger . ConnectionName
     "reporter" -> VReporter . ConnectionName
     _ -> error $ "Unknown obj type: " <> from txt
     where
-      brk vType nType t =
-        let (a, Text.tail -> b) = Text.span (/= ':') t
-         in vType (nType a) (PipelineName b)
+      -- Assume the provider name is the first element of a '/' separated path
+      decodeCanonical :: Text -> CanonicalProjectName
+      decodeCanonical t =
+        let (ProviderName -> provider, Text.tail -> name) = Text.span (/= '/') t
+         in CanonicalProjectName provider (ProjectName name)
+
+      -- Project/Template Pipeline name is separated by a ':'
+      splitPipeline :: DecodeProject -> Text -> VertexName
+      splitPipeline dp t =
+        let (PipelineName -> pipeline, Text.tail -> name) = Text.span (/= ':') t
+         in case dp of
+              DecodeCanonical -> VProjectPipeline pipeline (decodeCanonical name)
+              DecodeTemplate -> VTemplatePipeline pipeline (ProjectTemplateName name)
 
 newtype VertexNameUrl = VNU {getVNU :: Text}
 

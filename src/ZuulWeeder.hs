@@ -18,7 +18,7 @@ import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
 import Web.HttpApiData (toHeader)
-import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, TenantResolver, emptyConfig, loadConfig)
+import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
 import Zuul.ZooKeeper
@@ -141,7 +141,7 @@ mkConfigLoader logger dataBaseDir configFile = do
       -- decode the tenants config
       tenantsConfig <- except (decodeTenantsConfig systemConfig)
       -- load all the config objects
-      let tr = Zuul.Tenant.tenantResolver serviceConfig tenantsConfig
+      let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
       config <- lift $ loadConfigFiles serviceConfig.urlBuilders tr dataDir
       pure (tenantsConfig, config)
 
@@ -201,12 +201,13 @@ unparsed_abide:
             - config: {}
           untrusted-projects:
             - sf-jobs: {}
+            - triple-o
             - zuul-jobs:
                 include: [job]
                 shadow: sf-jobs
 |]
         tenantsConfig <- except (decodeTenantsConfig systemConfig)
-        let tr = Zuul.Tenant.tenantResolver serviceConfig tenantsConfig
+        let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
         conf <- lift $ flip execStateT Zuul.ConfigLoader.emptyConfig do
           xs <- sequence configFiles
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)

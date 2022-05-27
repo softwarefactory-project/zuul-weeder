@@ -16,8 +16,12 @@
     ,
         [ Node
             { rootLabel = VProjectPipeline
-                ( ProjectName "sftests.com/config" )
                 ( PipelineName "check" )
+                ( CanonicalProjectName
+                    { provider = ProviderName "sftests.com"
+                    , project = ProjectName "config"
+                    }
+                )
             , subForest =
                 [ Node
                     { rootLabel = VJob
@@ -51,8 +55,12 @@
             }
         , Node
             { rootLabel = VProjectPipeline
-                ( ProjectName "triple-o" )
                 ( PipelineName "check" )
+                ( CanonicalProjectName
+                    { provider = ProviderName "sftests.com"
+                    , project = ProjectName "triple-o"
+                    }
+                )
             , subForest =
                 [ Node
                     { rootLabel = VJob
@@ -79,8 +87,8 @@
             }
         , Node
             { rootLabel = VTemplatePipeline
-                ( ProjectTemplateName "common" )
                 ( PipelineName "check" )
+                ( ProjectTemplateName "common" )
             , subForest = []
             }
         ]
@@ -90,12 +98,20 @@
     ,
         [ Node
             { rootLabel = VProjectPipeline
-                ( ProjectName "triple-o" )
                 ( PipelineName "check" )
+                ( CanonicalProjectName
+                    { provider = ProviderName "sftests.com"
+                    , project = ProjectName "triple-o"
+                    }
+                )
             , subForest =
                 [ Node
                     { rootLabel = VProject
-                        ( ProjectName "triple-o" )
+                        ( CanonicalProjectName
+                            { provider = ProviderName "sftests.com"
+                            , project = ProjectName "triple-o"
+                            }
+                        )
                     , subForest = []
                     }
                 , Node

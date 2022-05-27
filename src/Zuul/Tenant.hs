@@ -15,7 +15,8 @@ module Zuul.Tenant
     TenantConnectionConfig (..),
     TenantProject (..),
     decodeTenantsConfig,
-    tenantResolver,
+    TenantResolver (..),
+    mkResolver,
   )
 where
 
@@ -154,19 +155,87 @@ decodeTenantsConfig (ZKTenantsConfig value) = case decoded of
               extraConfigPaths = [] -- TODO: decode attribute
           pure $ TenantProject (ProjectName name) includedElements (extraConfigPaths <> defaultPaths)
 
--- | Helper function to return the list of tenants matching a 'ConfigLoc'
-tenantResolver ::
+-- | Tenant information to resolve project location
+data TenantResolver = TenantResolver
+  { resolveTenants ::
+      -- The config location to resolve
+      ConfigLoc ->
+      -- The config element type
+      ZuulConfigType ->
+      -- The list of tenant allowing the element
+      Set TenantName,
+    resolveProject ::
+      -- The list of tenant matching the project location
+      Set TenantName ->
+      -- The project definition config location
+      ConfigLoc ->
+      -- The project name
+      ProjectName ->
+      -- The resolved project name
+      Maybe CanonicalProjectName
+  }
+
+mkResolver ::
   -- | The zuul.conf for the list of connection names
   ServiceConfig ->
   -- | The main.yaml tenants config
   TenantsConfig ->
-  -- | The config location to resolve
+  TenantResolver
+mkResolver sc tc = TenantResolver {resolveTenants = resolveTenant sc tc, resolveProject}
+  where
+    resolveProject :: Set TenantName -> ConfigLoc -> ProjectName -> Maybe CanonicalProjectName
+    resolveProject tenants loc rawName
+      | -- The project is already qualified
+        provider `Set.member` allProviders tc.tenants =
+          Just $ CanonicalProjectName provider name
+      | -- Otherwise we pick the provider name of the config location
+        defaultProjectName `Set.member` allProjects tc.tenants =
+          Just defaultProjectName
+      | -- The default project name does not exists
+        otherwise = Nothing
+      where
+        (ProviderName -> provider, ProjectName . Text.tail -> name) = Text.span (/= '/') (from rawName)
+        defaultProjectName = CanonicalProjectName loc.project.provider rawName
+
+        allTenantsConfig :: Map TenantName TenantConfig -> [TenantConfig]
+        allTenantsConfig =
+          map snd
+            . filter (\(tenant, _) -> tenant `Set.member` tenants)
+            . Map.toList
+
+        allProjects :: Map TenantName TenantConfig -> Set CanonicalProjectName
+        allProjects =
+          Set.fromList
+            . mapMaybe getCanonicalName
+            . concatMap getProjects
+            . allTenantsConfig
+          where
+            getProjects tenantConfig =
+              let tenantProjects :: (ConnectionName, TenantConnectionConfig) -> [(ConnectionName, ProjectName)]
+                  tenantProjects (conn, tcc) =
+                    map toProject tcc.configProjects <> map toProject tcc.untrustedProjects
+                    where
+                      toProject tp = (conn, tp.name)
+               in concatMap tenantProjects $ Map.toList tenantConfig.connections
+            getCanonicalName (cn, pname) = case Map.lookup cn sc.connections of
+              Just pn -> Just (CanonicalProjectName pn pname)
+              Nothing -> Nothing
+
+        -- The list of provider named based on the available tenants connection.
+        allProviders :: Map TenantName TenantConfig -> Set ProviderName
+        allProviders =
+          Set.fromList
+            . mapMaybe (\cn -> Map.lookup cn sc.connections)
+            . concatMap (\tenantConfig -> Map.keys tenantConfig.connections)
+            . allTenantsConfig
+
+resolveTenant ::
+  ServiceConfig ->
+  TenantsConfig ->
   ConfigLoc ->
-  -- | The config element type
   ZuulConfigType ->
-  -- | The list of tenant depending on the element
   Set TenantName
-tenantResolver serviceConfig tenantsConfig configLoc zct =
+resolveTenant serviceConfig tenantsConfig configLoc zct =
   Set.fromList $ map fst $ filter (containsProject . snd) $ Map.toList $ tenantsConfig.tenants
   where
     containsProject :: TenantConfig -> Bool

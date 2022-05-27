@@ -58,15 +58,15 @@ data VertexName
   | -- | A queue
     VQueue QueueName
   | -- | A project
-    VProject ProjectName
+    VProject CanonicalProjectName
   | -- | A project template
     VProjectTemplate ProjectTemplateName
   | -- | A pipeline
     VPipeline PipelineName
   | -- | A project pipeline config
-    VProjectPipeline ProjectName PipelineName
+    VProjectPipeline PipelineName CanonicalProjectName
   | -- | A template pipeline config
-    VTemplatePipeline ProjectTemplateName PipelineName
+    VTemplatePipeline PipelineName ProjectTemplateName
   | -- | A pipeline trigger
     VTrigger ConnectionName
   | -- | A pipeline reporter
@@ -82,11 +82,11 @@ instance From VertexName Text where
     VNodeset (NodesetName n) -> n
     VNodeLabel (NodeLabelName n) -> n
     VQueue (QueueName n) -> n
-    VProject (ProjectName n) -> n
+    VProject (CanonicalProjectName (ProviderName p) (ProjectName n)) -> p <> "/" <> n
     VProjectTemplate (ProjectTemplateName n) -> n
     VPipeline (PipelineName n) -> n
-    VProjectPipeline (ProjectName n) (PipelineName v) -> n <> ":" <> v
-    VTemplatePipeline (ProjectTemplateName n) (PipelineName v) -> n <> ":" <> v
+    VProjectPipeline (PipelineName v) cp -> v <> ":" <> from cp
+    VTemplatePipeline (PipelineName v) (ProjectTemplateName n) -> v <> ":" <> n
     VTrigger (ConnectionName n) -> n
     VReporter (ConnectionName n) -> n
 
@@ -94,6 +94,9 @@ instance From Job VertexName where
   from job
     | job.abstract = VAbstractJob job.name
     | otherwise = VJob job.name
+
+instance From CanonicalProjectName VertexName where
+  from = VProject
 
 instance From SecretName VertexName where
   from = VSecret
@@ -103,9 +106,6 @@ instance From SemaphoreName VertexName where
 
 instance From QueueName VertexName where
   from = VQueue
-
-instance From Project VertexName where
-  from pp = VProject pp.name
 
 instance From ProjectTemplate VertexName where
   from p = VProjectTemplate p.name
@@ -230,12 +230,15 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     go = do
       traverse_ goJob $ concat $ Map.elems allJobs
       traverse_ goNodeset $ concat $ Map.elems config.nodesets
-      traverse_ goProject $ concat $ Map.elems config.projects
+      traverse_ goProject $ concatMap projectList (Map.toList config.projects)
       traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
       traverse_ goPipeline $ concat $ Map.elems config.pipelines
       traverse_ goInsert $ concat $ Map.elems config.secrets
       traverse_ goInsert $ concat $ Map.elems config.semaphores
       traverse_ goInsert $ concat $ Map.elems config.queues
+      where
+        projectList :: (CanonicalProjectName, [(ConfigLoc, Project)]) -> [(CanonicalProjectName, (ConfigLoc, Project))]
+        projectList (a, b) = (a,) <$> b
 
     goInsert (loc, obj) = do
       let vertex = mkVertex loc obj
@@ -297,9 +300,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         Nothing -> #graphErrors %= (("Can't find : " <> show queue) :)
       Nothing -> pure ()
 
-    goProject :: (ConfigLoc, Project) -> State Analysis ()
-    goProject (loc, project) = do
-      let vProject = mkVertex loc project
+    goProject :: (CanonicalProjectName, (ConfigLoc, Project)) -> State Analysis ()
+    goProject (projectName, (loc, project)) = do
+      let vProject = mkVertex loc projectName
       insertVertex loc vProject
 
       -- handle queues
@@ -312,7 +315,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           Nothing -> #graphErrors %= (("Can't find : " <> show templateName) :)
 
       -- handle project pipeline configs
-      traverse_ (goPipelineConfig loc vProject (VProjectPipeline project.name)) project.pipelines
+      traverse_ (goPipelineConfig loc vProject (flip VProjectPipeline projectName)) project.pipelines
 
     goProjectTemplate :: (ConfigLoc, ProjectTemplate) -> State Analysis ()
     goProjectTemplate (loc, tmpl) = do
@@ -323,7 +326,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       goQueue loc src tmpl.queue
 
       -- handle template pipeline config
-      traverse_ (goPipelineConfig loc src (VTemplatePipeline tmpl.name)) tmpl.pipelines
+      traverse_ (goPipelineConfig loc src (flip VTemplatePipeline tmpl.name)) tmpl.pipelines
 
     goNodeset :: (ConfigLoc, Nodeset) -> State Analysis ()
     goNodeset (loc, nodeset) = do

@@ -29,8 +29,10 @@ import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Map qualified as Map
 import Data.Set qualified
+import Data.Text qualified as Text
 import Data.Vector qualified as V
 import Zuul.Config
+import Zuul.Tenant (TenantResolver (..))
 import Zuul.ZooKeeper (ConfigError (..), ZKFile (..))
 import ZuulWeeder.Prelude
 
@@ -46,7 +48,9 @@ data Config = Config
     -- | The node labels.
     nodeLabels :: ConfigMap NodeLabelName NodeLabelName,
     -- | The projects.
-    projects :: ConfigMap ProjectName Project,
+    projects :: ConfigMap CanonicalProjectName Project,
+    -- | The projects regexp.
+    projectRegexps :: ConfigMap ProjectRegex Project,
     -- | The project-templates.
     projectTemplates :: ConfigMap ProjectTemplateName ProjectTemplate,
     -- | The pipelines.
@@ -67,12 +71,16 @@ data Config = Config
   deriving (Show, Generic)
 
 updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
-updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
+updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
   ZJob job -> #jobs %= insertConfig job.name job
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
-  ZProject project -> #projects %= insertConfig project.name project
+  ZProject project
+    | isRegex project.name -> #projectRegexps %= insertConfig (from project.name) project
+    | otherwise -> case tr.resolveProject tenants configLoc project.name of
+        Just pn -> #projects %= insertConfig pn project
+        Nothing -> #configErrors %= (AmbiguousName (from project.name) :)
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> do
     #pipelines %= insertConfig pipeline.name pipeline
@@ -82,7 +90,8 @@ updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
   ZQueue queue -> #queues %= insertConfig queue queue
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
   where
-    tenants = tenantResolver configLoc (from ze)
+    isRegex (ProjectName n) = "^" `Text.isPrefixOf` n
+    tenants = tr.resolveTenants configLoc (from ze)
     insertConfig k v
       | null tenants = id -- The object is not attached to any tenant, we don't add it
       | otherwise = Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
@@ -277,9 +286,6 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
 -- | Convenient alias
 type ConnectionUrlMap = Map ProviderName ConnectionUrl
 
--- | Convenient alias
-type TenantResolver = ConfigLoc -> ZuulConfigType -> Set TenantName
-
 -- | The main function to decode a 'ZKFile'
 loadConfig ::
   -- | The map of the connection urls.
@@ -311,4 +317,4 @@ loadConfig urlBuilder tenantResolver zkcE = do
 
 -- | An empty config.
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
