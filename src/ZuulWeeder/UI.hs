@@ -150,15 +150,11 @@ instance From VertexName VertexType where
     VTemplatePipeline _ _ -> VTemplatePipelineT
 
 vertexColor :: VertexType -> Text
-vertexColor = \case
-  VJobT -> "#1f77b4"
-  VProjectT -> "#aec6e8"
-  VNodesetT -> "#ff7f0e"
-  VProjectTemplateT -> "#ffbb78"
-  VPipelineT -> "#2ca02c"
-  VNodeLabelT -> "#98df8a"
-  VProjectPipelineT -> "pink"
-  VTemplatePipelineT -> "pink"
+vertexColor vt = "hsl(" <> from (show hue) <> ", 50%, 50%)"
+  where
+    hue, step :: Int
+    step = 360 `div` fromEnum @VertexType maxBound
+    hue = fromEnum vt * step
 
 cssColors :: Text
 cssColors = Text.unlines $ map mkCssColor [minBound .. maxBound]
