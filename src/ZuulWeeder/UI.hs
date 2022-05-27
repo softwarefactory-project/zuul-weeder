@@ -33,7 +33,6 @@ import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Lucid
 import Lucid.Base (makeAttribute)
-import Network.URI.Encode qualified
 import Paths_zuul_weeder (version)
 import Servant hiding (Context)
 import Servant.HTML.Lucid (HTML)
@@ -366,8 +365,7 @@ vertexLink ctx name = hxNavLink ref Nothing
         "/"
         [ baseUrl ctx <> "object",
           vertexTypeName (from name),
-          -- TODO: url encode name
-          Network.URI.Encode.encodeText (from name)
+          from name
         ]
 
 tenantBaseLink :: BasePath -> TenantName -> Html ()
@@ -599,10 +597,10 @@ instance FromHttpApiData VertexTypeUrl where
         let (a, Text.tail -> b) = Text.span (/= ':') t
          in vType (nType a) (PipelineName b)
 
-newtype VertexNameUrl = CNU Text
+newtype VertexNameUrl = VNU {getVNU :: Text}
 
 instance FromHttpApiData VertexNameUrl where
-  parseUrlPiece = pure . CNU
+  parseUrlPiece = pure . VNU
 
 newtype TenantsUrl = TNU {getTNU :: Set TenantName}
 
@@ -619,7 +617,7 @@ type BaseAPI =
     :<|> "search" :> GetRequest
     :<|> "info" :> GetRequest
     :<|> "debug" :> GetRequest
-    :<|> "object" :> Capture "type" VertexTypeUrl :> Capture "name" VertexNameUrl :> GetRequest
+    :<|> "object" :> Capture "type" VertexTypeUrl :> CaptureAll "name" VertexNameUrl :> GetRequest
     :<|> "search_results" :> SearchPath
     :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
     :<|> "data.json" :> Get '[JSON] D3Graph
@@ -679,9 +677,10 @@ app config rootURL distPath = serve (Proxy @API) rootServer
             navComponent ctx name
             with div_ [class_ "container grid p-4"] componentHtml
 
-        objectRoute (VTU mkName) (CNU name) htmxRequest = do
+        objectRoute :: VertexTypeUrl -> [VertexNameUrl] -> Maybe Text -> Handler (Html ())
+        objectRoute (VTU mkName) name htmxRequest = do
           analysis <- liftIO config
-          let vname = mkName name
+          let vname = mkName $ Text.intercalate "/" $ getVNU <$> name
           let vertices = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
                 where
                   matchVertex v = v.name == vname
