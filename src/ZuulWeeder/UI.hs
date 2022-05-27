@@ -136,10 +136,10 @@ data VertexType
   | VNodesetT
   | VNodeLabelT
   | VQueueT
-  | VProjectT
-  | VProjectTemplateT
   | VPipelineT
+  | VProjectT
   | VProjectPipelineT
+  | VProjectTemplateT
   | VTemplatePipelineT
   | VTriggerT
   | VReporterT

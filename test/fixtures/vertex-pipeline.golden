@@ -77,6 +77,12 @@
                     }
                 ]
             }
+        , Node
+            { rootLabel = VTemplatePipeline
+                ( ProjectTemplateName "common" )
+                ( PipelineName "check" )
+            , subForest = []
+            }
         ]
     )
 ,

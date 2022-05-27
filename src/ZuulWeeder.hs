@@ -258,7 +258,15 @@ unparsed_abide:
 - job:
     name: config-check
 
+- project-template:
+    name: common
+    check:
+      jobs:
+        - linter
+
 - project:
+    templates:
+      - common
     check:
       jobs:
         - config-check
