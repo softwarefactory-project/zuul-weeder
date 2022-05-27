@@ -55,6 +55,8 @@ data VertexName
     VNodeset NodesetName
   | -- | A node label
     VNodeLabel NodeLabelName
+  | -- | A queue
+    VQueue QueueName
   | -- | A project
     VProject ProjectName
   | -- | A project template
@@ -79,6 +81,7 @@ instance From VertexName Text where
     VSemaphore (SemaphoreName n) -> n
     VNodeset (NodesetName n) -> n
     VNodeLabel (NodeLabelName n) -> n
+    VQueue (QueueName n) -> n
     VProject (ProjectName n) -> n
     VProjectTemplate (ProjectTemplateName n) -> n
     VPipeline (PipelineName n) -> n
@@ -97,6 +100,9 @@ instance From SecretName VertexName where
 
 instance From SemaphoreName VertexName where
   from = VSemaphore
+
+instance From QueueName VertexName where
+  from = VQueue
 
 instance From Project VertexName where
   from pp = VProject pp.name
@@ -227,6 +233,13 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       traverse_ goProject $ concat $ Map.elems config.projects
       traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
       traverse_ goPipeline $ concat $ Map.elems config.pipelines
+      traverse_ goInsert $ concat $ Map.elems config.secrets
+      traverse_ goInsert $ concat $ Map.elems config.semaphores
+      traverse_ goInsert $ concat $ Map.elems config.queues
+
+    goInsert (loc, obj) = do
+      let vertex = mkVertex loc obj
+      insertVertex loc vertex
 
     -- get the list of vertex matching a given name and set of tenants
     lookupTenant :: (Ord a, From b VertexName) => Set TenantName -> a -> ConfigMap a b -> Maybe (Set Vertex)
@@ -277,10 +290,20 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
             -- job that are overriden are handled as a new job.
             goJob (loc, job)
 
+    goQueue :: ConfigLoc -> Vertex -> Maybe QueueName -> State Analysis ()
+    goQueue loc src = \case
+      Just queue -> case lookupTenant loc.tenants queue config.queues of
+        Just queues -> src `connects` queues
+        Nothing -> #graphErrors %= (("Can't find : " <> show queue) :)
+      Nothing -> pure ()
+
     goProject :: (ConfigLoc, Project) -> State Analysis ()
     goProject (loc, project) = do
       let vProject = mkVertex loc project
       insertVertex loc vProject
+
+      -- handle queues
+      goQueue loc vProject project.queue
 
       -- handle templates
       forM_ project.templates $ \templateName -> do
@@ -295,6 +318,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goProjectTemplate (loc, tmpl) = do
       let src = mkVertex loc tmpl
       insertVertex loc src
+
+      -- handle queues
+      goQueue loc src tmpl.queue
 
       -- handle template pipeline config
       traverse_ (goPipelineConfig loc src (VTemplatePipeline tmpl.name)) tmpl.pipelines

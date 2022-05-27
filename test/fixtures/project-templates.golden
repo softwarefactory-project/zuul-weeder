@@ -1,6 +1,7 @@
 [ ZProjectTemplate
     ( ProjectTemplate
         { name = ProjectTemplateName "sf-ci-jobs"
+        , queue = Nothing
         , pipelines = fromList
             [ ProjectPipeline
                 { name = PipelineName "check"

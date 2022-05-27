@@ -239,6 +239,9 @@ unparsed_abide:
       - name: runner
         label: cloud-centos-7
 
+- queue:
+    name: queue
+
 - pipeline:
     name: check
     trigger:
@@ -262,6 +265,7 @@ unparsed_abide:
 
 - project:
     name: triple-o
+    queue: queue
     check:
       jobs:
         - wallaby-job

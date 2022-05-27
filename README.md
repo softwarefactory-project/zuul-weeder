@@ -75,7 +75,7 @@ Configure grafana dashboard by running `./bin/create-dashboard`
 
 Here are some planned features:
 
-- Add the remaining configuration objects to the graph: project-templates and queue.
+- Add the remaining configuration objects to the graph project-templates.
 - Add a project name object type, to resolve global project configuration (e.g. with a name regexp) and to create a graph connection for all the matching repository names.
 - Connect the graphs from multiple zuul-weeder service to analyse the configuration cross deployments.
 - Display the weeds, e.g. the dead configuration object that are unreachable.

@@ -135,6 +135,7 @@ data VertexType
   | VSecretT
   | VNodesetT
   | VNodeLabelT
+  | VQueueT
   | VProjectT
   | VProjectTemplateT
   | VPipelineT
@@ -150,6 +151,7 @@ instance From VertexName VertexType where
     VJob _ -> VJobT
     VSemaphore _ -> VSemaphoreT
     VSecret _ -> VSecretT
+    VQueue _ -> VQueueT
     VProject _ -> VProjectT
     VNodeset _ -> VNodesetT
     VProjectTemplate _ -> VProjectTemplateT
@@ -194,6 +196,7 @@ vertexTypeName = \case
   VSecretT -> "secret"
   VNodesetT -> "nodeset"
   VNodeLabelT -> "label"
+  VQueueT -> "queue"
   VProjectT -> "project"
   VProjectTemplateT -> "project-template"
   VPipelineT -> "pipeline"
@@ -319,6 +322,7 @@ vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
       VJobT -> "file-text-line"
       VSemaphoreT -> "lock-line"
       VSecretT -> "key-2-line"
+      VQueueT -> "traffic-light-line"
       VProjectT -> "folder-open-line"
       VProjectTemplateT -> "draft-line"
       VPipelineT -> "git-merge-line"
@@ -537,6 +541,7 @@ objectInfo ctx vertices analysis = do
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VSecret name -> getLocs $ Map.lookup name analysis.config.secrets
       VSemaphore name -> getLocs $ Map.lookup name analysis.config.semaphores
+      VQueue name -> getLocs $ Map.lookup name analysis.config.queues
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
@@ -580,6 +585,7 @@ instance FromHttpApiData VertexTypeUrl where
     "secret" -> VSecret . SecretName
     "nodeset" -> VNodeset . NodesetName
     "label" -> VNodeLabel . NodeLabelName
+    "queue" -> VQueue . QueueName
     "project" -> VProject . ProjectName
     "project-template" -> VProjectTemplate . ProjectTemplateName
     "pipeline" -> VPipeline . PipelineName

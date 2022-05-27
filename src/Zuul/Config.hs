@@ -166,12 +166,14 @@ data ProjectPipeline = ProjectPipeline
 data Project = Project
   { name :: ProjectName,
     templates :: [ProjectTemplateName],
+    queue :: Maybe QueueName,
     pipelines :: Set ProjectPipeline
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
 data ProjectTemplate = ProjectTemplate
   { name :: ProjectTemplateName,
+    queue :: Maybe QueueName,
     pipelines :: Set ProjectPipeline
   }
   deriving (Show, Eq, Ord, Generic, Hashable)

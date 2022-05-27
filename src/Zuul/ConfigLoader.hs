@@ -223,9 +223,15 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
       name <- case HM.lookup "name" va of
         (Just x) -> ProjectName <$> decodeString x
         Nothing -> pure $ ProjectName (providerName <> "/" <> projectName)
+      queue <- decodeQueueName va
       templates <- decodeAsList "templates" ProjectTemplateName va
       pipelines <- Data.Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
-      pure $ Project {name, templates, pipelines}
+      pure $ Project {name, queue, templates, pipelines}
+
+    decodeQueueName :: Object -> Decoder (Maybe QueueName)
+    decodeQueueName va = case HM.lookup "queue" va of
+      (Just x) -> Just . QueueName <$> decodeString x
+      _ -> pure Nothing
 
     decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe (Decoder ProjectPipeline)
     decodeProjectPipeline (Data.Aeson.Key.toText -> pipelineName', va')
@@ -253,8 +259,9 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
     decodeProjectTemplate :: Object -> Decoder ProjectTemplate
     decodeProjectTemplate va = do
       name <- ProjectTemplateName <$> getName va
+      queue <- decodeQueueName va
       pipelines <- Data.Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
-      pure $ ProjectTemplate {name, pipelines}
+      pure $ ProjectTemplate {name, queue, pipelines}
 
     -- Zuul config elements are object with an unique key
     getObjectKey :: Object -> Decoder (Text, Object)

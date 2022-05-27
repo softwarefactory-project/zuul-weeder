@@ -2,6 +2,7 @@
     ( Project
         { name = ProjectName "config"
         , templates = []
+        , queue = Nothing
         , pipelines = fromList
             [ ProjectPipeline
                 { name = PipelineName "check"
@@ -32,6 +33,7 @@
         { name = ProjectName "/"
         , templates =
             [ ProjectTemplateName "sf-ci-jobs" ]
+        , queue = Nothing
         , pipelines = fromList
             [ ProjectPipeline
                 { name = PipelineName "check"
