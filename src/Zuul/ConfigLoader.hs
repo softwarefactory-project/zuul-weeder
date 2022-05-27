@@ -57,6 +57,8 @@ data Config = Config
     queues :: ConfigMap QueueName QueueName,
     -- | The semaphores.
     semaphores :: ConfigMap SemaphoreName SemaphoreName,
+    -- | The pipeline triggers.
+    triggers :: ConfigMap ConnectionName ConnectionName,
     -- | Configuration errors.
     configErrors :: [ConfigError]
   }
@@ -70,7 +72,9 @@ updateTopConfig tenantResolver configLoc (Decoder (Right ze)) = case ze of
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
   ZProject project -> #projects %= insertConfig project.name project
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
-  ZPipeline pipeline -> #pipelines %= insertConfig pipeline.name pipeline
+  ZPipeline pipeline -> do
+    #pipelines %= insertConfig pipeline.name pipeline
+    traverse_ (\(PipelineTrigger v) -> #triggers %= insertConfig v v) pipeline.triggers
   ZSecret secret -> #secrets %= insertConfig secret secret
   ZQueue queue -> #queues %= insertConfig queue queue
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
@@ -261,4 +265,4 @@ loadConfig urlBuilder tenantResolver zkcE = do
 
 -- | An empty config.
 emptyConfig :: Config
-emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty

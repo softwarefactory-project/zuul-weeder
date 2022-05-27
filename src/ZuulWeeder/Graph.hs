@@ -39,6 +39,8 @@ data Vertex = Vertex
   }
   deriving (Eq, Ord, Show, Generic, Hashable)
 
+-- WARNING: when adding new VertexName, you need to update the FromHttpApiData VertexTypeUrl instance in the UI module.
+
 -- | A Vertex can be a raw zuul config element, or a custom element added through analysis
 data VertexName
   = -- | A job
@@ -57,6 +59,8 @@ data VertexName
     VProjectPipeline ProjectName PipelineName
   | -- | A template pipeline config
     VTemplatePipeline ProjectTemplateName PipelineName
+  | -- | A pipeline trigger
+    VTrigger ConnectionName
   deriving (Eq, Ord, Show, Generic, Hashable)
 
 instance From VertexName Text where
@@ -69,6 +73,7 @@ instance From VertexName Text where
     VPipeline (PipelineName n) -> n
     VProjectPipeline (ProjectName n) (PipelineName v) -> n <> ":" <> v
     VTemplatePipeline (ProjectTemplateName n) (PipelineName v) -> n <> ":" <> v
+    VTrigger (ConnectionName n) -> n
 
 instance From Job VertexName where
   from job = VJob job.name
@@ -219,7 +224,11 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
     goPipeline (loc, pipeline) = do
       let vPipeline = mkVertex loc pipeline
       insertVertex loc vPipeline
-    -- TODO: handles triggers and reporters
+      forM_ pipeline.triggers $ \(PipelineTrigger trigger) -> do
+        let vTrigger = Vertex (VTrigger trigger) loc.tenants
+        vTrigger `connect` vPipeline
+        insertVertex loc vTrigger
+    -- TODO: handles reporters
 
     goPipelineConfig :: ConfigLoc -> Vertex -> (PipelineName -> VertexName) -> ProjectPipeline -> State Analysis ()
     goPipelineConfig loc vProject mk pipeline = do

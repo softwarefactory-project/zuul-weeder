@@ -212,10 +212,10 @@ unparsed_abide:
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
         pure (tenantsConfig, conf)
 
-  -- let a = analyzeConfig tenantsConfig config
-  -- pPrint (Algebra.Graph.edgeList a.dependentGraph)
-
-  pure $ analyzeConfig tenantsConfig config
+  let analysis = analyzeConfig tenantsConfig config
+  -- pPrint analysis.config.triggers
+  -- pPrint (Algebra.Graph.edgeList analysis.dependentGraph)
+  pure analysis
   where
     mkConfigFile conn proj conf =
       ZKFile conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
@@ -236,6 +236,8 @@ unparsed_abide:
 
 - pipeline:
     name: check
+    trigger:
+      timer: {}
 
 - job:
     name: wallaby-job

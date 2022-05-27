@@ -1,6 +1,12 @@
 [
     ( "check is needed by"
-    , []
+    ,
+        [ Node
+            { rootLabel = VTrigger
+                ( ConnectionName "timer" )
+            , subForest = []
+            }
+        ]
     , "check requires"
     ,
         [ Node
@@ -79,7 +85,13 @@
                 , Node
                     { rootLabel = VPipeline
                         ( PipelineName "check" )
-                    , subForest = []
+                    , subForest =
+                        [ Node
+                            { rootLabel = VTrigger
+                                ( ConnectionName "timer" )
+                            , subForest = []
+                            }
+                        ]
                     }
                 ]
             }

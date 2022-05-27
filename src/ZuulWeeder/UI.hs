@@ -137,6 +137,7 @@ data VertexType
   | VPipelineT
   | VProjectPipelineT
   | VTemplatePipelineT
+  | VTriggerT
   deriving (Enum, Bounded)
 
 instance From VertexName VertexType where
@@ -149,6 +150,7 @@ instance From VertexName VertexType where
     VNodeLabel _ -> VNodeLabelT
     VProjectPipeline _ _ -> VProjectPipelineT
     VTemplatePipeline _ _ -> VTemplatePipelineT
+    VTrigger _ -> VTriggerT
 
 vertexColor :: VertexType -> Text
 vertexColor vt = "hsl(" <> from (show hue) <> ", 50%, 50%)"
@@ -186,6 +188,7 @@ vertexTypeName = \case
   VPipelineT -> "pipeline"
   VProjectPipelineT -> "project-pipeline"
   VTemplatePipelineT -> "template-pipeline"
+  VTriggerT -> "trigger"
 
 spinner :: Html ()
 spinner = with span_ [class_ "htmx-indicator font-semibold text-white", id_ "spinner"] "◌"
@@ -308,6 +311,7 @@ vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
       VProjectPipelineT -> "git-merge-line"
       VTemplatePipelineT -> "git-merge-line"
       VNodesetT -> "server-line"
+      VTriggerT -> "download-fill"
 
 data D3Node = D3Node
   { name :: Text,
@@ -521,6 +525,7 @@ objectInfo ctx vertices analysis = do
       VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
       VProjectPipeline name _ -> getLocs $ Map.lookup name analysis.config.projects
       VTemplatePipeline name _ -> getLocs $ Map.lookup name analysis.config.projectTemplates
+      VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
     dependencies = getForest analysis.dependencyGraph
     dependents = getForest analysis.dependentGraph
     getForest = ZuulWeeder.Graph.findReachableForest tenantsM vertices
@@ -557,6 +562,7 @@ instance FromHttpApiData VertexTypeUrl where
     "pipeline" -> VPipeline . PipelineName
     "project-pipeline" -> brk VProjectPipeline ProjectName
     "template-pipeline" -> brk VTemplatePipeline ProjectTemplateName
+    "trigger" -> VTrigger . ConnectionName
     _ -> error $ "Unknown obj type: " <> from txt
     where
       brk vType nType t =
