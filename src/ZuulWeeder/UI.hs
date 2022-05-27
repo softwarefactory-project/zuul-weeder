@@ -70,6 +70,7 @@ mainBody ctx page mainComponent =
       meta_ [name_ "viewport", content_ "width=device-width, initial-scale=1.0"]
       script_ jsColors
       style_ css
+      link_ [href_ $ distUrl ctx "remixicon.min.css", rel_ "stylesheet"]
       link_ [href_ $ distUrl ctx "tailwind.css", rel_ "stylesheet"]
       with (script_ mempty) [src_ $ distUrl ctx "d3.v4.min.js"]
       with (script_ mempty) [src_ $ distUrl ctx "graph.js"]
@@ -152,9 +153,13 @@ instance From VertexName VertexType where
 vertexColor :: VertexType -> Text
 vertexColor vt = "hsl(" <> from (show hue) <> ", 50%, 50%)"
   where
+    vt' = case vt of
+      VTemplatePipelineT -> VProjectTemplateT
+      VProjectPipelineT -> VProjectT
+      _ -> vt
     hue, step :: Int
     step = 360 `div` fromEnum @VertexType maxBound
-    hue = fromEnum vt * step
+    hue = fromEnum vt' * step
 
 cssColors :: Text
 cssColors = Text.unlines $ map mkCssColor [minBound .. maxBound]
@@ -194,7 +199,7 @@ hxNavLinkWithAttr xs url extraClass =
              hxPushUrl,
              hxIndicator "#spinner",
              hxTarget "#main",
-             class_ ("cursor-pointer" <> maybe "" (mappend " ") extraClass),
+             class_ ("cursor-pointer hover:font-semibold" <> maybe "" (mappend " ") extraClass),
              href_ url
            ]
     )
@@ -208,11 +213,28 @@ welcomeComponent ctx = do
   script_ do
     "renderToy('" <> baseUrl ctx <> "data.json');"
 
+title :: Text -> Html ()
+title = with' h2_ "font-bold" . toHtml
+
+mkIconClass :: Maybe Text -> Text -> Html ()
+mkIconClass cl name = with' i_ ("pr-1 font-bold align-bottom " <> name <> maybe "" (mappend " ") cl) mempty
+
+mkIcon :: Text -> Html ()
+mkIcon = mkIconClass Nothing
+
 aboutComponent :: Html ()
 aboutComponent = do
-  h2_ "Welcome"
-  p_ "Zuul Weeder is a web service to inspect Zuul configuration"
+  title "Welcome"
+  with' p_ "pb-5" "Zuul Weeder is a web service to inspect Zuul configuration"
+  title "Icons"
+  with' ul_ "pb-5" do
+    traverse_ renderIconLegend [minBound .. maxBound]
   div_ . toHtml $ "Version: " <> from (showVersion version) <> " (" <> gitVersion <> ")"
+  where
+    renderIconLegend :: VertexType -> Html ()
+    renderIconLegend vt = li_ do
+      vertexTypeIcon vt
+      toHtml $ vertexTypeName vt
 
 tenantsList :: Set TenantName -> Text
 tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)
@@ -274,17 +296,18 @@ toD3Graph scope g =
     toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
     toLinks (a, b) = ZuulWeeder.UI.D3Link (hash a) (hash b)
 
-vertexTypeIcon :: VertexName -> Html ()
-vertexTypeIcon vn = with' div_ ("font-bold w-5 inline-block " <> vertexTypeName (from vn)) do
-  toHtml @Text $ case vn of
-    VJob _ -> "⚙"
-    VProject _ -> "🧱"
-    VNodeset _ -> "🖥"
-    VProjectTemplate _ -> "🎛"
-    VPipeline _ -> "ǁ"
-    VNodeLabel _ -> "🏷"
-    VProjectPipeline _ _ -> "🎛"
-    VTemplatePipeline _ _ -> "🎛"
+vertexTypeIcon :: VertexType -> Html ()
+vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
+  where
+    iconName = case vt of
+      VJobT -> "file-text-line"
+      VProjectT -> "folder-open-line"
+      VProjectTemplateT -> "draft-line"
+      VPipelineT -> "git-merge-line"
+      VNodeLabelT -> "price-tag-3-line"
+      VProjectPipelineT -> "git-merge-line"
+      VTemplatePipelineT -> "git-merge-line"
+      VNodesetT -> "server-line"
 
 data D3Node = D3Node
   { name :: Text,
@@ -335,7 +358,7 @@ tenantLink rootURL name tenant =
 
 vertexName :: VertexName -> Html ()
 vertexName n = do
-  vertexTypeIcon n
+  vertexTypeIcon (from n)
   toHtml (into @Text n)
 
 -- | Return the search result
@@ -453,7 +476,7 @@ debugComponent analysis = do
 locLink :: ConfigLoc -> Html ()
 locLink loc =
   with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
-    with' span_ "px-1" "🔗"
+    mkIcon "ri-link"
     toHtml locPath
   where
     -- TODO: render valid link based on config connection
@@ -463,16 +486,16 @@ locLink loc =
 objectInfo :: Context -> NonEmpty Vertex -> Analysis -> Html ()
 objectInfo ctx vertices analysis = do
   h2_ do
-    vertexTypeIcon vertex.name
+    vertexTypeIcon (from vertex.name)
     toHtml (from vertex.name :: Text)
   ul_ do
     traverse_ renderConfigLink configComponents
   with' div_ "grid grid-cols-2 gap-1 m-4" do
     div_ do
-      h3_ "Dependents"
+      title "Dependents"
       traverse_ (renderTree 0) dependents
     div_ do
-      h3_ "Dependencies"
+      title "Dependencies"
       traverse_ (renderTree 0) dependencies
   where
     renderConfigLink loc =
@@ -618,7 +641,7 @@ app config rootURL distPath = serve (Proxy @API) rootServer
           componentHtml <- component
           pure do
             navComponent ctx name
-            componentHtml
+            with div_ [class_ "container grid p-4"] componentHtml
 
         objectRoute (VTU mkName) (CNU name) htmxRequest = do
           analysis <- liftIO config
