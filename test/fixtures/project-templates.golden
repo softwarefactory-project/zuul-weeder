@@ -10,6 +10,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-ci-functional-minimal"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []
@@ -20,6 +21,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-ci-functional-allinone"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []
@@ -30,6 +32,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-tenants"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []
@@ -47,6 +50,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-ci-functional-minimal"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []
@@ -57,6 +61,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-ci-functional-allinone"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []
@@ -67,6 +72,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "wait-for-changes-ahead"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []

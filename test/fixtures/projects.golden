@@ -39,6 +39,7 @@
                     [ PJJob
                         ( Job
                             { name = JobName "linters"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Just
                                 ( JobNodeset
@@ -58,6 +59,7 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-ci-openshift-integration"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Nothing
                             , branches = []
@@ -73,6 +75,7 @@
                     [ PJJob
                         ( Job
                             { name = JobName "linters"
+                            , abstract = False
                             , parent = Nothing
                             , nodeset = Just
                                 ( JobNodeset

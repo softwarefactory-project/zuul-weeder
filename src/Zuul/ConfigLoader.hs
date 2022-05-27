@@ -24,7 +24,7 @@ module Zuul.ConfigLoader
   )
 where
 
-import Data.Aeson (Object, Value (Array, Null, String))
+import Data.Aeson (Object, Value (Array, Bool, Null, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Map qualified as Map
@@ -126,11 +126,17 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
     decodeJobContent :: JobName -> Object -> Decoder Job
     decodeJobContent name va = do
       Job name
-        <$> decodeJobParent
+        <$> decodeJobAbstract
+        <*> decodeJobParent
         <*> decodeJobNodeset
         <*> decodeAsList "branches" BranchName va
         <*> decodeJobDependencies
       where
+        decodeJobAbstract :: Decoder Bool
+        decodeJobAbstract = pure $ case HM.lookup "abstract" va of
+          Just (Bool x) -> x
+          _ -> False
+
         decodeJobParent :: Decoder (Maybe JobName)
         decodeJobParent = case HM.lookup "parent" va of
           Just (String p) -> pure $ Just $ JobName p

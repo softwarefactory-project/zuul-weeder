@@ -1,6 +1,7 @@
 [ ZJob
     ( Job
         { name = JobName "base"
+        , abstract = True
         , parent = Nothing
         , nodeset = Just
             ( JobAnonymousNodeset
@@ -13,6 +14,7 @@
 , ZJob
     ( Job
         { name = JobName "config-check"
+        , abstract = False
         , parent = Just
             ( JobName "base" )
         , nodeset = Just
@@ -30,6 +32,7 @@
 , ZJob
     ( Job
         { name = JobName "config-update"
+        , abstract = False
         , parent = Just
             ( JobName "base" )
         , nodeset = Just
@@ -42,6 +45,7 @@
 , ZJob
     ( Job
         { name = JobName "wait-for-changes-ahead"
+        , abstract = False
         , parent = Nothing
         , nodeset = Just
             ( JobNodeset

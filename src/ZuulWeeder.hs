@@ -226,6 +226,7 @@ unparsed_abide:
           [s|
 - job:
     name: base
+    abstract: true
     nodeset: centos
 
 - nodeset:

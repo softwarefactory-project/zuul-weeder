@@ -1,6 +1,7 @@
 - job:
     name: base
     parent: null
+    abstract: true
     description: The base job.
     pre-run: playbooks/base/pre.yaml
     post-run:

@@ -19,7 +19,7 @@
                         ( JobName "config-check" )
                     , subForest =
                         [ Node
-                            { rootLabel = VJob
+                            { rootLabel = VAbstractJob
                                 ( JobName "base" )
                             , subForest =
                                 [ Node
@@ -99,7 +99,7 @@
     , "wallaby-job requires"
     ,
         [ Node
-            { rootLabel = VJob
+            { rootLabel = VAbstractJob
                 ( JobName "base" )
             , subForest =
                 [ Node

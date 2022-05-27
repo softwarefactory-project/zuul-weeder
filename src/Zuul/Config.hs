@@ -136,6 +136,7 @@ data Nodeset = Nodeset
 
 data Job = Job
   { name :: JobName,
+    abstract :: Bool,
     parent :: Maybe JobName,
     nodeset :: Maybe JobNodeset,
     branches :: [BranchName],

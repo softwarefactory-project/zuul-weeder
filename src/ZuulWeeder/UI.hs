@@ -129,7 +129,8 @@ navComponent ctx page =
         tenantClass = "my-4 p-1 text-white font-semibold "
 
 data VertexType
-  = VJobT
+  = VAbstractJobT
+  | VJobT
   | VNodesetT
   | VNodeLabelT
   | VProjectT
@@ -142,6 +143,7 @@ data VertexType
 
 instance From VertexName VertexType where
   from = \case
+    VAbstractJob _ -> VAbstractJobT
     VJob _ -> VJobT
     VProject _ -> VProjectT
     VNodeset _ -> VNodesetT
@@ -160,7 +162,7 @@ vertexColor vt = "hsl(" <> from (show hue) <> ", 50%, 50%)"
       VProjectPipelineT -> VProjectT
       _ -> vt
     hue, step :: Int
-    step = 360 `div` fromEnum @VertexType maxBound
+    step = 300 `div` fromEnum @VertexType maxBound
     hue = fromEnum vt' * step
 
 cssColors :: Text
@@ -180,6 +182,7 @@ jsColors =
 -- | A text representation of a vertex type, useful for /object url piece.
 vertexTypeName :: VertexType -> Text
 vertexTypeName = \case
+  VAbstractJobT -> "abstract-job"
   VJobT -> "job"
   VNodesetT -> "nodeset"
   VNodeLabelT -> "label"
@@ -303,6 +306,7 @@ vertexTypeIcon :: VertexType -> Html ()
 vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
   where
     iconName = case vt of
+      VAbstractJobT -> "file-text-line"
       VJobT -> "file-text-line"
       VProjectT -> "folder-open-line"
       VProjectTemplateT -> "draft-line"
@@ -517,6 +521,7 @@ objectInfo ctx vertices analysis = do
     getLocs = filter forTenant . maybe [] (fmap fst)
     configComponents :: [ConfigLoc]
     configComponents = case vertex.name of
+      VAbstractJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
@@ -554,6 +559,7 @@ newtype VertexTypeUrl = VTU (Text -> VertexName)
 
 instance FromHttpApiData VertexTypeUrl where
   parseUrlPiece txt = pure . VTU $ case txt of
+    "abstract-job" -> VAbstractJob . JobName
     "job" -> VJob . JobName
     "nodeset" -> VNodeset . NodesetName
     "label" -> VNodeLabel . NodeLabelName

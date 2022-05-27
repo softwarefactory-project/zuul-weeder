@@ -43,7 +43,9 @@ data Vertex = Vertex
 
 -- | A Vertex can be a raw zuul config element, or a custom element added through analysis
 data VertexName
-  = -- | A job
+  = -- | An abstract job
+    VAbstractJob JobName
+  | -- | A job
     VJob JobName
   | -- | A nodeset
     VNodeset NodesetName
@@ -65,6 +67,7 @@ data VertexName
 
 instance From VertexName Text where
   from = \case
+    VAbstractJob (JobName n) -> n
     VJob (JobName n) -> n
     VNodeset (NodesetName n) -> n
     VNodeLabel (NodeLabelName n) -> n
@@ -76,7 +79,9 @@ instance From VertexName Text where
     VTrigger (ConnectionName n) -> n
 
 instance From Job VertexName where
-  from job = VJob job.name
+  from job
+    | job.abstract = VAbstractJob job.name
+    | otherwise = VJob job.name
 
 instance From Project VertexName where
   from pp = VProject pp.name
