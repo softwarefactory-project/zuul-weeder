@@ -15,6 +15,7 @@ module Zuul.ConfigLoader
     Config (..),
     ConfigError,
     loadConfig,
+    mergeConfig,
     emptyConfig,
     TenantResolver,
     ConnectionUrlMap,
@@ -71,6 +72,80 @@ data Config = Config
     tenants :: Set TenantName
   }
   deriving (Show, Generic, FromJSON, ToJSON)
+
+-- | Merge two configurations by assigning unique tenant names.
+mergeConfig :: Config -> Config -> Config
+mergeConfig c1 c2 =
+  Config
+    { jobs = c1.jobs `mergeMap` c2.jobs,
+      nodesets = c1.nodesets `mergeMap` c2.nodesets,
+      nodeLabels = c1.nodeLabels `mergeMap` c2.nodeLabels,
+      projects = c1.projects `mergeMap` c2.projects,
+      projectRegexs = c1.projectRegexs `mergeMap` c2.projectRegexs,
+      projectTemplates = c1.projectTemplates `mergeMap` c2.projectTemplates,
+      pipelines = c1.pipelines `mergeMap` c2.pipelines,
+      secrets = c1.secrets `mergeMap` c2.secrets,
+      queues = c1.queues `mergeMap` c2.queues,
+      semaphores = c1.semaphores `mergeMap` c2.semaphores,
+      triggers = c1.triggers `mergeMap` c2.triggers,
+      reporters = c1.reporters `mergeMap` c2.reporters,
+      configErrors = nub $ c1.configErrors <> c2.configErrors,
+      tenants = newTenants
+    }
+  where
+    -- The new tenants list with unique name
+    newTenants = Set.union c1.tenants (Set.map renameTenant c2.tenants)
+
+    mergeMap :: (Ord a, Eq b) => ConfigMap a b -> ConfigMap a b -> ConfigMap a b
+    mergeMap = Map.unionWith mergeLocs
+
+    mergeLocs :: (Eq b) => [(ConfigLoc, b)] -> [(ConfigLoc, b)] -> [(ConfigLoc, b)]
+    mergeLocs cm1 cm2 = foldl' mergeConfigLoc [] $ cm1 <> (first renameLoc <$> cm2)
+      where
+        renameLoc :: ConfigLoc -> ConfigLoc
+        renameLoc loc = loc & #tenants `set` Set.map renameTenant loc.tenants
+
+    mergeConfigLoc :: Eq b => [(ConfigLoc, b)] -> (ConfigLoc, b) -> [(ConfigLoc, b)]
+    mergeConfigLoc xs x@(loc2, obj2) = go False xs
+      where
+        -- The object was not found in c1
+        go False [] = [x]
+        -- The object was merged
+        go True [] = []
+        -- Check if the object can be merged
+        go merged ((loc1, obj1) : rest)
+          | obj1 == obj2 && loc1 `sameLoc` loc2 = (loc1 `mergeLoc` loc2, obj1) : go True rest
+          | otherwise = (loc1, obj1) : go merged rest
+
+        sameLoc :: ConfigLoc -> ConfigLoc -> Bool
+        sameLoc l1 l2 =
+          and
+            [ l1.project == l2.project,
+              l1.branch == l2.branch,
+              l1.path == l2.path,
+              l1.url == l2.url
+            ]
+
+        mergeLoc :: ConfigLoc -> ConfigLoc -> ConfigLoc
+        mergeLoc l1 l2 = l1 & #tenants `set` Set.union l1.tenants l2.tenants
+
+    -- The renameTenant create unique tenant names for c2 locations
+    renameTenant :: TenantName -> TenantName
+    renameTenant tenantName
+      | tenantName `Set.member` commonTenants = case foldM mkTenantName tenantName ['1' .. '9'] of
+          Left newName -> newName
+          Right _ -> error $ "Can't create a new tenant name for " <> show tenantName
+      | otherwise = tenantName
+    commonTenants = Set.intersection c1.tenants c2.tenants
+
+    -- Returns Left if the name is unique, otherwise returns Right
+    mkTenantName :: TenantName -> Char -> Either TenantName TenantName
+    mkTenantName oldName@(TenantName n) c
+      | newName `Set.member` allTenants = Right oldName
+      | otherwise = Left newName
+      where
+        newName = TenantName $ Text.snoc n c
+    allTenants = Set.union c1.tenants c2.tenants
 
 updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
 updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of

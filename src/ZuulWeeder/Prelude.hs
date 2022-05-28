@@ -137,6 +137,7 @@ module ZuulWeeder.Prelude
     Data.Bifunctor.first,
     Data.Bool.bool,
     Data.Foldable.traverse_,
+    Data.Foldable.foldl',
     Data.Maybe.catMaybes,
     Data.Maybe.mapMaybe,
     Data.Maybe.isJust,
@@ -146,6 +147,7 @@ module ZuulWeeder.Prelude
 
     -- * base control
     Control.Monad.forM_,
+    Control.Monad.foldM,
     Control.Monad.unless,
     Control.Monad.when,
     Control.Monad.void,

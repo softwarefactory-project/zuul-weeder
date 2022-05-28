@@ -71,9 +71,47 @@ tests demo =
         goldenTest "Pipeline jobs are linked" "vertex-pipeline" validatePipelineConfig,
         testCase "Demo graph errors" validateNoGraphError,
         testCase "Demo config errors" validateNoConfigError
+      ],
+    testGroup
+      "Federation"
+      [ testCase "Tenant renamer" validateTenantRenamer,
+        testCase "Conf merger" validateConfMerger
       ]
+
   ]
   where
+    mkTenantSet = Set.fromList . fmap TenantName
+
+    -- Validate that tenants names are uniques after the merge
+    validateTenantRenamer =
+      let c1 = emptyConfig $ mkTenantSet ["a", "b"]
+          c2 = emptyConfig $ mkTenantSet ["b", "c"]
+       in assertEqual "Tenant renamed" (mkTenantSet ["a", "b", "b1", "c"]) (mergeConfig c1 c2).tenants
+
+    -- Validate that config location are uniques after the merge
+    validateConfMerger =
+      let c1 = emptyConfig (mkTenantSet ["a", "b"]) & #queues `set` mkMap [loc1, locShared1]
+          c2 = emptyConfig (mkTenantSet ["b", "c"]) & #queues `set` mkMap [loc2, locShared2]
+          loc1 = mkLoc & #tenants `set` mkTenantSet ["a"]
+          loc2 = mkLoc & (#tenants `set` mkTenantSet ["b"]) & (#path `set` FilePathT "other.yaml")
+          -- The loc2 in the c2 has a new tenant name, because `b` is already present in c1
+          expectedLoc2 = loc2 & #tenants `set` mkTenantSet ["b1"]
+
+          locShared = mkLoc & #path `set` FilePathT "common.yaml"
+          locShared1 = locShared & #tenants `set` mkTenantSet ["a", "b"]
+          locShared2 = locShared & #tenants `set` mkTenantSet ["b", "c"]
+          -- The shared loc should span all the unique tenants
+          expectedLocShared = locShared & #tenants `set` mkTenantSet ["a", "b", "b1", "c"]
+
+          mkMap xs = Map.fromList [
+            (QueueName "qn",
+              (\x -> (x, QueueName "qn")) <$> xs
+              )]
+
+          expected = mkMap [loc1, expectedLocShared, expectedLoc2]
+
+       in assertEqual "New labels" expected (mergeConfig c1 c2).queues
+
     validateNoGraphError = assertEqual "graph error" [] demo.graphErrors
     validateNoConfigError = assertBool ("config error: " <> show demo.config.configErrors) (List.null demo.config.configErrors)
     validateGitConfig = pure $ Map.lookup (NodeLabelName "cloud-rhel-7") demo.config.nodeLabels
@@ -133,14 +171,16 @@ tests demo =
       json <- loadJSONFixture "system-config"
       pure $ decodeTenantsConfig (ZKTenantsConfig json)
 
-    computeGitwebLinks = do
-      let testConfigLoc =
-            ConfigLoc
+    mkLoc :: ConfigLoc
+    mkLoc = ConfigLoc
               { project = CanonicalProjectName (ProviderName "sftests.com") (ProjectName "sf-config"),
                 branch = BranchName "main",
                 path = FilePathT "zuul.d/pipelines.yaml",
                 url = GerritUrl "https://managesf.sftests.com",
                 tenants = mempty
               }
+
+    computeGitwebLinks = do
+      let testConfigLoc = mkLoc
           expected = "https://managesf.sftests.com/plugins/gitiles/sf-config/+/refs/heads/main/zuul.d/pipelines.yaml"
       assertEqual "Expect gitweb url" expected $ configLocUrl testConfigLoc
