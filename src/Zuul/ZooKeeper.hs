@@ -57,15 +57,15 @@ data ZKFile = ZKFile
 -- | The list of config error that can happens when loading the configuration.
 data ConfigError
   = -- | System level exception, e.g. ENOENT
-    ReadError SomeException
+    ReadError Text
   | -- | YAML decoding error
-    YamlError Data.Yaml.ParseException
+    YamlError Text
   | -- | The path is missing component, e.g. branch name
     InvalidPath
   | AmbiguousName Text
   | -- | A decoding error
     DecodeError FilePathT Text Value
-  deriving (Show)
+  deriving (Show, Eq, Generic, FromJSON, ToJSON)
 
 -- | Read all the configuration found at the given path
 walkConfigNodes ::
@@ -90,7 +90,7 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
     handleConfig fullPath = do
       zkData <- readZKData fullPath
       zkJSONData <- case Data.Yaml.decodeEither' zkData of
-        Left err -> throwError $ YamlError err
+        Left err -> throwError $ YamlError (from $ show err)
         Right content -> pure content
 
       case mkZKFile zkJSONData fullPath of
@@ -101,7 +101,7 @@ walkConfigNodes dumpPath = walkRecursive $ dumpPath </> "zuul/config/cache"
     readZKData path = do
       zkDataE <- lift $ try $ readFileBS path
       case zkDataE of
-        Left err -> throwError $ ReadError err
+        Left err -> throwError $ ReadError (from $ show (err :: SomeException))
         Right content -> pure content
 
 -- | The tenant configuration value read from ZooKeeper. To be decoded by 'Zuul.Tenant.decodeTenantsConfig'

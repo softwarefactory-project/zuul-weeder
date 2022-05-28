@@ -192,7 +192,8 @@ mkResolver sc tc = TenantResolver {resolveTenants = resolveTenant sc tc, resolve
         defaultProjectName `Set.member` allProjects tc.tenants =
           Just defaultProjectName
       | -- The default project name does not exists
-        otherwise = Nothing
+        otherwise =
+          Nothing
       where
         (ProviderName -> provider, ProjectName . Text.tail -> name) = Text.span (/= '/') (from rawName)
         defaultProjectName = CanonicalProjectName loc.project.provider rawName

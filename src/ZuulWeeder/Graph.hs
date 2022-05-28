@@ -98,7 +98,7 @@ instance From VertexName Text where
 
 instance From Job VertexName where
   from job
-    | job.abstract = VAbstractJob job.name
+    | job.abstract == Just True = VAbstractJob job.name
     | otherwise = VJob job.name
 
 instance From CanonicalProjectName VertexName where
@@ -390,19 +390,19 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         Nothing -> pure ()
 
       -- handle job dependencies
-      forM_ job.dependencies $ \dJob -> do
+      forM_ (concat job.dependencies) $ \dJob -> do
         case lookupTenant loc.tenants dJob allJobs of
           Just vDependencyJobs -> vJob `connects` vDependencyJobs
           Nothing -> #graphErrors %= (("Can't find : " <> show dJob) :)
 
       -- handle job secrets
-      forM_ job.secrets $ \secret -> do
+      forM_ (concat job.secrets) $ \secret -> do
         case lookupTenant loc.tenants secret config.secrets of
           Just vSecrets -> vJob `connects` vSecrets
           Nothing -> #graphErrors %= (("Can't find : " <> show secret) :)
 
       -- handle job semaphores
-      forM_ job.semaphores $ \semaphore -> do
+      forM_ (concat job.semaphores) $ \semaphore -> do
         case lookupTenant loc.tenants semaphore config.semaphores of
           Just vSemaphores -> vJob `connects` vSemaphores
           Nothing -> #graphErrors %= (("Can't find : " <> show semaphore) :)

@@ -41,16 +41,16 @@
                     [ PJJob
                         ( Job
                             { name = JobName "linters"
-                            , abstract = False
+                            , abstract = Nothing
                             , parent = Nothing
                             , nodeset = Just
                                 ( JobNodeset
                                     ( NodesetName "linters-pod" )
                                 )
-                            , branches = []
-                            , dependencies = []
-                            , semaphores = []
-                            , secrets = []
+                            , branches = Nothing
+                            , dependencies = Nothing
+                            , semaphores = Nothing
+                            , secrets = Nothing
                             }
                         )
                     ]
@@ -63,14 +63,14 @@
                     , PJJob
                         ( Job
                             { name = JobName "sf-ci-openshift-integration"
-                            , abstract = False
+                            , abstract = Nothing
                             , parent = Nothing
                             , nodeset = Nothing
-                            , branches = []
-                            , dependencies =
+                            , branches = Nothing
+                            , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
-                            , semaphores = []
-                            , secrets = []
+                            , semaphores = Nothing
+                            , secrets = Nothing
                             }
                         )
                     ]
@@ -81,16 +81,16 @@
                     [ PJJob
                         ( Job
                             { name = JobName "linters"
-                            , abstract = False
+                            , abstract = Nothing
                             , parent = Nothing
                             , nodeset = Just
                                 ( JobNodeset
                                     ( NodesetName "linters-pod" )
                                 )
-                            , branches = []
-                            , dependencies = []
-                            , semaphores = []
-                            , secrets = []
+                            , branches = Nothing
+                            , dependencies = Nothing
+                            , semaphores = Nothing
+                            , secrets = Nothing
                             }
                         )
                     ]

@@ -55,70 +55,70 @@ import ZuulWeeder.Prelude
 
 newtype BranchName = BranchName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, ToJSON)
 
 newtype JobName = JobName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype PipelineName = PipelineName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype ProjectName = ProjectName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 instance From ProjectName Text where
   from (ProjectName n) = n
 
 newtype ProjectRegex = ProjectRegex Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 instance From ProjectName ProjectRegex where
   from (ProjectName n) = ProjectRegex n
 
 newtype NodesetName = NodesetName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype NodeLabelName = NodeLabelName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype ProviderName = ProviderName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype ProjectTemplateName = ProjectTemplateName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype SecretName = SecretName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype QueueName = QueueName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 newtype SemaphoreName = SemaphoreName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 data CanonicalProjectName = CanonicalProjectName
   { provider :: ProviderName,
     project :: ProjectName
   }
-  deriving (Eq, Ord, Show, Generic, Hashable)
+  deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 instance From CanonicalProjectName Text where
   from (CanonicalProjectName (ProviderName p) (ProjectName n)) = p <> "/" <> n
 
 newtype ConnectionName = ConnectionName Text
   deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 -- TODO: use Network.URI.URI instead of Text
 
@@ -129,11 +129,11 @@ data ConnectionUrl
   | GithubUrl Text
   | PagureUrl Text
   | GitUrl Text
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
 newtype TenantName = TenantName Text
   deriving (Show, Eq, Ord, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, ToJSON)
 
 instance From TenantName Text where
   from (TenantName name) = name
@@ -141,30 +141,36 @@ instance From TenantName Text where
 data JobNodeset
   = JobNodeset NodesetName
   | JobAnonymousNodeset [NodeLabelName]
-  deriving (Eq, Ord, Show, Generic, Hashable)
+  deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, ToJSON)
 
 data Nodeset = Nodeset
   { name :: NodesetName,
     labels :: [NodeLabelName]
   }
-  deriving (Show, Eq, Ord, Generic, Hashable)
+  deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 data Job = Job
   { name :: JobName,
-    abstract :: Bool,
+    abstract :: Maybe Bool,
     parent :: Maybe JobName,
     nodeset :: Maybe JobNodeset,
-    branches :: [BranchName],
-    dependencies :: [JobName],
-    semaphores :: [SemaphoreName],
-    secrets :: [SecretName]
+    branches :: Maybe [BranchName],
+    dependencies :: Maybe [JobName],
+    semaphores :: Maybe [SemaphoreName],
+    secrets :: Maybe [SecretName]
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
+
+instance FromJSON Job where
+  parseJSON = genericParseJSON defaultOptions {omitNothingFields = True}
+
+instance ToJSON Job where
+  toJSON = genericToJSON defaultOptions {omitNothingFields = True}
 
 data PipelineJob
   = PJName JobName
   | PJJob Job
-  deriving (Show, Eq, Ord, Generic, Hashable)
+  deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 instance From PipelineJob JobName where
   from = \case
@@ -175,7 +181,7 @@ data ProjectPipeline = ProjectPipeline
   { name :: PipelineName,
     jobs :: [PipelineJob]
   }
-  deriving (Show, Eq, Ord, Generic, Hashable)
+  deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 data Project = Project
   { name :: ProjectName,
@@ -183,29 +189,29 @@ data Project = Project
     queue :: Maybe QueueName,
     pipelines :: Set ProjectPipeline
   }
-  deriving (Show, Eq, Ord, Generic, Hashable)
+  deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 data ProjectTemplate = ProjectTemplate
   { name :: ProjectTemplateName,
     queue :: Maybe QueueName,
     pipelines :: Set ProjectPipeline
   }
-  deriving (Show, Eq, Ord, Generic, Hashable)
+  deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 newtype PipelineTrigger = PipelineTrigger {connectionName :: ConnectionName}
   deriving (Show, Ord, Eq, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, ToJSON)
 
 newtype PipelineReporter = PipelineReporter {connectionName :: ConnectionName}
   deriving (Show, Ord, Eq, Generic)
-  deriving newtype (Hashable)
+  deriving newtype (Hashable, FromJSON, ToJSON)
 
 data Pipeline = Pipeline
   { name :: PipelineName,
     triggers :: [PipelineTrigger],
     reporters :: [PipelineReporter]
   }
-  deriving (Show, Eq, Ord, Generic, Hashable)
+  deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 -- | The sum of all the configuration elements.
 data ZuulConfigElement
@@ -217,7 +223,7 @@ data ZuulConfigElement
   | ZQueue QueueName
   | ZSemaphore SemaphoreName
   | ZSecret SecretName
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
 
 instance From ZuulConfigElement ZuulConfigType where
   from zce = case zce of
@@ -240,7 +246,7 @@ data ZuulConfigType
   | NodesetT
   | SecretT
   | QueueT
-  deriving (Show, Eq, Ord, Enum, Bounded)
+  deriving (Show, Eq, Ord, Generic, Enum, Bounded, FromJSON, ToJSON)
 
 -- | The configuration source context location
 data ConfigLoc = ConfigLoc
@@ -250,7 +256,7 @@ data ConfigLoc = ConfigLoc
     url :: ConnectionUrl,
     tenants :: Set TenantName
   }
-  deriving (Show, Eq, Ord, Generic)
+  deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
 
 instance From ConfigLoc CanonicalProjectName where
   from loc = loc.project

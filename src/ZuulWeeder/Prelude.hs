@@ -57,6 +57,8 @@ module ZuulWeeder.Prelude
     Witch.from,
     Witch.via,
     Witch.into,
+    Witch.unsafeFrom,
+    Witch.unsafeInto,
 
     -- * mtl
     Control.Monad.Trans.lift,
@@ -79,7 +81,17 @@ module ZuulWeeder.Prelude
     (%=),
 
     -- * aeson
+    Data.Aeson.FromJSON (..),
+    Data.Aeson.FromJSONKey (..),
+    Data.Aeson.ToJSON (..),
+    Data.Aeson.ToJSONKey (..),
     Data.Aeson.Value (Object),
+    Data.Aeson.genericParseJSON,
+    Data.Aeson.genericToJSON,
+    Data.Aeson.defaultOptions,
+    Data.Aeson.omitNothingFields,
+    encodeJSON,
+    decodeJSON,
 
     -- * aeson helpers
     Decoder (..),
@@ -179,6 +191,7 @@ import Control.Monad.State qualified
 import Control.Monad.Trans qualified
 import Control.Monad.Trans.Except qualified
 import Data.Aeson (Object, Value (Array, Object, String))
+import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM
 import Data.Bifunctor qualified
@@ -220,6 +233,12 @@ import System.Timeout qualified (timeout)
 import Text.Pretty.Simple qualified
 import Witch qualified
 
+encodeJSON :: Data.Aeson.ToJSON a => a -> ByteString
+encodeJSON = Witch.from . Data.Aeson.encode
+
+decodeJSON :: Data.Aeson.FromJSON a => ByteString -> Either String a
+decodeJSON = Data.Aeson.eitherDecodeStrict
+
 -- | The content of the GIT_COMMIT environment variable, default to HEAD.
 gitVersion :: Text
 gitVersion = Data.Maybe.fromMaybe "HEAD" $$(Language.Haskell.TH.Env.envQ "GIT_COMMIT")
@@ -247,7 +266,8 @@ whenM test action = do
 
 -- | A FilePath encoded with UTF-8.
 newtype FilePathT = FilePathT Text
-  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Data.Hashable.Hashable)
+  deriving (Generic)
+  deriving newtype (Show, Eq, Ord, IsString, Semigroup, Monoid, Data.Hashable.Hashable, Data.Aeson.FromJSON, Data.Aeson.ToJSON)
 
 instance Witch.From FilePathT Text where
   from (FilePathT fp) = fp

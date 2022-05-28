@@ -68,7 +68,7 @@ data Config = Config
     -- | Configuration errors.
     configErrors :: [ConfigError]
   }
-  deriving (Show, Generic)
+  deriving (Show, Generic, FromJSON, ToJSON)
 
 updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
 updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
@@ -146,14 +146,24 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
     decodeJobContent :: JobName -> Object -> Decoder Job
     decodeJobContent name va = do
       Job name
-        <$> decodeJobAbstract
+        <$> fmap toMaybe' decodeJobAbstract
         <*> decodeJobParent
         <*> decodeJobNodeset
-        <*> decodeAsList "branches" BranchName va
-        <*> decodeJobDependencies
-        <*> decodeSemaphores
-        <*> decodeSecrets
+        <*> fmap toMaybe (decodeAsList "branches" BranchName va)
+        <*> fmap toMaybe decodeJobDependencies
+        <*> fmap toMaybe decodeSemaphores
+        <*> fmap toMaybe decodeSecrets
       where
+        toMaybe' :: Bool -> Maybe Bool
+        toMaybe' = \case
+          False -> Nothing
+          True -> Just True
+
+        toMaybe :: [a] -> Maybe [a]
+        toMaybe = \case
+          [] -> Nothing
+          xs -> Just xs
+
         decodeJobAbstract :: Decoder Bool
         decodeJobAbstract = pure $ case HM.lookup "abstract" va of
           Just (Bool x) -> x

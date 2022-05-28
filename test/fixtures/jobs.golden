@@ -1,70 +1,70 @@
 [ ZJob
     ( Job
         { name = JobName "base"
-        , abstract = True
+        , abstract = Just True
         , parent = Nothing
         , nodeset = Just
             ( JobAnonymousNodeset
                 [ NodeLabelName "pod-centos-7" ]
             )
-        , branches = []
-        , dependencies = []
-        , semaphores = []
-        , secrets =
+        , branches = Nothing
+        , dependencies = Nothing
+        , semaphores = Nothing
+        , secrets = Just
             [ SecretName "site_sflogs" ]
         }
     )
 , ZJob
     ( Job
         { name = JobName "config-check"
-        , abstract = False
+        , abstract = Nothing
         , parent = Just
             ( JobName "base" )
         , nodeset = Just
             ( JobAnonymousNodeset
                 [ NodeLabelName "cloud-fedora-35" ]
             )
-        , branches =
+        , branches = Just
             [ BranchName "master" ]
-        , dependencies =
+        , dependencies = Just
             [ JobName "job1"
             , JobName "job2"
             ]
-        , semaphores = []
-        , secrets =
+        , semaphores = Nothing
+        , secrets = Just
             [ SecretName "service_user" ]
         }
     )
 , ZJob
     ( Job
         { name = JobName "config-update"
-        , abstract = False
+        , abstract = Nothing
         , parent = Just
             ( JobName "base" )
         , nodeset = Just
             ( JobAnonymousNodeset [] )
-        , branches =
+        , branches = Just
             [ BranchName "master" ]
-        , dependencies = []
-        , semaphores =
+        , dependencies = Nothing
+        , semaphores = Just
             [ SemaphoreName "semaphore-config-update" ]
-        , secrets =
+        , secrets = Just
             [ SecretName "site_install_server" ]
         }
     )
 , ZJob
     ( Job
         { name = JobName "wait-for-changes-ahead"
-        , abstract = False
+        , abstract = Nothing
         , parent = Nothing
         , nodeset = Just
             ( JobNodeset
                 ( NodesetName "nodeset1" )
             )
-        , branches = []
-        , dependencies = []
-        , semaphores = []
-        , secrets = []
+        , branches = Nothing
+        , dependencies = Nothing
+        , semaphores = Nothing
+        , secrets = Nothing
         }
     )
 ]

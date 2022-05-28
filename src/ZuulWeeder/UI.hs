@@ -642,6 +642,7 @@ type BaseAPI =
     :<|> "search" :> GetRequest
     :<|> "info" :> GetRequest
     :<|> "debug" :> GetRequest
+    :<|> "export" :> Get '[JSON] Config
     :<|> "object" :> Capture "type" VertexTypeUrl :> CaptureAll "name" VertexNameUrl :> GetRequest
     :<|> "search_results" :> SearchPath
     :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
@@ -687,6 +688,7 @@ app config rootURL distPath = serve (Proxy @API) rootServer
         :<|> flip searchRoute Nothing
         :<|> indexRoute "info" (infoComponent ctx <$> liftIO config)
         :<|> indexRoute "debug" (debugComponent <$> liftIO config)
+        :<|> exportRoute
         :<|> objectRoute
         :<|> searchResultRoute
         :<|> searchRouteWithQuery
@@ -734,3 +736,8 @@ app config rootURL distPath = serve (Proxy @API) rootServer
           analysis <- liftIO config
           let graph = dependencyGraph analysis
           pure (toD3Graph ctx.scope graph)
+
+        exportRoute = do
+          analysis <- liftIO config
+          -- TODO: filter with tenant scope
+          pure (analysis.config)
