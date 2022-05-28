@@ -41,6 +41,7 @@ module ZuulWeeder.Prelude
     doesDirectoryExist,
     readFileBS,
     readFileText,
+    writeFileText,
 
     -- * text, bytestring
     Data.Text.Text,
@@ -160,6 +161,7 @@ module ZuulWeeder.Prelude
     Debug.Trace.trace,
     System.IO.hPutStrLn,
     System.IO.stderr,
+    Text.Printf.printf,
     GHC.Stack.HasCallStack,
 
     -- * base system
@@ -183,6 +185,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar qualified
 import Control.Exception qualified
 import Control.Lens ((%=))
+import Text.Printf qualified
 import Control.Lens qualified
 import Control.Monad ((<=<), (>=>))
 import Control.Monad qualified
@@ -218,7 +221,7 @@ import Data.Set (Set)
 import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
-import Data.Text.IO qualified as Text (readFile)
+import Data.Text.IO qualified as Text (readFile, writeFile)
 import Data.Tree qualified
 import Data.Vector qualified as V
 import Data.Version qualified
@@ -299,6 +302,9 @@ readFileBS = BS.readFile . getPath
 -- | Wrapper for 'Data.Text.IO.readFile'
 readFileText :: FilePathT -> IO Text
 readFileText = Text.readFile . getPath
+
+writeFileText :: FilePathT -> Text -> IO ()
+writeFileText (getPath -> fp) = Text.writeFile fp
 
 -- | Get the clock seconds.
 getSec :: IO Int64

@@ -9,6 +9,8 @@
 -- Portability : portable
 --
 -- This module contains the core configuration graph.
+-- The config analysis results looks like this:
+-- ![demo-graph](doc/demo-graph.svg)
 module ZuulWeeder.Graph
   ( ConfigGraph,
     Analysis (..),

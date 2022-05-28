@@ -6,6 +6,15 @@ cabal build -O0 lib:zuul-weeder # build the hie files
 MODULES=$(find src/ -name "*.hs" | sed -e 's/^src.//' -e 's/.hs$//' | tr '/' '.' | egrep -v "ZuulWeeder.Prelude|Zuul.Config") # get the module lists, except the common ones
 nix run .#calligraphy -- calligraphy -s doc/modules.svg --collapse-modules $MODULES
 
+# render the demo analysis with graphviz
+cabal repl <<EOF
+(writeFileText "dist-newstyle/graph.dot" . ZuulWeeder.UI.dotGraph =<< ZuulWeeder.demoConfig) \
+  >> writeFileText "dist-newstyle/legend.dot" ZuulWeeder.UI.dotLegend
+EOF
+dot -Tsvg dist-newstyle/legend.dot > dist-newstyle/legend.svg
+dot -Tsvg dist-newstyle/graph.dot  > dist-newstyle/graph.svg
+svg_stack --direction horizontal ./dist-newstyle/legend.svg ./dist-newstyle/graph.svg > doc/demo-graph.svg
+
 # render the docs for local hosting, see: https://stackoverflow.com/questions/57916341/how-to-instruct-haddock-to-link-to-hackage-documentation-for-hackage-packages#58859107
 cabal haddock --haddock-html-location='https://hackage.haskell.org/package/$pkg-$version/docs' --haddock-hyperlink-source --haddock-quickjump
 echo "Publish build directory to pagesuser@softwarefactory-project.io:/var/www/pages/docs.softwarefactory-project.io/zuul-weeder/"
