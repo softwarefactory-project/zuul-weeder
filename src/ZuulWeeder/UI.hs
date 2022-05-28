@@ -138,6 +138,8 @@ data VertexType
   | VPipelineT
   | VProjectT
   | VProjectPipelineT
+  | VProjectRegexT
+  | VRegexPipelineT
   | VProjectTemplateT
   | VTemplatePipelineT
   | VTriggerT
@@ -152,11 +154,13 @@ instance From VertexName VertexType where
     VSecret _ -> VSecretT
     VQueue _ -> VQueueT
     VProject _ -> VProjectT
+    VProjectRegex _ -> VProjectRegexT
     VNodeset _ -> VNodesetT
     VProjectTemplate _ -> VProjectTemplateT
     VPipeline _ -> VPipelineT
     VNodeLabel _ -> VNodeLabelT
     VProjectPipeline _ _ -> VProjectPipelineT
+    VRegexPipeline _ _ -> VRegexPipelineT
     VTemplatePipeline _ _ -> VTemplatePipelineT
     VTrigger _ -> VTriggerT
     VReporter _ -> VReporterT
@@ -197,9 +201,11 @@ vertexTypeName = \case
   VNodeLabelT -> "label"
   VQueueT -> "queue"
   VProjectT -> "project"
+  VProjectRegexT -> "project-regex"
   VProjectTemplateT -> "project-template"
   VPipelineT -> "pipeline"
   VProjectPipelineT -> "project-pipeline"
+  VRegexPipelineT -> "regex-pipeline"
   VTemplatePipelineT -> "template-pipeline"
   VTriggerT -> "trigger"
   VReporterT -> "reporter"
@@ -323,10 +329,12 @@ vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
       VSecretT -> "key-2-line"
       VQueueT -> "traffic-light-line"
       VProjectT -> "folder-open-line"
+      VProjectRegexT -> "folder-open-line"
       VProjectTemplateT -> "draft-line"
       VPipelineT -> "git-merge-line"
       VNodeLabelT -> "price-tag-3-line"
       VProjectPipelineT -> "git-merge-line"
+      VRegexPipelineT -> "git-merge-line"
       VTemplatePipelineT -> "git-merge-line"
       VNodesetT -> "server-line"
       VTriggerT -> "download-fill"
@@ -541,11 +549,13 @@ objectInfo ctx vertices analysis = do
       VSemaphore name -> getLocs $ Map.lookup name analysis.config.semaphores
       VQueue name -> getLocs $ Map.lookup name analysis.config.queues
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
+      VProjectRegex name -> getLocs $ Map.lookup name analysis.config.projectRegexs
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
       VNodeset name -> getLocs $ Map.lookup name analysis.config.nodesets
       VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
       VProjectPipeline _ name -> getLocs $ Map.lookup name analysis.config.projects
+      VRegexPipeline _ name -> getLocs $ Map.lookup name analysis.config.projectRegexs
       VTemplatePipeline _ name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
       VReporter name -> getLocs $ Map.lookup name analysis.config.reporters
@@ -575,7 +585,7 @@ vertexScope scope vertices = Set.toList $ case scope of
 
 newtype VertexTypeUrl = VTU (Text -> VertexName)
 
-data DecodeProject = DecodeCanonical | DecodeTemplate
+data DecodeProject = DecodeCanonical | DecodeTemplate | DecodeRegex
 
 instance FromHttpApiData VertexTypeUrl where
   parseUrlPiece txt = pure . VTU $ case txt of
@@ -587,9 +597,11 @@ instance FromHttpApiData VertexTypeUrl where
     "label" -> VNodeLabel . NodeLabelName
     "queue" -> VQueue . QueueName
     "project" -> VProject . decodeCanonical
+    "project-regex" -> VProjectRegex . ProjectRegex
     "project-template" -> VProjectTemplate . ProjectTemplateName
     "pipeline" -> VPipeline . PipelineName
     "project-pipeline" -> splitPipeline DecodeCanonical
+    "regex-pipeline" -> splitPipeline DecodeRegex
     "template-pipeline" -> splitPipeline DecodeTemplate
     "trigger" -> VTrigger . ConnectionName
     "reporter" -> VReporter . ConnectionName
@@ -608,6 +620,7 @@ instance FromHttpApiData VertexTypeUrl where
          in case dp of
               DecodeCanonical -> VProjectPipeline pipeline (decodeCanonical name)
               DecodeTemplate -> VTemplatePipeline pipeline (ProjectTemplateName name)
+              DecodeRegex -> VRegexPipeline pipeline (ProjectRegex name)
 
 newtype VertexNameUrl = VNU {getVNU :: Text}
 

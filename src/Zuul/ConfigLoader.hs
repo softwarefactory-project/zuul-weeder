@@ -50,7 +50,7 @@ data Config = Config
     -- | The projects.
     projects :: ConfigMap CanonicalProjectName Project,
     -- | The projects regexp.
-    projectRegexps :: ConfigMap ProjectRegex Project,
+    projectRegexs :: ConfigMap ProjectRegex Project,
     -- | The project-templates.
     projectTemplates :: ConfigMap ProjectTemplateName ProjectTemplate,
     -- | The pipelines.
@@ -77,7 +77,7 @@ updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
   ZProject project
-    | isRegex project.name -> #projectRegexps %= insertConfig (from project.name) project
+    | isRegex project.name -> #projectRegexs %= insertConfig (from project.name) project
     | otherwise -> case tr.resolveProject tenants configLoc project.name of
         Just pn -> #projects %= insertConfig pn project
         Nothing -> #configErrors %= (AmbiguousName (from project.name) :)

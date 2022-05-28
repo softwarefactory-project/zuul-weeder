@@ -59,12 +59,16 @@ data VertexName
     VQueue QueueName
   | -- | A project
     VProject CanonicalProjectName
+  | -- | A project regex
+    VProjectRegex ProjectRegex
   | -- | A project template
     VProjectTemplate ProjectTemplateName
   | -- | A pipeline
     VPipeline PipelineName
   | -- | A project pipeline config
     VProjectPipeline PipelineName CanonicalProjectName
+  | -- | A project regex config
+    VRegexPipeline PipelineName ProjectRegex
   | -- | A template pipeline config
     VTemplatePipeline PipelineName ProjectTemplateName
   | -- | A pipeline trigger
@@ -83,8 +87,10 @@ instance From VertexName Text where
     VNodeLabel (NodeLabelName n) -> n
     VQueue (QueueName n) -> n
     VProject (CanonicalProjectName (ProviderName p) (ProjectName n)) -> p <> "/" <> n
+    VProjectRegex (ProjectRegex n) -> n
     VProjectTemplate (ProjectTemplateName n) -> n
     VPipeline (PipelineName n) -> n
+    VRegexPipeline (PipelineName v) (ProjectRegex n) -> v <> ":" <> n
     VProjectPipeline (PipelineName v) cp -> v <> ":" <> from cp
     VTemplatePipeline (PipelineName v) (ProjectTemplateName n) -> v <> ":" <> n
     VTrigger (ConnectionName n) -> n
@@ -100,6 +106,9 @@ instance From CanonicalProjectName VertexName where
 
 instance From SecretName VertexName where
   from = VSecret
+
+instance From ProjectRegex VertexName where
+  from = VProjectRegex
 
 instance From SemaphoreName VertexName where
   from = VSemaphore
@@ -231,6 +240,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       traverse_ goJob $ concat $ Map.elems allJobs
       traverse_ goNodeset $ concat $ Map.elems config.nodesets
       traverse_ goProject $ concatMap projectList (Map.toList config.projects)
+      traverse_ goProjectRegex $ concat $ Map.elems config.projectRegexs
       traverse_ goProjectTemplate $ concat $ Map.elems config.projectTemplates
       traverse_ goPipeline $ concat $ Map.elems config.pipelines
       traverse_ goInsert $ concat $ Map.elems config.secrets
@@ -305,17 +315,32 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       let vProject = mkVertex loc projectName
       insertVertex loc vProject
 
-      -- handle queues
-      goQueue loc vProject project.queue
-
-      -- handle templates
-      forM_ project.templates $ \templateName -> do
-        case lookupTenant loc.tenants templateName config.projectTemplates of
-          Just templates -> vProject `connects` templates
-          Nothing -> #graphErrors %= (("Can't find : " <> show templateName) :)
+      -- handle queue and templates
+      goProjectConfig loc project vProject
 
       -- handle project pipeline configs
       traverse_ (goPipelineConfig loc vProject (flip VProjectPipeline projectName)) project.pipelines
+
+    goProjectConfig loc project v = do
+      -- handle queues
+      goQueue loc v project.queue
+
+      forM_ project.templates $ \templateName -> do
+        case lookupTenant loc.tenants templateName config.projectTemplates of
+          Just templates -> v `connects` templates
+          Nothing -> #graphErrors %= (("Can't find : " <> show templateName) :)
+
+    goProjectRegex :: (ConfigLoc, Project) -> State Analysis ()
+    goProjectRegex (loc, project) = do
+      let regex = into @ProjectRegex project.name
+      let vProjectRegex = mkVertex loc regex
+      insertVertex loc vProjectRegex
+
+      -- handle templates
+      goProjectConfig loc project vProjectRegex
+
+      -- handle project pipeline configs
+      traverse_ (goPipelineConfig loc vProjectRegex (flip VRegexPipeline regex)) project.pipelines
 
     goProjectTemplate :: (ConfigLoc, ProjectTemplate) -> State Analysis ()
     goProjectTemplate (loc, tmpl) = do
