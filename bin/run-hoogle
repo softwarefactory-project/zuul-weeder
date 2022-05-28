@@ -1,0 +1,4 @@
+#!/bin/sh -e
+nix develop .#hoogle --command hoogle server -p 8080 --local --haskell &
+trap 'kill $(jobs -p)' EXIT
+firefox http://localhost:8080

@@ -106,6 +106,11 @@
           ];
         };
 
+        devShells.hoogle = haskellPackages.shellFor {
+          packages = p: [ zuulWeederPackage ];
+          withHoogle = true;
+        };
+
         apps.calligraphy = mkApp ''
           set -xe
           exec ${
