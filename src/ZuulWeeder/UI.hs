@@ -477,7 +477,7 @@ infoComponent ctx analysis = do
     scope = case ctx.scope of
       Scoped tenants -> tenants
       UnScoped -> mempty
-    otherTenants = Set.difference analysis.tenants scope
+    otherTenants = Set.difference analysis.config.tenants scope
     config = analysis.config
     objectCounts :: Text -> Zuul.ConfigLoader.ConfigMap a b -> Html ()
     objectCounts n m = do

@@ -28,7 +28,7 @@ import Data.Aeson (Object, Value (Array, Bool, Null, String))
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM (keys, lookup, toList)
 import Data.Map qualified as Map
-import Data.Set qualified
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Vector qualified as V
 import Zuul.Config
@@ -66,7 +66,9 @@ data Config = Config
     -- | The pipeline reporters.
     reporters :: ConfigMap ConnectionName ConnectionName,
     -- | Configuration errors.
-    configErrors :: [ConfigError]
+    configErrors :: [ConfigError],
+    -- | The list of all tenants
+    tenants :: Set TenantName
   }
   deriving (Show, Generic, FromJSON, ToJSON)
 
@@ -75,7 +77,7 @@ updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
   ZJob job -> #jobs %= insertConfig job.name job
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
-    traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Data.Set.fromList node.labels
+    traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Set.fromList node.labels
   ZProject project
     | isRegex project.name -> #projectRegexs %= insertConfig (from project.name) project
     | otherwise -> case tr.resolveProject tenants configLoc project.name of
@@ -94,7 +96,7 @@ updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
     tenants = tr.resolveTenants configLoc (from ze)
     insertConfig k v
       | null tenants = id -- The object is not attached to any tenant, we don't add it
-      | otherwise = Map.insertWith mappend k [(configLoc {tenants = tenants}, v)]
+      | otherwise = Map.insertWith mappend k [(configLoc & #tenants `set` tenants, v)]
 updateTopConfig _ configLoc (Decoder (Left (e, v))) =
   #configErrors %= (DecodeError configLoc.path e v :)
 
@@ -244,7 +246,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
         Nothing -> pure $ ProjectName (providerName <> "/" <> projectName)
       queue <- decodeQueueName va
       templates <- decodeAsList "templates" ProjectTemplateName va
-      pipelines <- Data.Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
+      pipelines <- Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
       pure $ Project {name, queue, templates, pipelines}
 
     decodeQueueName :: Object -> Decoder (Maybe QueueName)
@@ -279,7 +281,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
     decodeProjectTemplate va = do
       name <- ProjectTemplateName <$> getName va
       queue <- decodeQueueName va
-      pipelines <- Data.Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
+      pipelines <- Set.fromList <$> sequence (mapMaybe decodeProjectPipeline (HM.toList va))
       pure $ ProjectTemplate {name, queue, pipelines}
 
     -- Zuul config elements are object with an unique key
@@ -326,5 +328,5 @@ loadConfig urlBuilder tenantResolver zkcE = do
        in traverse_ (updateTopConfig tenantResolver configLoc) decodedResults
 
 -- | An empty config.
-emptyConfig :: Config
+emptyConfig :: Set TenantName -> Config
 emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty

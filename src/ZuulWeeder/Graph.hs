@@ -178,8 +178,6 @@ data Analysis = Analysis
     vertices :: Set Vertex,
     -- | A map of all the names and their matching tenants, used for searching.
     names :: Map VertexName (Set TenantName),
-    -- | The list of all tenants, for the info page.
-    tenants :: Set TenantName,
     -- | The zuul config.
     config :: Config,
     -- | A list of error found when building the analysis.
@@ -190,10 +188,8 @@ data Analysis = Analysis
 -- | The main function to build the 'Analysis' .
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty allTenants config mempty))
+  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty config mempty))
   where
-    allTenants = Set.fromList $ Map.keys tenantsConfig
-
     -- All the default base jobs defined by the tenants
     -- Given:
     -- - tenant1, tenant2 default base job is 'base'

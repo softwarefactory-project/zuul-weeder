@@ -133,6 +133,7 @@ module ZuulWeeder.Prelude
     -- * base data
     Int64,
     (&),
+    Data.Proxy.Proxy (..),
     Data.Bifunctor.first,
     Data.Bool.bool,
     Data.Foldable.traverse_,
@@ -210,6 +211,7 @@ import Data.List qualified
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.Map (Map)
 import Data.Maybe qualified
+import Data.Proxy qualified
 import Data.Set (Set)
 import Data.String (IsString)
 import Data.String.QQ qualified (s)

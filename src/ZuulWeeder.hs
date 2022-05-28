@@ -11,6 +11,8 @@
 -- The project entrypoint.
 module ZuulWeeder (main, runDemo, demoConfig) where
 
+import Data.Map qualified as Map
+import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Yaml (decodeThrow)
 import Network.Wai.Handler.Warp as Warp (run)
@@ -18,6 +20,7 @@ import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
 import Web.HttpApiData (toHeader)
+import Zuul.Config (TenantName)
 import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
@@ -142,12 +145,13 @@ mkConfigLoader logger dataBaseDir configFile = do
       tenantsConfig <- except (decodeTenantsConfig systemConfig)
       -- load all the config objects
       let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
-      config <- lift $ loadConfigFiles serviceConfig.urlBuilders tr dataDir
+          allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
+      config <- lift $ loadConfigFiles allTenants serviceConfig.urlBuilders tr dataDir
       pure (tenantsConfig, config)
 
-loadConfigFiles :: ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
-loadConfigFiles ub tr =
-  flip execStateT Zuul.ConfigLoader.emptyConfig
+loadConfigFiles :: Set TenantName -> ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
+loadConfigFiles tenants ub tr =
+  flip execStateT (Zuul.ConfigLoader.emptyConfig tenants)
     -- StateT Config IO ()
     . S.effects
     -- Apply the loadConfig function to each element
@@ -208,7 +212,8 @@ unparsed_abide:
 |]
         tenantsConfig <- except (decodeTenantsConfig systemConfig)
         let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
-        conf <- lift $ flip execStateT Zuul.ConfigLoader.emptyConfig do
+            allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
+        conf <- lift $ flip execStateT (Zuul.ConfigLoader.emptyConfig allTenants) do
           xs <- sequence configFiles
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
         pure (tenantsConfig, conf)
