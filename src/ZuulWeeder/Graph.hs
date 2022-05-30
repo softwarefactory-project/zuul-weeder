@@ -434,6 +434,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       dst `allows` src
 
     -- see https://english.stackexchange.com/questions/248642/inverse-of-dependency
+    -- For a nodeset `foo` that has a label `bar`:
+    --   `foo` is a dependent of `bar`, because `foo` requires `bar`
+    --   `bar` is a dependency of `foo`, because `bar` allows `foo`
     requires, allows :: Vertex -> Vertex -> State Analysis ()
     a `requires` b = #dependencyGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)
     a `allows` b = #dependentGraph %= Algebra.Graph.overlay (Algebra.Graph.edge a b)

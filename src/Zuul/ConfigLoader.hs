@@ -147,15 +147,15 @@ mergeConfig c1 c2 =
         newName = TenantName $ Text.snoc n c
     allTenants = Set.union c1.tenants c2.tenants
 
-updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
-updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
+doUpdateTopConfig :: TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
+doUpdateTopConfig tr configLoc ze = case ze of
   ZJob job -> #jobs %= insertConfig job.name job
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Set.fromList node.labels
   ZProject project
     | isRegex project.name -> #projectRegexs %= insertConfig (from project.name) project
-    | otherwise -> case tr.resolveProject tenants configLoc project.name of
+    | otherwise -> case tr.resolveProject configLoc project.name of
         Just pn -> #projects %= insertConfig pn project
         Nothing -> #configErrors %= (AmbiguousName (from project.name) :)
   ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
@@ -168,10 +168,14 @@ updateTopConfig tr configLoc (Decoder (Right ze)) = case ze of
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
   where
     isRegex (ProjectName n) = "^" `Text.isPrefixOf` n
+    insertConfig k v = Map.insertWith mappend k [(configLoc, v)]
+
+updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
+updateTopConfig tr configLoc (Decoder (Right ze))
+  | Set.null tenants = pure ()
+  | otherwise = doUpdateTopConfig tr (configLoc & #tenants `set` tenants) ze
+  where
     tenants = tr.resolveTenants configLoc (from ze)
-    insertConfig k v
-      | null tenants = id -- The object is not attached to any tenant, we don't add it
-      | otherwise = Map.insertWith mappend k [(configLoc & #tenants `set` tenants, v)]
 updateTopConfig _ configLoc (Decoder (Left (e, v))) =
   #configErrors %= (DecodeError configLoc.path e v :)
 

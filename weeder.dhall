@@ -2,7 +2,11 @@
   [ -- This might be useful in the future
     "ZuulWeeder.Graph.findReachable"
   , "ZuulWeeder.Prelude..*JSON"
-  , "ZuulWeeder.main"
+  , -- Used for doc rendering
+    "ZuulWeeder.UI.dot.*"
+  , "ZuulWeeder.Prelude.writeFileText"
+  , -- The entrypoints
+    "ZuulWeeder.main"
   , "ZuulWeeder.runDemo"
   , "Main.main"
   , "^Paths_.*"

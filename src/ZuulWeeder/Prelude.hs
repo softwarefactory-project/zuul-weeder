@@ -185,7 +185,6 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.MVar qualified
 import Control.Exception qualified
 import Control.Lens ((%=))
-import Text.Printf qualified
 import Control.Lens qualified
 import Control.Monad ((<=<), (>=>))
 import Control.Monad qualified
@@ -238,6 +237,7 @@ import System.IO qualified
 import System.Log.FastLogger qualified
 import System.Timeout qualified (timeout)
 import Text.Pretty.Simple qualified
+import Text.Printf qualified
 import Witch qualified
 
 encodeJSON :: Data.Aeson.ToJSON a => a -> ByteString

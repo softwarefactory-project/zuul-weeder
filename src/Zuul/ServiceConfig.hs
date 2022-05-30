@@ -39,6 +39,7 @@ data ServiceConfig = ServiceConfig
     -- | The dump script parameter: hosts, key, cert, ca
     zookeeper :: ZKConnection
   }
+  deriving (Show)
 
 -- | Read the zuul.conf file
 readServiceConfig ::

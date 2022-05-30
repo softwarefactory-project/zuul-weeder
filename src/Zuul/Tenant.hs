@@ -165,8 +165,6 @@ data TenantResolver = TenantResolver
       -- The list of tenant allowing the element
       Set TenantName,
     resolveProject ::
-      -- The list of tenant matching the project location
-      Set TenantName ->
       -- The project definition config location
       ConfigLoc ->
       -- The project name
@@ -183,25 +181,22 @@ mkResolver ::
   TenantResolver
 mkResolver sc tc = TenantResolver {resolveTenants = resolveTenant sc tc, resolveProject}
   where
-    resolveProject :: Set TenantName -> ConfigLoc -> ProjectName -> Maybe CanonicalProjectName
-    resolveProject tenants loc rawName
+    resolveProject :: ConfigLoc -> ProjectName -> Maybe CanonicalProjectName
+    resolveProject loc rawName
       | -- The project is already qualified
         provider `Set.member` allProviders tc.tenants =
           Just $ CanonicalProjectName provider name
-      | -- Otherwise we pick the provider name of the config location
-        defaultProjectName `Set.member` allProjects tc.tenants =
-          Just defaultProjectName
-      | -- The default project name does not exists
-        otherwise =
-          Nothing
+      | -- Otherwise look for a matching project in the tenant configs
+        otherwise = case Set.toList (Set.filter (\cp -> cp.project == rawName) (allProjects tc.tenants)) of
+          [x] -> Just x
+          _ -> Nothing
       where
         (ProviderName -> provider, ProjectName . Text.tail -> name) = Text.span (/= '/') (from rawName)
-        defaultProjectName = CanonicalProjectName loc.project.provider rawName
 
         allTenantsConfig :: Map TenantName TenantConfig -> [TenantConfig]
         allTenantsConfig =
           map snd
-            . filter (\(tenant, _) -> tenant `Set.member` tenants)
+            . filter (\(tenant, _) -> tenant `Set.member` loc.tenants)
             . Map.toList
 
         allProjects :: Map TenantName TenantConfig -> Set CanonicalProjectName
