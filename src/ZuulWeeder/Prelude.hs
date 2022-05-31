@@ -144,6 +144,7 @@ module ZuulWeeder.Prelude
     Data.Maybe.isJust,
     Data.Maybe.isNothing,
     Data.Maybe.fromMaybe,
+    Data.Maybe.maybeToList,
     Data.Either.fromRight,
 
     -- * base control

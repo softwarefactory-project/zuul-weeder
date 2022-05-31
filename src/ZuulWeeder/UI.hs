@@ -185,7 +185,7 @@ cssColors = Text.unlines $ map mkCssColor [minBound .. maxBound]
   where
     mkCssColor :: VertexType -> Text
     mkCssColor vt =
-      "." <> vertexTypeName vt <> " { color: " <> vertexColor vt <> ";}"
+      ".color-" <> vertexTypeName vt <> " { color: " <> vertexColor vt <> ";}"
 
 jsColors :: Text
 jsColors =
@@ -243,11 +243,14 @@ welcomeComponent ctx = do
 title :: Text -> Html ()
 title = with' h2_ "font-bold" . toHtml
 
-mkIconClass :: Maybe Text -> Text -> Html ()
-mkIconClass cl name = with' i_ ("pr-1 font-bold align-bottom " <> name <> maybe "" (mappend " ") cl) mempty
+mkIconTitle :: Maybe Text -> Text -> Html ()
+mkIconTitle iconTitle name =
+  with i_ ([class_ ("pr-1 font-bold align-bottom " <> name <> maybe "" (mappend " color-") iconTitle)] <> titleAttr) mempty
+  where
+    titleAttr = maybeToList (title_ <$> iconTitle)
 
 mkIcon :: Text -> Html ()
-mkIcon = mkIconClass Nothing
+mkIcon = mkIconTitle Nothing
 
 aboutComponent :: Html ()
 aboutComponent = do
@@ -324,7 +327,7 @@ toD3Graph scope g =
     toLinks (a, b) = ZuulWeeder.UI.D3Link (hash a) (hash b)
 
 vertexTypeIcon :: VertexType -> Html ()
-vertexTypeIcon vt = mkIconClass (Just $ vertexTypeName vt) ("ri-" <> iconName)
+vertexTypeIcon vt = mkIconTitle (Just $ vertexTypeName vt) ("ri-" <> iconName)
   where
     iconName = case vt of
       VAbstractJobT -> "file-text-line"
