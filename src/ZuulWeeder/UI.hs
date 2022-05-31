@@ -29,6 +29,7 @@ where
 
 import Algebra.Graph qualified
 import Data.Aeson qualified
+import Data.List qualified as List
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Set qualified as Set
@@ -95,6 +96,33 @@ svg#d3 {
   top: 0;
   left: 0;
   z-index: -1;
+}
+
+.tree-caret {
+  cursor: pointer;
+  user-select: none;
+  font-size: 10px;
+  vertical-align: super;
+  color: rgb(100, 116, 139);
+}
+
+.tree-caret::before {
+  content: "\25B6";
+  display: inline-block;
+  color: rgb(100, 116, 139);
+  margin-right: 6px;
+}
+
+.tree-caret-down::before {
+  transform: rotate(90deg);
+}
+
+.nested {
+  display: none;
+}
+
+.active {
+  display: block;
 }
 |]
         <> cssColors
@@ -534,6 +562,8 @@ objectInfo ctx vertices analysis = do
     div_ do
       title "Dependencies"
       traverse_ (renderTree 0) dependencies
+  script_ do
+    "addTreeHandler()"
   where
     renderConfigLink loc =
       li_ do
@@ -579,9 +609,18 @@ objectInfo ctx vertices analysis = do
       let listStyle
             | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
             | otherwise = ""
-      with' ul_ listStyle do
-        li_ $ vertexLink ctx root (vertexName root)
-        traverse_ (renderTree (depth + 1)) childs
+          isNested = depth > 2
+          showCarret = not (List.null childs) && depth > 1
+          nestedStyle
+            | isNested = " nested"
+            | otherwise = ""
+      with' ul_ (listStyle <> nestedStyle) do
+        li_ do
+          when showCarret do
+            with' span_ "tree-caret" mempty
+          vertexLink ctx root (vertexName root)
+          unless (List.null childs) do
+            traverse_ (renderTree (depth + 1)) childs
 
 vertexScope :: Scope -> Set Vertex -> [Vertex]
 vertexScope scope vertices = Set.toList $ case scope of

@@ -102,3 +102,16 @@ function renderToy(url) {
     }
   });
 }
+
+function addTreeHandler() {
+  Array.from(document.getElementsByClassName("tree-caret")).forEach(toggler => {
+    toggler.addEventListener("click", function () {
+      Array.from(this.parentElement.querySelectorAll(".nested"))
+         .filter(subList =>  subList.parentElement === this.parentElement)
+         .forEach(subList => {
+            subList.classList.toggle("active");
+      });
+      this.classList.toggle("tree-caret-down");
+    });
+  });
+}
