@@ -40,8 +40,6 @@ import Paths_zuul_weeder (version)
 import Servant hiding (Context)
 import Servant.HTML.Lucid (HTML)
 import Servant.Server.StaticFiles qualified
-import WaiAppStatic.Storage.Filesystem qualified
-import WaiAppStatic.Types qualified
 import Web.FormUrlEncoded (FromForm)
 import Zuul.Config
 import Zuul.ConfigLoader (Config (..), ConfigMap)
@@ -73,9 +71,9 @@ mainBody ctx page mainComponent =
       script_ jsColors
       style_ css
       link_ [href_ $ distUrl ctx "remixicon.min.css", rel_ "stylesheet"]
-      link_ [href_ $ distUrl ctx "tailwind.css", rel_ "stylesheet"]
+      link_ [href_ $ distUrl ctx ("tailwind.css?version=" <> gitVersion), rel_ "stylesheet"]
       with (script_ mempty) [src_ $ distUrl ctx "d3.v4.min.js"]
-      with (script_ mempty) [src_ $ distUrl ctx "graph.js"]
+      with (script_ mempty) [src_ $ distUrl ctx ("graph.js?version=" <> gitVersion)]
       with (script_ mempty) [src_ $ distUrl ctx "htmx.min.js"]
     with body_ [id_ "main"] do
       navComponent ctx page
@@ -718,14 +716,9 @@ app config rootURL distPath = serve (Proxy @API) rootServer
   where
     rootServer :: Server API
     rootServer =
-      Servant.Server.StaticFiles.serveDirectoryWith staticSettings
+      Servant.Server.StaticFiles.serveDirectoryWebApp distPath
         :<|> server (Context rootURL UnScoped)
         :<|> server . Context rootURL . Scoped . getTNU
-
-    staticSettings =
-      (WaiAppStatic.Storage.Filesystem.defaultWebAppSettings distPath)
-        { WaiAppStatic.Types.ssMaxAge = WaiAppStatic.Types.NoMaxAge
-        }
 
     server :: Context -> Server BaseAPI
     server ctx =
