@@ -157,18 +157,24 @@ findReachableForest ::
   ConfigGraph ->
   -- | The forest
   Forest VertexName
-findReachableForest scope xs = concatMap goRoot . Algebra.Graph.ToGraph.dfsForestFrom vertices
+findReachableForest baseScope xs = concatMap goRoot . Algebra.Graph.ToGraph.dfsForestFrom vertices
   where
     vertices = NE.toList xs
-    goRoot (Node _ child) = concatMap go child
-    go :: Tree Vertex -> [Tree VertexName]
-    go tree@(Node root _) = case scope of
-      Just tenants
-        | tenants `Set.isSubsetOf` root.tenants -> go' tree
-        | otherwise -> []
-      Nothing -> go' tree
-    go' :: Tree Vertex -> [Tree VertexName]
-    go' (Node root childs) = [Node root.name (concatMap go childs)]
+    goRoot (Node top child) = concatMap (go scope) child
+      where
+        scope = case baseScope of
+          Just tenants -> tenants `Set.intersection` top.tenants
+          Nothing -> top.tenants
+
+    go :: Set TenantName -> Tree Vertex -> [Tree VertexName]
+    go scope tree@(Node root _)
+      | Set.null newScope = []
+      | otherwise = go' newScope tree
+      where
+        newScope = scope `Set.intersection` root.tenants
+
+    go' :: Set TenantName -> Tree Vertex -> [Tree VertexName]
+    go' scope (Node root childs) = [Node root.name (concatMap (go scope) childs)]
 
 -- | The config analysis result used by the "ZuulWeeder.UI" module.
 data Analysis = Analysis
