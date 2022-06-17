@@ -177,7 +177,7 @@ tls_cert=cert.pem
 tls_key=key.pem
 tls_ca=ca.pem
 
-[connection gerrit]
+[connection "gerrit"]
 driver=gerrit
 server=managesf.sftests.com
 canonical_hostname=sftests.com

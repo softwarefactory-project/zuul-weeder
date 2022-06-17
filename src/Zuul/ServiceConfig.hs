@@ -119,11 +119,11 @@ parseConfig sections = do
       host <- uriAuthority uri `orDie` "invalid url"
       pure (from $ uriRegName host, baseUrl)
 
-    dropSectionPrefix = Text.drop 11
+    dropSectionPrefix = Text.dropAround (== '"') . Text.drop 11
     getSectionName sn = ConnectionName $ dropSectionPrefix sn
     getCanonicalName hm = case HM.lookup "canonical_hostname" hm of
       Just hostname -> pure hostname
       Nothing -> getServer hm
     getServer hm = case HM.lookup "server" hm of
       Just server -> pure server
-      Nothing -> Left $ "Unable to find mandatory 'server' key in: " <> Text.pack (show hm)
+      Nothing -> Left $ "Unable to find mandatory 'canonical_hostname' or 'server' key in: " <> Text.pack (show hm)

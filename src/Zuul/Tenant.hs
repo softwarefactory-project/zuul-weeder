@@ -243,7 +243,7 @@ resolveTenant serviceConfig tenantsConfig configLoc zct =
         matchProject tp =
           let providerName = case Map.lookup cn serviceConfig.connections of
                 Just pn -> pn
-                Nothing -> error "Unable to find project connection's provider name"
+                Nothing -> error $ "Unable to find project connection's provider name: " <> show cn <> ", for project: " <> show tp
            in and
                 [ CanonicalProjectName providerName tp.name == configLoc.project,
                   zct `Set.member` tp.includedConfigElements,
