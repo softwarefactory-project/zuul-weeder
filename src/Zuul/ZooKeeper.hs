@@ -128,7 +128,9 @@ mkZKFile :: Value -> FilePathT -> Maybe ZKFile
 mkZKFile zkJSONData path = do
   [_, _, filePath', _, branch', Network.URI.Encode.decodeText -> providerPath'] <-
     pure $
-      take 6 $ reverse $ Text.split (== '/') (from path)
+      take 6 $
+        reverse $
+          Text.split (== '/') (from path)
   (provider, project) <- case Text.breakOn "/" providerPath' of
     (_, "") -> Nothing
     (x, xs) -> Just (x, Text.drop 1 xs)

@@ -800,7 +800,9 @@ dotGraph analysis = "digraph G {" <> Text.unlines dotGraph' <> "}"
     allNodes :: Map VertexType [Text]
     allNodes =
       Map.fromListWith mappend $
-        Set.toList $ Set.map (\v -> (from v.name, [from v.name])) $ analysis.vertices
+        Set.toList $
+          Set.map (\v -> (from v.name, [from v.name])) $
+            analysis.vertices
 
     dotEdges :: ConfigGraph -> [Text]
     dotEdges = fmap dotEdge . Algebra.Graph.edgeList

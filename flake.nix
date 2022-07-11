@@ -3,10 +3,11 @@
 #   TMPDIR=/tmp/podman podman load < result
 {
   description = "Zuul Weeder";
-  nixConfig.bash-prompt = "[nix(zuul-weeder)] ";
+  nixConfig.bash-prompt = "[nix(zuul-weeder)]$ ";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
+    hspkgs.url = "github:podenv/hspkgs/24d2028871584f71313ac06e23ef143db61aea34";
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";
@@ -14,40 +15,11 @@
     calligraphy.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils, tailwind, calligraphy }:
+  outputs = { self, nixpkgs, hspkgs, flake-utils, tailwind, calligraphy }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        pkgs = hspkgs.pkgs;
         packageName = "zuul-weeder";
-
-        haskellOverrides = {
-          overrides = hpFinal: hpPrev:
-            let
-              mk-servant-lib = hpPrev: name:
-                let
-                  # Use direct source because nixpkgs somehow can't fetch
-                  servant-src = builtins.fetchGit {
-                    url = "https://github.com/haskell-servant/servant";
-                    ref = "master";
-                    rev = "c19ed0fb925fbe62365adcaf286c00c497adf8fb";
-                  };
-                in (hpPrev.callCabal2nix "sevant${name}"
-                  "${servant-src}/servant${name}" { });
-
-            in {
-              # nixpkgs servant somehow doesn't fetch, use direct src
-              servant = mk-servant-lib hpPrev "";
-              servant-server = mk-servant-lib hpPrev "-server";
-
-              # pull ghc-9.2 support for weeder (https://github.com/ocharles/weeder/pull/94)
-              weeder = pkgs.haskell.lib.justStaticExecutables
-                (hpPrev.callCabal2nix "weeder" (builtins.fetchGit {
-                  url = "https://github.com/ocharles/weeder";
-                  ref = "master";
-                  rev = "c58ed2a8c66dcf0b469f8343efb6b6f61c7c40f3";
-                }) { });
-            };
-        };
 
         python_svg =
           pkgs.python310.withPackages (ps: with ps; [ ps.lxml ps.six ]);
@@ -63,8 +35,7 @@
 
         python = pkgs.python310.withPackages (ps: with ps; [ kazoo ]);
 
-        haskellPackages =
-          pkgs.haskell.packages.ghc922.override haskellOverrides;
+        haskellPackages = pkgs.hspkgs;
         zuulWeederPackage =
           (haskellPackages.callCabal2nix packageName self { }).overrideAttrs
           (_: { GIT_COMMIT = self.rev or "dirty"; });
@@ -109,11 +80,11 @@
 
           buildInputs = with haskellPackages; [
             python
-            ghcid
-            ormolu
-            cabal-install
-            hlint
-            weeder
+            pkgs.ghcid
+            pkgs.ormolu
+            pkgs.cabal-install
+            pkgs.hlint
+            pkgs.weeder
             pkgs.haskell-language-server
             pkgs.graphviz
             svg_stack
