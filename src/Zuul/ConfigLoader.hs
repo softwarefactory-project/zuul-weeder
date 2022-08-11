@@ -147,9 +147,11 @@ mergeConfig c1 c2 =
         newName = TenantName $ Text.snoc n c
     allTenants = Set.union c1.tenants c2.tenants
 
-doUpdateTopConfig :: TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config IO ()
+doUpdateTopConfig :: Monad m => TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config m ()
 doUpdateTopConfig tr configLoc ze = case ze of
-  ZJob job -> #jobs %= insertConfig job.name job
+  ZJob job -> do
+    requiredProjects <- doResolveProjects job.requiredProjects
+    #jobs %= insertConfig job.name (job {requiredCanonicalProjects = requiredProjects})
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Set.fromList node.labels
@@ -167,6 +169,16 @@ doUpdateTopConfig tr configLoc ze = case ze of
   ZQueue queue -> #queues %= insertConfig queue queue
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
   where
+    doResolveProjects :: Monad m => Maybe [ProjectName] -> StateT Config m (Maybe [CanonicalProjectName])
+    doResolveProjects (Just xs) = Just . catMaybes <$> traverse doResolveProject xs
+    doResolveProjects Nothing = pure Nothing
+    doResolveProject :: Monad m => ProjectName -> StateT Config m (Maybe CanonicalProjectName)
+    doResolveProject pn = case tr.resolveProject configLoc pn of
+      Just cpn -> pure (Just cpn)
+      Nothing -> do
+        #configErrors %= (AmbiguousName (from pn) :)
+        pure Nothing
+
     isRegex (ProjectName n) = "^" `Text.isPrefixOf` n
     insertConfig k v = Map.insertWith mappend k [(configLoc, v)]
 
@@ -232,6 +244,8 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
         <*> decodeJobNodeset
         <*> fmap toMaybe (decodeAsList "branches" BranchName va)
         <*> fmap toMaybe decodeJobDependencies
+        <*> fmap toMaybe decodeRequiredProjects
+        <*> pure Nothing -- This will be filled in updateConfig
         <*> fmap toMaybe decodeSemaphores
         <*> fmap toMaybe decodeSecrets
       where
@@ -282,6 +296,19 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
           String v -> pure $ JobName v
           Object v -> JobName <$> getName v
           anyOther -> decodeFail "Unexpected job dependency value" anyOther
+
+        decodeRequiredProjects :: Decoder [ProjectName]
+        decodeRequiredProjects = case HM.lookup "required-projects" va of
+          Just (String v) -> pure [ProjectName v]
+          Just (Array xs) -> traverse decodeRequiredProject (V.toList xs)
+          Just _ -> decodeFail "Unexpected required-projects value" (Object va)
+          Nothing -> pure []
+
+        decodeRequiredProject :: Value -> Decoder ProjectName
+        decodeRequiredProject = \case
+          String v -> pure $ ProjectName v
+          Object v -> ProjectName <$> getName v
+          anyOther -> decodeFail "Unexpected job required-projects value" anyOther
 
         decodeJobNodesetNodes xs = do
           names <- decodeNodesetNodes xs

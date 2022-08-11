@@ -399,6 +399,10 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           Just vDependencyJobs -> vJob `connects` vDependencyJobs
           Nothing -> #graphErrors %= (("Can't find : " <> show dJob) :)
 
+      -- handle job required-projects
+      forM_ (concat job.requiredCanonicalProjects) $ \dProj ->
+        vJob `connects` Set.singleton (mkVertex loc dProj)
+
       -- handle job secrets
       forM_ (concat job.secrets) $ \secret -> do
         case lookupTenant loc.tenants secret config.secrets of

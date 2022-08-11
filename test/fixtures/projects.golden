@@ -49,6 +49,8 @@
                                 )
                             , branches = Nothing
                             , dependencies = Nothing
+                            , requiredProjects = Nothing
+                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -69,6 +71,8 @@
                             , branches = Nothing
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
+                            , requiredProjects = Nothing
+                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -89,6 +93,8 @@
                                 )
                             , branches = Nothing
                             , dependencies = Nothing
+                            , requiredProjects = Nothing
+                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }

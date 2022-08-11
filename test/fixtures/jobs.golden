@@ -9,6 +9,8 @@
             )
         , branches = Nothing
         , dependencies = Nothing
+        , requiredProjects = Nothing
+        , requiredCanonicalProjects = Nothing
         , semaphores = Nothing
         , secrets = Just
             [ SecretName "site_sflogs" ]
@@ -30,6 +32,8 @@
             [ JobName "job1"
             , JobName "job2"
             ]
+        , requiredProjects = Nothing
+        , requiredCanonicalProjects = Nothing
         , semaphores = Nothing
         , secrets = Just
             [ SecretName "service_user" ]
@@ -46,6 +50,11 @@
         , branches = Just
             [ BranchName "master" ]
         , dependencies = Nothing
+        , requiredProjects = Just
+            [ ProjectName "config"
+            , ProjectName "config-named"
+            ]
+        , requiredCanonicalProjects = Nothing
         , semaphores = Just
             [ SemaphoreName "semaphore-config-update" ]
         , secrets = Just
@@ -63,6 +72,8 @@
             )
         , branches = Nothing
         , dependencies = Nothing
+        , requiredProjects = Nothing
+        , requiredCanonicalProjects = Nothing
         , semaphores = Nothing
         , secrets = Nothing
         }

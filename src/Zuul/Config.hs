@@ -156,6 +156,8 @@ data Job = Job
     nodeset :: Maybe JobNodeset,
     branches :: Maybe [BranchName],
     dependencies :: Maybe [JobName],
+    requiredProjects :: Maybe [ProjectName],
+    requiredCanonicalProjects :: Maybe [CanonicalProjectName],
     semaphores :: Maybe [SemaphoreName],
     secrets :: Maybe [SecretName]
   }

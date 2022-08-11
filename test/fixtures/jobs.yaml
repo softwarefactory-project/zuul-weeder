@@ -51,6 +51,10 @@
     final: true
     allowed-projects:
       - config
+    required-projects:
+      - config
+      - name: config-named
+        override-checkout: main
     description: Deploy config repo update.
     run: playbooks/config/update.yaml
     branches:
