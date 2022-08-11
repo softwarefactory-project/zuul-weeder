@@ -39,7 +39,7 @@
                 { name = PipelineName "check"
                 , jobs =
                     [ PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "linters"
                             , abstract = Nothing
                             , parent = Nothing
@@ -50,7 +50,6 @@
                             , branches = Nothing
                             , dependencies = Nothing
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -63,7 +62,7 @@
                     [ PJName
                         ( JobName "sf-rpm-build" )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "sf-ci-openshift-integration"
                             , abstract = Nothing
                             , parent = Nothing
@@ -72,7 +71,6 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -83,7 +81,7 @@
                 { name = PipelineName "gate"
                 , jobs =
                     [ PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "linters"
                             , abstract = Nothing
                             , parent = Nothing
@@ -94,7 +92,6 @@
                             , branches = Nothing
                             , dependencies = Nothing
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }

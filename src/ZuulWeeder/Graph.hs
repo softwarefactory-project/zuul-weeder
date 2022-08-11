@@ -282,7 +282,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         vReporter `connect` vPipeline
         insertVertex loc vReporter
 
-    goPipelineConfig :: ConfigLoc -> Vertex -> (PipelineName -> VertexName) -> ProjectPipeline -> State Analysis ()
+    goPipelineConfig :: ConfigLoc -> Vertex -> (PipelineName -> VertexName) -> ProjectPipeline CanonicalProjectName -> State Analysis ()
     goPipelineConfig loc vProject mk pipeline = do
       -- pipeline config is a list of jobs attached to a project pipeline
       let vPipelineConfig = Vertex (mk pipeline.name) loc.tenants
@@ -400,7 +400,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
           Nothing -> #graphErrors %= (("Can't find : " <> show dJob) :)
 
       -- handle job required-projects
-      forM_ (concat job.requiredCanonicalProjects) $ \dProj ->
+      forM_ (concat job.requiredProjects) $ \dProj ->
         vJob `connects` Set.singleton (mkVertex loc dProj)
 
       -- handle job secrets

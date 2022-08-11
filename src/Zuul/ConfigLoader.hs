@@ -149,18 +149,22 @@ mergeConfig c1 c2 =
 
 doUpdateTopConfig :: Monad m => TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config m ()
 doUpdateTopConfig tr configLoc ze = case ze of
-  ZJob job -> do
-    requiredProjects <- doResolveProjects job.requiredProjects
-    #jobs %= insertConfig job.name (job {requiredCanonicalProjects = requiredProjects})
+  ZJob baseJob -> do
+    job <- doResolveJob baseJob
+    #jobs %= insertConfig job.name job
   ZNodeset node -> do
     #nodesets %= insertConfig node.name node
     traverse_ (\v -> #nodeLabels %= insertConfig v v) $ Set.fromList node.labels
-  ZProject project
-    | isRegex project.name -> #projectRegexs %= insertConfig (from project.name) project
-    | otherwise -> case tr.resolveProject configLoc project.name of
+  ZProject baseProject -> do
+    project <- doResolveProjectJob baseProject
+    if isRegex project.name
+      then #projectRegexs %= insertConfig (from project.name) project
+      else case tr.resolveProject configLoc project.name of
         Just pn -> #projects %= insertConfig pn project
         Nothing -> #configErrors %= (AmbiguousName (from project.name) :)
-  ZProjectTemplate template -> #projectTemplates %= insertConfig template.name template
+  ZProjectTemplate baseTemplate -> do
+    template <- doResolveProjectTemplateJob baseTemplate
+    #projectTemplates %= insertConfig template.name template
   ZPipeline pipeline -> do
     #pipelines %= insertConfig pipeline.name pipeline
     traverse_ (\(PipelineTrigger v) -> #triggers %= insertConfig v v) pipeline.triggers
@@ -169,6 +173,31 @@ doUpdateTopConfig tr configLoc ze = case ze of
   ZQueue queue -> #queues %= insertConfig queue queue
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
   where
+    doResolveProjectTemplateJob :: Monad m => BaseProjectTemplate ProjectName -> StateT Config m ProjectTemplate
+    doResolveProjectTemplateJob pt = do
+      pipelines <- mapMSet doResolveProjectPipeline pt.pipelines
+      pure $ pt & #pipelines `set` pipelines
+
+    doResolveProjectJob :: Monad m => BaseProject ProjectName -> StateT Config m Project
+    doResolveProjectJob p = do
+      pipelines <- mapMSet doResolveProjectPipeline p.pipelines
+      pure $ p & #pipelines `set` pipelines
+
+    doResolveProjectPipeline :: Monad m => ProjectPipeline ProjectName -> StateT Config m (ProjectPipeline CanonicalProjectName)
+    doResolveProjectPipeline projectPipeline = do
+      jobs <- mapM doResolvePipelineJob projectPipeline.jobs
+      pure $ projectPipeline & #jobs `set` jobs
+
+    doResolvePipelineJob :: Monad m => PipelineJob ProjectName -> StateT Config m (PipelineJob CanonicalProjectName)
+    doResolvePipelineJob = \case
+      PJName jobName -> pure $ PJName jobName
+      PJJob job -> PJJob <$> doResolveJob job
+
+    doResolveJob :: Monad m => BaseJob ProjectName -> StateT Config m Job
+    doResolveJob job = do
+      requiredProjects <- doResolveProjects job.requiredProjects
+      pure $ job & #requiredProjects `set` requiredProjects
+
     doResolveProjects :: Monad m => Maybe [ProjectName] -> StateT Config m (Maybe [CanonicalProjectName])
     doResolveProjects (Just xs) = Just . catMaybes <$> traverse doResolveProject xs
     doResolveProjects Nothing = pure Nothing
@@ -231,21 +260,20 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
             pure $ ConnectionName . Data.Aeson.Key.toText <$> HM.keys obj
           Nothing -> pure []
 
-    decodeJob :: Object -> Decoder Job
+    decodeJob :: Object -> Decoder (BaseJob ProjectName)
     decodeJob va = do
       name <- JobName <$> getName va
       decodeJobContent name va
 
-    decodeJobContent :: JobName -> Object -> Decoder Job
+    decodeJobContent :: JobName -> Object -> Decoder (BaseJob ProjectName)
     decodeJobContent name va = do
-      Job name
+      BaseJob name
         <$> fmap toMaybe' decodeJobAbstract
         <*> decodeJobParent
         <*> decodeJobNodeset
         <*> fmap toMaybe (decodeAsList "branches" BranchName va)
         <*> fmap toMaybe decodeJobDependencies
         <*> fmap toMaybe decodeRequiredProjects
-        <*> pure Nothing -- This will be filled in updateConfig
         <*> fmap toMaybe decodeSemaphores
         <*> fmap toMaybe decodeSecrets
       where
@@ -345,7 +373,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
       labels <- decodeNodesetNodes =<< decodeList =<< decodeObjectAttribute "nodes" va
       pure $ Nodeset {name, labels}
 
-    decodeProject :: Object -> Decoder Project
+    decodeProject :: Object -> Decoder (BaseProject ProjectName)
     decodeProject va = do
       name <- case HM.lookup "name" va of
         (Just x) -> ProjectName <$> decodeString x
@@ -360,7 +388,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
       (Just x) -> Just . QueueName <$> decodeString x
       _ -> pure Nothing
 
-    decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe (Decoder ProjectPipeline)
+    decodeProjectPipeline :: (Data.Aeson.Key.Key, Value) -> Maybe (Decoder (ProjectPipeline ProjectName))
     decodeProjectPipeline (Data.Aeson.Key.toText -> pipelineName', va')
       -- These project configuration attribute are not pipelines
       | pipelineName' `elem` ["name", "vars", "description", "default-branch", "merge-mode", "squash-merge"] = Nothing
@@ -375,7 +403,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
             pure $ ProjectPipeline {name, jobs}
           _ -> decodeFail "Unexpected pipeline" va'
       where
-        decodeProjectPipelineJob :: Value -> Decoder PipelineJob
+        decodeProjectPipelineJob :: Value -> Decoder (PipelineJob ProjectName)
         decodeProjectPipelineJob = \case
           String v -> pure $ PJName (JobName v)
           Object jobObj -> do
@@ -383,7 +411,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
             PJJob <$> decodeJobContent (JobName name) obj
           v -> decodeFail "Unexpected project pipeline jobs format" v
 
-    decodeProjectTemplate :: Object -> Decoder ProjectTemplate
+    decodeProjectTemplate :: Object -> Decoder (BaseProjectTemplate ProjectName)
     decodeProjectTemplate va = do
       name <- ProjectTemplateName <$> getName va
       queue <- decodeQueueName va

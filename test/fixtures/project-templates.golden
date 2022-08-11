@@ -9,7 +9,7 @@
                     [ PJName
                         ( JobName "sf-rpm-build" )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "sf-ci-functional-minimal"
                             , abstract = Nothing
                             , parent = Nothing
@@ -18,13 +18,12 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
                         )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "sf-ci-functional-allinone"
                             , abstract = Nothing
                             , parent = Nothing
@@ -33,13 +32,12 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
                         )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "sf-tenants"
                             , abstract = Nothing
                             , parent = Nothing
@@ -48,7 +46,6 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -61,7 +58,7 @@
                     [ PJName
                         ( JobName "sf-rpm-build" )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "sf-ci-functional-minimal"
                             , abstract = Nothing
                             , parent = Nothing
@@ -70,13 +67,12 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
                         )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "sf-ci-functional-allinone"
                             , abstract = Nothing
                             , parent = Nothing
@@ -85,13 +81,12 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
                         )
                     , PJJob
-                        ( Job
+                        ( BaseJob
                             { name = JobName "wait-for-changes-ahead"
                             , abstract = Nothing
                             , parent = Nothing
@@ -102,7 +97,6 @@
                                 , JobName "sf-ci-functional-allinone"
                                 ]
                             , requiredProjects = Nothing
-                            , requiredCanonicalProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }

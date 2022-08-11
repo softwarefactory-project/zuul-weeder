@@ -33,16 +33,19 @@ module Zuul.Config
     CanonicalProjectName (..),
 
     -- * Configuration data types
-    Job (..),
+    BaseJob (..),
+    Job,
     JobNodeset (..),
-    Project (..),
+    Project,
+    BaseProject (..),
     ProjectPipeline (..),
     PipelineJob (..),
     PipelineTrigger (..),
     PipelineReporter (..),
     Pipeline (..),
     Nodeset (..),
-    ProjectTemplate (..),
+    ProjectTemplate,
+    BaseProjectTemplate (..),
 
     -- * Configuration identifiers
     BaseConfigLoc (..),
@@ -150,56 +153,64 @@ data Nodeset = Nodeset
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
-data Job = Job
+-- Ideally, a job should be decoded directly using a CanonicalProjectName for the
+-- required-projects list, but to resolve a project name, we need to know the tenant
+-- owning the job, and this is presently only possible after the config element has been decoded.
+data BaseJob project = BaseJob
   { name :: JobName,
     abstract :: Maybe Bool,
     parent :: Maybe JobName,
     nodeset :: Maybe JobNodeset,
     branches :: Maybe [BranchName],
     dependencies :: Maybe [JobName],
-    requiredProjects :: Maybe [ProjectName],
-    requiredCanonicalProjects :: Maybe [CanonicalProjectName],
+    requiredProjects :: Maybe [project],
     semaphores :: Maybe [SemaphoreName],
     secrets :: Maybe [SecretName]
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
-instance FromJSON Job where
+type Job = BaseJob CanonicalProjectName
+
+instance FromJSON a => FromJSON (BaseJob a) where
   parseJSON = genericParseJSON defaultOptions {omitNothingFields = True}
 
-instance ToJSON Job where
+instance ToJSON a => ToJSON (BaseJob a) where
   toJSON = genericToJSON defaultOptions {omitNothingFields = True}
 
-data PipelineJob
+data PipelineJob a
   = PJName JobName
-  | PJJob Job
+  | PJJob (BaseJob a)
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
-instance From PipelineJob JobName where
+instance From (PipelineJob a) JobName where
   from = \case
     PJName name -> name
     PJJob job -> job.name
 
-data ProjectPipeline = ProjectPipeline
+data ProjectPipeline a = ProjectPipeline
   { name :: PipelineName,
-    jobs :: [PipelineJob]
+    jobs :: [PipelineJob a]
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
-data Project = Project
+data BaseProject a = Project
   { name :: ProjectName,
     templates :: [ProjectTemplateName],
     queue :: Maybe QueueName,
-    pipelines :: Set ProjectPipeline
+    pipelines :: Set (ProjectPipeline a)
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
-data ProjectTemplate = ProjectTemplate
+type Project = BaseProject CanonicalProjectName
+
+data BaseProjectTemplate a = ProjectTemplate
   { name :: ProjectTemplateName,
     queue :: Maybe QueueName,
-    pipelines :: Set ProjectPipeline
+    pipelines :: Set (ProjectPipeline a)
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
+
+type ProjectTemplate = BaseProjectTemplate CanonicalProjectName
 
 newtype PipelineTrigger = PipelineTrigger {connectionName :: ConnectionName}
   deriving (Show, Ord, Eq, Generic)
@@ -218,10 +229,10 @@ data Pipeline = Pipeline
 
 -- | The sum of all the configuration elements.
 data ZuulConfigElement
-  = ZJob Job
-  | ZProject Project
+  = ZJob (BaseJob ProjectName)
+  | ZProject (BaseProject ProjectName)
   | ZNodeset Nodeset
-  | ZProjectTemplate ProjectTemplate
+  | ZProjectTemplate (BaseProjectTemplate ProjectName)
   | ZPipeline Pipeline
   | ZQueue QueueName
   | ZSemaphore SemaphoreName

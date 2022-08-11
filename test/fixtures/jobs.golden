@@ -1,5 +1,5 @@
 [ ZJob
-    ( Job
+    ( BaseJob
         { name = JobName "base"
         , abstract = Just True
         , parent = Nothing
@@ -10,14 +10,13 @@
         , branches = Nothing
         , dependencies = Nothing
         , requiredProjects = Nothing
-        , requiredCanonicalProjects = Nothing
         , semaphores = Nothing
         , secrets = Just
             [ SecretName "site_sflogs" ]
         }
     )
 , ZJob
-    ( Job
+    ( BaseJob
         { name = JobName "config-check"
         , abstract = Nothing
         , parent = Just
@@ -33,14 +32,13 @@
             , JobName "job2"
             ]
         , requiredProjects = Nothing
-        , requiredCanonicalProjects = Nothing
         , semaphores = Nothing
         , secrets = Just
             [ SecretName "service_user" ]
         }
     )
 , ZJob
-    ( Job
+    ( BaseJob
         { name = JobName "config-update"
         , abstract = Nothing
         , parent = Just
@@ -54,7 +52,6 @@
             [ ProjectName "config"
             , ProjectName "config-named"
             ]
-        , requiredCanonicalProjects = Nothing
         , semaphores = Just
             [ SemaphoreName "semaphore-config-update" ]
         , secrets = Just
@@ -62,7 +59,7 @@
         }
     )
 , ZJob
-    ( Job
+    ( BaseJob
         { name = JobName "wait-for-changes-ahead"
         , abstract = Nothing
         , parent = Nothing
@@ -73,7 +70,6 @@
         , branches = Nothing
         , dependencies = Nothing
         , requiredProjects = Nothing
-        , requiredCanonicalProjects = Nothing
         , semaphores = Nothing
         , secrets = Nothing
         }

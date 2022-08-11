@@ -52,6 +52,7 @@ module ZuulWeeder.Prelude
     Data.Set.Set,
     Data.Tree.Forest,
     Data.Tree.Tree (..),
+    mapMSet,
 
     -- * witch
     Witch.From,
@@ -220,6 +221,7 @@ import Data.Map (Map)
 import Data.Maybe qualified
 import Data.Proxy qualified
 import Data.Set (Set)
+import Data.Set qualified
 import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
@@ -376,3 +378,6 @@ decodeAsList k build va = case HM.lookup k va of
 -- | Abort a decoder.
 decodeFail :: Text -> Value -> Decoder a
 decodeFail t v = Decoder (Left (t, v))
+
+mapMSet :: (Ord b, Monad m) => (a -> m b) -> Set a -> m (Set b)
+mapMSet f set = Data.Set.fromList <$> mapM f (Data.Set.toList set)
