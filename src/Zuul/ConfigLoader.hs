@@ -182,7 +182,7 @@ doUpdateTopConfig tr configLoc ze = case ze of
     isRegex (ProjectName n) = "^" `Text.isPrefixOf` n
     insertConfig k v = Map.insertWith mappend k [(configLoc, v)]
 
-updateTopConfig :: TenantResolver -> ConfigLoc -> Decoder ZuulConfigElement -> StateT Config IO ()
+updateTopConfig :: TenantResolver -> BaseConfigLoc Void -> Decoder ZuulConfigElement -> StateT Config IO ()
 updateTopConfig tr configLoc (Decoder (Right ze))
   | Set.null tenants = pure ()
   | otherwise = doUpdateTopConfig tr (configLoc & #tenants `set` tenants) ze
@@ -428,9 +428,9 @@ loadConfig urlBuilder tenantResolver zkcE = do
           configPath = zkc.filePath
           -- tenants info are set in the updateTopConfig function.
           -- this is done per element because a tenant may not include everything.
-          tenants = mempty
+          tenants = mempty :: Set Void
           url = fromMaybe (error "Missing connection provider?!") $ Map.lookup providerName urlBuilder
-          configLoc = ConfigLoc canonicalProjectName branchName configPath url tenants
+          configLoc = BaseConfigLoc canonicalProjectName branchName configPath url tenants
        in traverse_ (updateTopConfig tenantResolver configLoc) decodedResults
 
 -- | An empty config.

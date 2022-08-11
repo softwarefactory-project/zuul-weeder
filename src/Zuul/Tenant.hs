@@ -159,7 +159,7 @@ decodeTenantsConfig (ZKTenantsConfig value) = case decoded of
 data TenantResolver = TenantResolver
   { resolveTenants ::
       -- The config location to resolve
-      ConfigLoc ->
+      BaseConfigLoc Void ->
       -- The config element type
       ZuulConfigType ->
       -- The list of tenant allowing the element
@@ -228,7 +228,7 @@ mkResolver sc tc = TenantResolver {resolveTenants = resolveTenant sc tc, resolve
 resolveTenant ::
   ServiceConfig ->
   TenantsConfig ->
-  ConfigLoc ->
+  BaseConfigLoc Void ->
   ZuulConfigType ->
   Set TenantName
 resolveTenant serviceConfig tenantsConfig configLoc zct =

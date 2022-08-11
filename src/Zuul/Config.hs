@@ -45,7 +45,8 @@ module Zuul.Config
     ProjectTemplate (..),
 
     -- * Configuration identifiers
-    ConfigLoc (..),
+    BaseConfigLoc (..),
+    ConfigLoc,
     ZuulConfigElement (..),
     ZuulConfigType (..),
   )
@@ -251,14 +252,17 @@ data ZuulConfigType
   deriving (Show, Eq, Ord, Generic, Enum, Bounded, FromJSON, ToJSON)
 
 -- | The configuration source context location
-data ConfigLoc = ConfigLoc
+data BaseConfigLoc resolved = BaseConfigLoc
   { project :: CanonicalProjectName,
     branch :: BranchName,
     path :: FilePathT,
     url :: ConnectionUrl,
-    tenants :: Set TenantName
+    tenants :: Set resolved
   }
   deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
+
+-- | A resolved config location, where the owning tenants have been resolved.
+type ConfigLoc = BaseConfigLoc TenantName
 
 instance From ConfigLoc CanonicalProjectName where
   from loc = loc.project

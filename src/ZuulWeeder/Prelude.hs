@@ -73,6 +73,7 @@ module ZuulWeeder.Prelude
     Control.Monad.Except.runExceptT,
     Control.Monad.Except.throwError,
     Control.Monad.Trans.Except.except,
+    Data.Functor.Identity.Identity,
     Data.Functor.Identity.runIdentity,
 
     -- * lens
@@ -134,6 +135,7 @@ module ZuulWeeder.Prelude
     -- * base data
     Int64,
     (&),
+    Data.Void.Void,
     Data.Proxy.Proxy (..),
     Data.Bifunctor.first,
     Data.Bool.bool,
@@ -225,6 +227,7 @@ import Data.Text.IO qualified as Text (readFile, writeFile)
 import Data.Tree qualified
 import Data.Vector qualified as V
 import Data.Version qualified
+import Data.Void qualified
 import Debug.Trace qualified
 import GHC.Generics (Generic)
 import GHC.Stack (HasCallStack)

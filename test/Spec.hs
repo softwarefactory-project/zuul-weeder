@@ -173,7 +173,7 @@ tests demo =
       pure $ decodeTenantsConfig (ZKTenantsConfig json)
 
     mkLoc :: ConfigLoc
-    mkLoc = ConfigLoc
+    mkLoc = BaseConfigLoc
               { project = CanonicalProjectName (ProviderName "sftests.com") (ProjectName "sf-config"),
                 branch = BranchName "main",
                 path = FilePathT "zuul.d/pipelines.yaml",
@@ -188,7 +188,7 @@ tests demo =
 
     computeGiteaLinks = do
       let testConfigLoc =
-            ConfigLoc
+            BaseConfigLoc
               { project = CanonicalProjectName (ProviderName "opendev.org") (ProjectName "openstack/nova"),
                 branch = BranchName "master",
                 path = FilePathT ".zuul.yaml",

@@ -1,6 +1,6 @@
 Just
     [
-        ( ConfigLoc
+        ( BaseConfigLoc
             { project = CanonicalProjectName
                 { provider = ProviderName "localhost"
                 , project = ProjectName "project-config"
