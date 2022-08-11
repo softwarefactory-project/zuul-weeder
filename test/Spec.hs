@@ -63,7 +63,8 @@ tests demo =
         goldenTest "Decode Tenant config" "system-config" decodeTenants,
         testCase "Decode Connections config" decodeServiceConfig,
         goldenTest "Get Tenant projects" "zuul" testGetTenantProjects,
-        testCase "Compute gitweb links" computeGitwebLinks
+        testCase "Compute gitweb links" computeGitwebLinks,
+        testCase "Compute opendev gitea links" computeGiteaLinks
       ],
     testGroup
       "Integration"
@@ -184,3 +185,15 @@ tests demo =
       let testConfigLoc = mkLoc
           expected = "https://managesf.sftests.com/plugins/gitiles/sf-config/+/refs/heads/main/zuul.d/pipelines.yaml"
       assertEqual "Expect gitweb url" expected $ configLocUrl testConfigLoc
+
+    computeGiteaLinks = do
+      let testConfigLoc =
+            ConfigLoc
+              { project = CanonicalProjectName (ProviderName "opendev.org") (ProjectName "openstack/nova"),
+                branch = BranchName "master",
+                path = FilePathT ".zuul.yaml",
+                url = GerritUrl "https://review.opendev.org/",
+                tenants = mempty
+              }
+          expected = "https://opendev.org/openstack/nova/src/branch/master/.zuul.yaml"
+      assertEqual "Expect gitea url" expected $ configLocUrl testConfigLoc

@@ -310,7 +310,9 @@ baseUrl ctx =
 -- | Get the URL of a configuration element location
 configLocUrl :: ConfigLoc -> Text
 configLocUrl loc = case loc.url of
-  GerritUrl url -> trimedUrl url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
+  GerritUrl (trimedUrl -> url)
+    | url == "https://review.opendev.org" -> buildGiteaUrl "https://opendev.org"
+    | otherwise -> url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
   GithubUrl url -> buildGithubUrl url
   GitlabUrl url -> buildGitlabUrl url
   PagureUrl url -> buildPagureUrl url
@@ -328,6 +330,7 @@ configLocUrl loc = case loc.url of
     buildGitlabUrl url = trimedUrl url <> "/" <> name <> "/-/blob/" <> branch <> "/" <> path
     buildPagureUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/f/" <> path
     buildGithubUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/" <> path
+    buildGiteaUrl url = url <> "/" <> name <> "/src/branch/" <> branch <> "/" <> path
 
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
