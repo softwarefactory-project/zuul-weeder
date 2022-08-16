@@ -7,7 +7,8 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
-    hspkgs.url = "github:podenv/hspkgs/24d2028871584f71313ac06e23ef143db61aea34";
+    hspkgs.url =
+      "github:podenv/hspkgs/24d2028871584f71313ac06e23ef143db61aea34";
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";
@@ -20,6 +21,11 @@
       let
         pkgs = hspkgs.pkgs;
         packageName = "zuul-weeder";
+
+        rev = if self ? rev then
+          self.rev
+        else
+          throw "Refusing to build from a dirty Git tree!";
 
         python_svg =
           pkgs.python310.withPackages (ps: with ps; [ ps.lxml ps.six ]);
@@ -36,16 +42,16 @@
         python = pkgs.python310.withPackages (ps: with ps; [ kazoo ]);
 
         haskellPackages = pkgs.hspkgs;
-        zuulWeederPackage =
-          (haskellPackages.callCabal2nix packageName self { }).overrideAttrs
-          (_: { GIT_COMMIT = self.rev or "dirty"; });
+        zuulWeederPackage = haskellPackages.callCabal2nix packageName self { };
+        finalPackage =
+          zuulWeederPackage.overrideAttrs (_: { GIT_COMMIT = rev; });
 
         distFiles = pkgs.runCommand "copy-dists" { } ''
           mkdir $out
           cp -v ${./dists}/* $out/
         '';
 
-        exe = pkgs.haskell.lib.justStaticExecutables zuulWeederPackage;
+        exe = pkgs.haskell.lib.justStaticExecutables finalPackage;
 
         mkApp = script: {
           type = "app";
@@ -55,7 +61,7 @@
 
       in {
         apps.default = exe;
-        packages.default = zuulWeederPackage;
+        packages.default = finalPackage;
 
         packages.containerImage = pkgs.dockerTools.buildLayeredImage {
           name = "quay.io/software-factory/zuul-weeder";
