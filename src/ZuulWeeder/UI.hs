@@ -232,7 +232,7 @@ vertexTypeName = \case
   VNodesetT -> "nodeset"
   VNodeLabelT -> "label"
   VQueueT -> "queue"
-  VProjectT -> "project"
+  VProjectT -> "project-config"
   VProjectRegexT -> "project-regex"
   VProjectTemplateT -> "project-template"
   VPipelineT -> "pipeline"
@@ -704,7 +704,7 @@ instance FromHttpApiData VertexTypeUrl where
     "nodeset" -> VNodeset . NodesetName
     "label" -> VNodeLabel . NodeLabelName
     "queue" -> VQueue . QueueName
-    "project" -> VProject . decodeCanonical
+    "project-config" -> VProject . decodeCanonical
     "project-regex" -> VProjectRegex . ProjectRegex
     "project-template" -> VProjectTemplate . ProjectTemplateName
     "pipeline" -> VPipeline . PipelineName

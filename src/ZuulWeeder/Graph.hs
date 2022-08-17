@@ -60,7 +60,7 @@ data VertexName
     VNodeLabel NodeLabelName
   | -- | A queue
     VQueue QueueName
-  | -- | A project
+  | -- | A project configuration
     VProject CanonicalProjectName
   | -- | A project regex
     VProjectRegex ProjectRegex
