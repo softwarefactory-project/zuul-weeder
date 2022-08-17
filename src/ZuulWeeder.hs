@@ -254,9 +254,15 @@ unparsed_abide:
 - pipeline:
     name: check
     trigger:
-      timer: {}
+      gerrit: {}
     success:
       elastic:
+
+- pipeline:
+    name: periodic
+    trigger:
+      timer:
+        - time: '0 8 * * 6'
 
 - job:
     name: wallaby-job

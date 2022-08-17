@@ -259,8 +259,32 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
             [ getPipelineConnections "success",
               getPipelineConnections "failure"
             ]
-      pure $ Pipeline {name, triggers, reporters}
+      pure $ Pipeline {name, triggers, reporters, timers}
       where
+        -- Timers are defined as:
+        --   trigger:
+        --     timer:
+        --      - time: '0 8 * * 6'
+        timers :: [Text]
+        timers = case decodeTimers of
+          (Decoder (Right xs)) -> xs
+          _ -> []
+        decodeTimers = do
+          triggers <- decodeObject =<< decodeObjectAttribute "trigger" va
+          fmap concat <$> forM (HM.toList triggers) $ \(Data.Aeson.Key.toText -> connName, attr) -> do
+            case connName of
+              "timer" -> getTimers attr
+              _ -> pure []
+
+        getTimers v = do
+          attrs <- decodeList v
+          forM attrs $ \attr -> do
+            obj <- decodeObject attr
+            spec <- decodeString =<< decodeObjectAttribute "time" obj
+            case describeCronSchedule <$> parseCronScheduleLoose spec of
+              Left e -> decodeFail ("can't parse time: " <> from (show e)) attr
+              Right x -> pure x
+
         getPipelineConnections key = case HM.lookup key va of
           Just v -> do
             obj <- decodeObject v

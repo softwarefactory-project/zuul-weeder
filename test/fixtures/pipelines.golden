@@ -1,6 +1,7 @@
 [ ZPipeline
     ( Pipeline
         { name = PipelineName "check"
+        , timers = []
         , triggers =
             [ PipelineTrigger
                 { connectionName = ConnectionName "my_gerrit" }
@@ -13,6 +14,25 @@
             , PipelineReporter
                 { connectionName = ConnectionName "my_gerrit" }
             ]
+        }
+    )
+, ZPipeline
+    ( Pipeline
+        { name = PipelineName "periodic"
+        , timers =
+            [ "At 06:10 AM, 10:10 AM, 02:10 PM, 06:10 PM and 10:10 PM"
+            , "At 10:00 AM, only on Tuesday and Friday"
+            , "At 01:30 AM, only on Sunday, Wednesday and Saturday"
+            , "At 00:10 AM, 08:10 AM and 04:10 PM"
+            , "Every minute"
+            , "At 08:00 AM, only on Saturday"
+            , "At 08:00 AM"
+            ]
+        , triggers =
+            [ PipelineTrigger
+                { connectionName = ConnectionName "timer" }
+            ]
+        , reporters = []
         }
     )
 ]

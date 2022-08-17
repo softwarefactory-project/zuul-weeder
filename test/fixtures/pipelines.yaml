@@ -7,3 +7,17 @@
       elasticsearch:
     failure:
       my_gerrit:
+
+- pipeline:
+    name: periodic
+    trigger:
+      timer:
+        - time: '10 6,10,14,18,22 * * *'
+        - time: '0 10 * * 2,5'
+        - time: '30 1 * * 0,3,6'
+        - time: '10 0,8,16 * * *'
+        - time: '* * * * *'
+        # The 6th part is ignored (it's the second)
+        - time: '0 8 * * 6 5'
+        # The 7th part is ignored (it's the jitter)
+        - time: '0 8 * * * * 60'

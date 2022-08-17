@@ -151,6 +151,7 @@ module ZuulWeeder.Prelude
     Data.Either.fromRight,
 
     -- * base control
+    Control.Monad.forM,
     Control.Monad.forM_,
     Control.Monad.foldM,
     Control.Monad.unless,
@@ -177,6 +178,12 @@ module ZuulWeeder.Prelude
     -- * hashable
     Data.Hashable.hash,
     Data.Hashable.Hashable,
+
+    -- * cron
+    System.Cron.Types.CronSchedule,
+    System.Cron.Parser.parseCronSchedule,
+    parseCronScheduleLoose,
+    describeCronSchedule,
 
     -- * base
     module Prelude,
@@ -226,6 +233,7 @@ import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
 import Data.Text.IO qualified as Text (readFile, writeFile)
+import Data.Text qualified
 import Data.Tree qualified
 import Data.Vector qualified as V
 import Data.Version qualified
@@ -236,6 +244,9 @@ import GHC.Stack (HasCallStack)
 import Language.Haskell.TH.Env qualified
 import Main.Utf8 qualified (withUtf8)
 import System.Clock qualified
+import System.Cron.Describe qualified
+import System.Cron.Parser qualified
+import System.Cron.Types qualified
 import System.Directory qualified
 import System.Environment qualified
 import System.FilePath qualified
@@ -245,6 +256,14 @@ import System.Timeout qualified (timeout)
 import Text.Pretty.Simple qualified
 import Text.Printf qualified
 import Witch qualified
+import Data.Attoparsec.Text  qualified
+
+describeCronSchedule :: System.Cron.Types.CronSchedule -> Text
+describeCronSchedule = Witch.from . System.Cron.Describe.describe System.Cron.Describe.defaultOpts
+
+parseCronScheduleLoose :: Text -> Either String System.Cron.Types.CronSchedule
+parseCronScheduleLoose = Data.Attoparsec.Text.parseOnly System.Cron.Parser.cronScheduleLoose . Data.Text.toLower
+
 
 encodeJSON :: Data.Aeson.ToJSON a => a -> ByteString
 encodeJSON = Witch.from . Data.Aeson.encode

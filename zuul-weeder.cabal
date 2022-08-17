@@ -83,7 +83,9 @@ library
   build-depends:       aeson >= 2
                      , algebraic-graphs
                      , mtl
+                     , attoparsec
                      , transformers
+                     , cron
                      , lens
                      , generic-lens
                      , text

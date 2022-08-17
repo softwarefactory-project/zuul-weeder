@@ -582,7 +582,7 @@ objectInfo ctx vertices analysis = do
     vertexTypeIcon (from vertex.name)
     toHtml (from vertex.name :: Text)
   ul_ do
-    traverse_ renderConfigLink configComponents
+    traverse_ li_ configComponents
   with' div_ "grid grid-cols-2 gap-1 m-4" do
     div_ do
       unless (null dependents) do
@@ -607,18 +607,22 @@ objectInfo ctx vertices analysis = do
         Nothing -> []
       _ -> []
 
-    renderConfigLink (Right loc) =
-      li_ do
-        with div_ [title_ $ "'" <> from vertex.name <> "' is provided by this repo"] do
-          let vRepo = VRepository loc.project
-          vertexLink ctx vRepo (vertexName vRepo)
-          traverse_ (tenantLink ctx.rootURL vertex.name) loc.tenants
-        div_ do
-          locLink $ configLocUrl loc
-    renderConfigLink (Left (url, project, tenants)) =
-      li_ do
-        locLink $ projectUrl url project
-        traverse_ (tenantLink ctx.rootURL vertex.name) tenants
+    renderConfigLink :: Maybe (Html ()) -> ConfigLoc -> Html ()
+    renderConfigLink extra loc = do
+      case extra of
+        Just h -> h
+        Nothing -> pure ()
+      with div_ [title_ $ "'" <> from vertex.name <> "' is provided by this repo"] do
+        let vRepo = VRepository loc.project
+        vertexLink ctx vRepo (vertexName vRepo)
+        traverse_ (tenantLink ctx.rootURL vertex.name) loc.tenants
+      with div_ [title_ $ "'" <> from vertex.name <> "' is defined at this url"] do
+        locLink $ configLocUrl loc
+
+    renderProjectLink :: ConnectionUrl -> CanonicalProjectName -> Set TenantName -> Html ()
+    renderProjectLink url project tenants = do
+      locLink $ projectUrl url project
+      traverse_ (tenantLink ctx.rootURL vertex.name) tenants
 
     vertex = NE.head vertices
     forTenant :: Set TenantName -> Bool
@@ -626,9 +630,19 @@ objectInfo ctx vertices analysis = do
       Scoped tenants -> tenants `Set.isSubsetOf` locTenants
       UnScoped -> True
 
-    getLocs :: Maybe [(ConfigLoc, a)] -> [Either (ConnectionUrl, CanonicalProjectName, Set TenantName) ConfigLoc]
-    getLocs = fmap Right . filter (forTenant . (.tenants)) . maybe [] (fmap fst)
-    configComponents :: [Either (ConnectionUrl, CanonicalProjectName, Set TenantName) ConfigLoc]
+    getLocs :: Maybe [(ConfigLoc, a)] -> [Html ()]
+    getLocs = map (renderConfigLink Nothing) . filter (forTenant . (.tenants)) . maybe [] (fmap fst)
+
+    renderPipelineInfo :: Pipeline -> Html ()
+    renderPipelineInfo p = traverse_ (with div_ [title_ "Trigger frequency"] . toHtml) p.timers
+
+    getPipelineLocs :: Maybe [(ConfigLoc, Pipeline)] -> [Html ()]
+    getPipelineLocs =
+      map (\(loc, pipeline) -> renderConfigLink (Just $ renderPipelineInfo pipeline) loc)
+        . filter (forTenant . (.tenants) . fst)
+        . fromMaybe []
+
+    configComponents :: [Html ()]
     configComponents = case vertex.name of
       VAbstractJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
@@ -638,7 +652,7 @@ objectInfo ctx vertices analysis = do
       VProject name -> getLocs $ Map.lookup name analysis.config.projects
       VProjectRegex name -> getLocs $ Map.lookup name analysis.config.projectRegexs
       VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
-      VPipeline name -> getLocs $ Map.lookup name analysis.config.pipelines
+      VPipeline name -> getPipelineLocs $ Map.lookup name analysis.config.pipelines
       VNodeset name -> getLocs $ Map.lookup name analysis.config.nodesets
       VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
       VProjectPipeline _ name -> getLocs $ Map.lookup name analysis.config.projects
@@ -646,7 +660,7 @@ objectInfo ctx vertices analysis = do
       VTemplatePipeline _ name -> getLocs $ Map.lookup name analysis.config.projectTemplates
       VRepository name -> case Map.lookup name analysis.config.canonicalProjects of
         Just tenants | forTenant tenants -> case Map.lookup name.provider analysis.config.urlBuilder of
-          Just cu -> [Left (cu, name, tenants)]
+          Just cu -> [renderProjectLink cu name tenants] -- Left (cu, name, tenants)]
           _ -> []
         _ -> []
       VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers

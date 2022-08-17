@@ -222,6 +222,7 @@ newtype PipelineReporter = PipelineReporter {connectionName :: ConnectionName}
 
 data Pipeline = Pipeline
   { name :: PipelineName,
+    timers :: [Text],
     triggers :: [PipelineTrigger],
     reporters :: [PipelineReporter]
   }

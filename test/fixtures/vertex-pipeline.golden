@@ -64,7 +64,7 @@
     ,
         [ Node
             { rootLabel = VTrigger
-                ( ConnectionName "timer" )
+                ( ConnectionName "gerrit" )
             , subForest = []
             }
         , Node
@@ -166,7 +166,7 @@
                             , subForest =
                                 [ Node
                                     { rootLabel = VTrigger
-                                        ( ConnectionName "timer" )
+                                        ( ConnectionName "gerrit" )
                                     , subForest = []
                                     }
                                 , Node
