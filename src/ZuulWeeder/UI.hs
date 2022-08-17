@@ -608,6 +608,13 @@ objectInfo ctx vertices analysis = do
           UnScoped -> Nothing
           Scoped xs -> Just xs
 
+    stopDescent :: VertexType -> Bool
+    stopDescent = \case
+      VJobT -> True
+      VAbstractJobT -> True
+      VProjectT -> True
+      _ -> False
+
     renderTree :: Int -> Tree VertexName -> Html ()
     renderTree depth (Node root childs) = do
       let listStyle
@@ -623,7 +630,7 @@ objectInfo ctx vertices analysis = do
           when showCarret do
             with' span_ "tree-caret" mempty
           vertexLink ctx root (vertexName root)
-          unless (List.null childs) do
+          unless (List.null childs || stopDescent (from root)) do
             traverse_ (renderTree (depth + 1)) childs
 
 vertexScope :: Scope -> Set Vertex -> [Vertex]
