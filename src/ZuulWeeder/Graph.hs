@@ -276,11 +276,11 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       insertVertex loc vPipeline
       forM_ pipeline.triggers $ \(PipelineTrigger trigger) -> do
         let vTrigger = Vertex (VTrigger trigger) loc.tenants
-        vTrigger `connect` vPipeline
+        vPipeline `connect` vTrigger
         insertVertex loc vTrigger
       forM_ pipeline.reporters $ \(PipelineReporter trigger) -> do
         let vReporter = Vertex (VReporter trigger) loc.tenants
-        vReporter `connect` vPipeline
+        vPipeline `connect` vReporter
         insertVertex loc vReporter
 
     goPipelineConfig :: ConfigLoc -> Vertex -> (PipelineName -> VertexName) -> ProjectPipeline CanonicalProjectName -> State Analysis ()
@@ -293,7 +293,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       let vPipeline = Vertex (VPipeline pipeline.name) loc.tenants
 
       vProject `connect` vPipelineConfig
-      vPipeline `connect` vPipelineConfig
+      vPipelineConfig `connect` vPipeline
 
       -- handle pipeline jobs
       forM_ (filter (\j -> from j /= JobName "noop") pipeline.jobs) $ \pJob -> do

@@ -2,19 +2,6 @@
     ( "check is needed by"
     ,
         [ Node
-            { rootLabel = VTrigger
-                ( ConnectionName "timer" )
-            , subForest = []
-            }
-        , Node
-            { rootLabel = VReporter
-                ( ConnectionName "elastic" )
-            , subForest = []
-            }
-        ]
-    , "check requires"
-    ,
-        [ Node
             { rootLabel = VProjectPipeline
                 ( PipelineName "check" )
                 ( CanonicalProjectName
@@ -24,19 +11,67 @@
                 )
             , subForest =
                 [ Node
-                    { rootLabel = VJob
-                        ( JobName "config-check" )
+                    { rootLabel = VProject
+                        ( CanonicalProjectName
+                            { provider = ProviderName "sftests.com"
+                            , project = ProjectName "config"
+                            }
+                        )
                     , subForest =
                         [ Node
                             { rootLabel = VAbstractJob
                                 ( JobName "base" )
-                            , subForest =
-                                [ Node
-                                    { rootLabel = VSecret
-                                        ( SecretName "log-key" )
-                                    , subForest = []
-                                    }
-                                ]
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VJob
+                                ( JobName "config-check" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VJob
+                                ( JobName "linter" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VJob
+                                ( JobName "wallaby-job" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VJob
+                                ( JobName "zena-job" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VSecret
+                                ( SecretName "log-key" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VNodeset
+                                ( NodesetName "centos" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VNodeLabel
+                                ( NodeLabelName "cloud-centos-7" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VQueue
+                                ( QueueName "queue" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VTrigger
+                                ( ConnectionName "timer" )
+                            , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VReporter
+                                ( ConnectionName "elastic" )
+                            , subForest = []
                             }
                         ]
                     }
@@ -52,51 +87,12 @@
                 )
             , subForest =
                 [ Node
-                    { rootLabel = VJob
-                        ( JobName "linter" )
-                    , subForest =
-                        [ Node
-                            { rootLabel = VNodeset
-                                ( NodesetName "centos" )
-                            , subForest =
-                                [ Node
-                                    { rootLabel = VNodeLabel
-                                        ( NodeLabelName "cloud-centos-7" )
-                                    , subForest = []
-                                    }
-                                ]
+                    { rootLabel = VProject
+                        ( CanonicalProjectName
+                            { provider = ProviderName "sftests.com"
+                            , project = ProjectName "triple-o"
                             }
-                        , Node
-                            { rootLabel = VNodeLabel
-                                ( NodeLabelName "pod-centos-7" )
-                            , subForest = []
-                            }
-                        ]
-                    }
-                , Node
-                    { rootLabel = VJob
-                        ( JobName "wallaby-job" )
-                    , subForest =
-                        [ Node
-                            { rootLabel = VProject
-                                ( CanonicalProjectName
-                                    { provider = ProviderName "sftests.com"
-                                    , project = ProjectName "triple-o"
-                                    }
-                                )
-                            , subForest =
-                                [ Node
-                                    { rootLabel = VQueue
-                                        ( QueueName "queue" )
-                                    , subForest = []
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                , Node
-                    { rootLabel = VJob
-                        ( JobName "zena-job" )
+                        )
                     , subForest = []
                     }
                 ]
@@ -105,6 +101,25 @@
             { rootLabel = VTemplatePipeline
                 ( PipelineName "check" )
                 ( ProjectTemplateName "common" )
+            , subForest =
+                [ Node
+                    { rootLabel = VProjectTemplate
+                        ( ProjectTemplateName "common" )
+                    , subForest = []
+                    }
+                ]
+            }
+        ]
+    , "check requires"
+    ,
+        [ Node
+            { rootLabel = VTrigger
+                ( ConnectionName "timer" )
+            , subForest = []
+            }
+        , Node
+            { rootLabel = VReporter
+                ( ConnectionName "elastic" )
             , subForest = []
             }
         ]
@@ -129,22 +144,6 @@
                             }
                         )
                     , subForest = []
-                    }
-                , Node
-                    { rootLabel = VPipeline
-                        ( PipelineName "check" )
-                    , subForest =
-                        [ Node
-                            { rootLabel = VTrigger
-                                ( ConnectionName "timer" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VReporter
-                                ( ConnectionName "elastic" )
-                            , subForest = []
-                            }
-                        ]
                     }
                 ]
             }
@@ -210,6 +209,22 @@
                             { rootLabel = VJob
                                 ( JobName "zena-job" )
                             , subForest = []
+                            }
+                        , Node
+                            { rootLabel = VPipeline
+                                ( PipelineName "check" )
+                            , subForest =
+                                [ Node
+                                    { rootLabel = VTrigger
+                                        ( ConnectionName "timer" )
+                                    , subForest = []
+                                    }
+                                , Node
+                                    { rootLabel = VReporter
+                                        ( ConnectionName "elastic" )
+                                    , subForest = []
+                                    }
+                                ]
                             }
                         ]
                     }
