@@ -68,6 +68,8 @@ data Config = Config
     reporters :: ConfigMap ConnectionName ConnectionName,
     -- | Configuration errors.
     configErrors :: [ConfigError],
+    -- | The list of known project, and there associated tenants
+    canonicalProjects :: Map CanonicalProjectName (Set TenantName),
     -- | The list of all tenants
     tenants :: Set TenantName
   }
@@ -90,6 +92,7 @@ mergeConfig c1 c2 =
       triggers = c1.triggers `mergeMap` c2.triggers,
       reporters = c1.reporters `mergeMap` c2.reporters,
       configErrors = nub $ c1.configErrors <> c2.configErrors,
+      canonicalProjects = Map.unionWith Set.union c1.canonicalProjects (Set.map renameTenant <$> c2.canonicalProjects),
       tenants = newTenants
     }
   where
@@ -462,5 +465,5 @@ loadConfig urlBuilder tenantResolver zkcE = do
        in traverse_ (updateTopConfig tenantResolver configLoc) decodedResults
 
 -- | An empty config.
-emptyConfig :: Set TenantName -> Config
+emptyConfig :: Map CanonicalProjectName (Set TenantName) -> Set TenantName -> Config
 emptyConfig = Config mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty

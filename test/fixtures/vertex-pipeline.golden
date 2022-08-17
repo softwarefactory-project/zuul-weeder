@@ -76,7 +76,23 @@
                 , Node
                     { rootLabel = VJob
                         ( JobName "wallaby-job" )
-                    , subForest = []
+                    , subForest =
+                        [ Node
+                            { rootLabel = VProject
+                                ( CanonicalProjectName
+                                    { provider = ProviderName "sftests.com"
+                                    , project = ProjectName "triple-o"
+                                    }
+                                )
+                            , subForest =
+                                [ Node
+                                    { rootLabel = VQueue
+                                        ( QueueName "queue" )
+                                    , subForest = []
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 , Node
                     { rootLabel = VJob
@@ -151,6 +167,48 @@
                         [ Node
                             { rootLabel = VNodeLabel
                                 ( NodeLabelName "cloud-centos-7" )
+                            , subForest = []
+                            }
+                        ]
+                    }
+                ]
+            }
+        , Node
+            { rootLabel = VProject
+                ( CanonicalProjectName
+                    { provider = ProviderName "sftests.com"
+                    , project = ProjectName "triple-o"
+                    }
+                )
+            , subForest =
+                [ Node
+                    { rootLabel = VQueue
+                        ( QueueName "queue" )
+                    , subForest = []
+                    }
+                , Node
+                    { rootLabel = VProjectPipeline
+                        ( PipelineName "check" )
+                        ( CanonicalProjectName
+                            { provider = ProviderName "sftests.com"
+                            , project = ProjectName "triple-o"
+                            }
+                        )
+                    , subForest =
+                        [ Node
+                            { rootLabel = VJob
+                                ( JobName "linter" )
+                            , subForest =
+                                [ Node
+                                    { rootLabel = VNodeLabel
+                                        ( NodeLabelName "pod-centos-7" )
+                                    , subForest = []
+                                    }
+                                ]
+                            }
+                        , Node
+                            { rootLabel = VJob
+                                ( JobName "zena-job" )
                             , subForest = []
                             }
                         ]

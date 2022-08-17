@@ -20,7 +20,7 @@ import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
 import Web.HttpApiData (toHeader)
-import Zuul.Config (TenantName)
+import Zuul.Config (CanonicalProjectName, TenantName)
 import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, emptyConfig, loadConfig)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
@@ -146,12 +146,13 @@ mkConfigLoader logger dataBaseDir configFile = do
       -- load all the config objects
       let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
           allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
-      config <- lift $ loadConfigFiles allTenants serviceConfig.urlBuilders tr dataDir
+          allProjects = getCanonicalProjects serviceConfig.connections tenantsConfig
+      config <- lift $ loadConfigFiles allProjects allTenants serviceConfig.urlBuilders tr dataDir
       pure (tenantsConfig, config)
 
-loadConfigFiles :: Set TenantName -> ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
-loadConfigFiles tenants ub tr =
-  flip execStateT (Zuul.ConfigLoader.emptyConfig tenants)
+loadConfigFiles :: Map CanonicalProjectName (Set TenantName) -> Set TenantName -> ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
+loadConfigFiles projs tenants ub tr =
+  flip execStateT (Zuul.ConfigLoader.emptyConfig projs tenants)
     -- StateT Config IO ()
     . S.effects
     -- Apply the loadConfig function to each element
@@ -213,7 +214,8 @@ unparsed_abide:
         tenantsConfig <- except (decodeTenantsConfig systemConfig)
         let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
             allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
-        conf <- lift $ flip execStateT (Zuul.ConfigLoader.emptyConfig allTenants) do
+            allProjects = getCanonicalProjects serviceConfig.connections tenantsConfig
+        conf <- lift $ flip execStateT (Zuul.ConfigLoader.emptyConfig allProjects allTenants) do
           xs <- sequence configFiles
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
         pure (tenantsConfig, conf)
@@ -257,6 +259,8 @@ unparsed_abide:
 
 - job:
     name: wallaby-job
+    required-projects:
+      - triple-o
 
 - job:
     name: zena-job

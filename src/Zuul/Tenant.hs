@@ -17,6 +17,7 @@ module Zuul.Tenant
     decodeTenantsConfig,
     TenantResolver (..),
     mkResolver,
+    getCanonicalProjects,
   )
 where
 
@@ -81,6 +82,24 @@ newtype TenantsConfig = TenantsConfig
   { tenants :: Map TenantName TenantConfig
   }
   deriving (Show, Eq, Ord, Generic)
+
+getCanonicalProjects :: Map ConnectionName ProviderName -> TenantsConfig -> Map CanonicalProjectName (Set TenantName)
+getCanonicalProjects allConn tcs = foldr addProject mempty allProjects
+  where
+    addProject :: (TenantName, CanonicalProjectName) -> Map CanonicalProjectName (Set TenantName) -> Map CanonicalProjectName (Set TenantName)
+    addProject (tenant, proj) = Map.insertWith Set.union proj (Set.singleton tenant)
+
+    allProjects :: [(TenantName, CanonicalProjectName)]
+    allProjects = concatMap getProjList $ Map.toList tcs.tenants
+    getProjList :: (TenantName, TenantConfig) -> [(TenantName, CanonicalProjectName)]
+    getProjList (tenant, tc) = concatMap (getTenantProjList tenant) $ Map.toList tc.connections
+
+    getTenantProjList :: TenantName -> (ConnectionName, TenantConnectionConfig) -> [(TenantName, CanonicalProjectName)]
+    getTenantProjList tenant (conn, tcc) = map mkTenantProj $ tcc.configProjects <> tcc.untrustedProjects
+      where
+        mkCanon = CanonicalProjectName (fromMaybe (error "unknown conn") (Map.lookup conn allConn))
+        mkTenantProj :: TenantProject -> (TenantName, CanonicalProjectName)
+        mkTenantProj tp = (tenant, mkCanon tp.name)
 
 -- | Decode the 'TenantsConfig' from a ZK data file.
 decodeTenantsConfig :: ZKTenantsConfig -> Either Text TenantsConfig
