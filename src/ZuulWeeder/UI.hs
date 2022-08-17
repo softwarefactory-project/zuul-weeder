@@ -266,6 +266,9 @@ welcomeComponent ctx = do
   script_ do
     "renderToy('" <> baseUrl ctx <> "data.json');"
 
+titleWithTooltip :: Text -> Text -> Html ()
+titleWithTooltip tooltip value = with h2_ [class_ "font-bold", title_ tooltip] (toHtml value)
+
 title :: Text -> Html ()
 title = with' h2_ "font-bold" . toHtml
 
@@ -558,10 +561,10 @@ objectInfo ctx vertices analysis = do
     traverse_ renderConfigLink configComponents
   with' div_ "grid grid-cols-2 gap-1 m-4" do
     div_ do
-      title "Dependents"
+      titleWithTooltip ("The dependents list require '" <> from vertex.name <> "'") "Dependents"
       traverse_ (renderTree 0) dependents
     div_ do
-      title "Dependencies"
+      titleWithTooltip ("'" <> from vertex.name <> "' requires the dependency list") "Dependencies"
       traverse_ (renderTree 0) dependencies
   script_ do
     "addTreeHandler()"
