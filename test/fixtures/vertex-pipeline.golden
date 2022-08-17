@@ -17,63 +17,7 @@
                             , project = ProjectName "config"
                             }
                         )
-                    , subForest =
-                        [ Node
-                            { rootLabel = VAbstractJob
-                                ( JobName "base" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VJob
-                                ( JobName "config-check" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VJob
-                                ( JobName "linter" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VJob
-                                ( JobName "wallaby-job" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VJob
-                                ( JobName "zena-job" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VSecret
-                                ( SecretName "log-key" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VNodeset
-                                ( NodesetName "centos" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VNodeLabel
-                                ( NodeLabelName "cloud-centos-7" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VQueue
-                                ( QueueName "queue" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VTrigger
-                                ( ConnectionName "timer" )
-                            , subForest = []
-                            }
-                        , Node
-                            { rootLabel = VReporter
-                                ( ConnectionName "elastic" )
-                            , subForest = []
-                            }
-                        ]
+                    , subForest = []
                     }
                 ]
             }
@@ -93,7 +37,13 @@
                             , project = ProjectName "triple-o"
                             }
                         )
-                    , subForest = []
+                    , subForest =
+                        [ Node
+                            { rootLabel = VJob
+                                ( JobName "wallaby-job" )
+                            , subForest = []
+                            }
+                        ]
                     }
                 ]
             }

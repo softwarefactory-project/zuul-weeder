@@ -74,6 +74,8 @@ data VertexName
     VRegexPipeline PipelineName ProjectRegex
   | -- | A template pipeline config
     VTemplatePipeline PipelineName ProjectTemplateName
+  | -- | A repository (containing zuul config objects)
+    VRepository CanonicalProjectName
   | -- | A pipeline trigger
     VTrigger ConnectionName
   | -- | A pipeline reporter
@@ -96,6 +98,7 @@ instance From VertexName Text where
     VRegexPipeline (PipelineName v) (ProjectRegex n) -> v <> ":" <> n
     VProjectPipeline (PipelineName v) cp -> v <> ":" <> from cp
     VTemplatePipeline (PipelineName v) (ProjectTemplateName n) -> v <> ":" <> n
+    VRepository (CanonicalProjectName (ProviderName p) (ProjectName n)) -> p <> "/" <> n
     VTrigger (ConnectionName n) -> n
     VReporter (ConnectionName n) -> n
 
@@ -183,21 +186,26 @@ data Analysis = Analysis
     dependencyGraph :: ConfigGraph,
     -- | The dependents graph, e.g. nodeset allows job.
     dependentGraph :: ConfigGraph,
+    -- | The link between repositories and configuration objects.
+    repositoryContent :: Map CanonicalProjectName (Set Vertex),
     -- | The list of vertex, used for displaying search result.
     vertices :: Set Vertex,
     -- | A map of all the names and their matching tenants, used for searching.
     names :: Map VertexName (Set TenantName),
-    -- | The zuul config.
-    config :: Config,
     -- | A list of error found when building the analysis.
-    graphErrors :: [String]
+    graphErrors :: [String],
+    -- | The zuul config.
+    config :: Config
   }
   deriving (Show, Generic)
+
+defaultAnalysis :: Config -> Analysis
+defaultAnalysis = Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty mempty mempty
 
 -- | The main function to build the 'Analysis' .
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity (execStateT go (Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty config mempty))
+  runIdentity (execStateT go (defaultAnalysis config))
   where
     -- All the default base jobs defined by the tenants
     -- Given:
@@ -242,6 +250,7 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
 
     go :: State Analysis ()
     go = do
+      traverse_ goCanonicalProjects $ Map.toList config.canonicalProjects
       traverse_ goJob $ concat $ Map.elems allJobs
       traverse_ goNodeset $ concat $ Map.elems config.nodesets
       traverse_ goProject $ concatMap projectList (Map.toList config.projects)
@@ -464,10 +473,22 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       #vertices %= Set.insert v
       #names %= Map.insertWith Set.union v.name v.tenants
 
-      let vProject = Vertex (VProject (from loc)) loc.tenants
-      vProject `allows` v
+      registerObject loc.project v
 
-      -- Ensure the project exist in the global list and the lookup names.
-      -- TODO: do that only once when starting the analysis
-      #vertices %= Set.insert vProject
-      #names %= Map.insertWith Set.union vProject.name vProject.tenants
+    registerObject :: CanonicalProjectName -> Vertex -> State Analysis ()
+    registerObject proj v
+      | isProjectPipeline = pure ()
+      | otherwise = do
+          #repositoryContent %= Map.insertWith Set.union proj (Set.singleton v)
+      where
+        isProjectPipeline = case v.name of
+          VProjectPipeline {} -> True
+          VRegexPipeline {} -> True
+          VTemplatePipeline {} -> True
+          _ -> False
+
+    goCanonicalProjects :: (CanonicalProjectName, Set TenantName) -> State Analysis ()
+    goCanonicalProjects (repo, tenants) = do
+      let vRepo = VRepository repo
+      #vertices %= Set.insert (Vertex vRepo tenants)
+      #names %= Map.insertWith Set.union vRepo tenants

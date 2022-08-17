@@ -152,7 +152,7 @@ mkConfigLoader logger dataBaseDir configFile = do
 
 loadConfigFiles :: Map CanonicalProjectName (Set TenantName) -> Set TenantName -> ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
 loadConfigFiles projs tenants ub tr =
-  flip execStateT (Zuul.ConfigLoader.emptyConfig projs tenants)
+  flip execStateT (Zuul.ConfigLoader.emptyConfig ub projs tenants)
     -- StateT Config IO ()
     . S.effects
     -- Apply the loadConfig function to each element
@@ -215,7 +215,8 @@ unparsed_abide:
         let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
             allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
             allProjects = getCanonicalProjects serviceConfig.connections tenantsConfig
-        conf <- lift $ flip execStateT (Zuul.ConfigLoader.emptyConfig allProjects allTenants) do
+            initialConfig = Zuul.ConfigLoader.emptyConfig serviceConfig.urlBuilders allProjects allTenants
+        conf <- lift $ flip execStateT initialConfig do
           xs <- sequence configFiles
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
         pure (tenantsConfig, conf)

@@ -170,6 +170,7 @@ data VertexType
   | VRegexPipelineT
   | VProjectTemplateT
   | VTemplatePipelineT
+  | VRepositoryT
   | VTriggerT
   | VReporterT
   deriving (Eq, Ord, Enum, Bounded)
@@ -190,6 +191,7 @@ instance From VertexName VertexType where
     VProjectPipeline _ _ -> VProjectPipelineT
     VRegexPipeline _ _ -> VRegexPipelineT
     VTemplatePipeline _ _ -> VTemplatePipelineT
+    VRepository _ -> VRepositoryT
     VTrigger _ -> VTriggerT
     VReporter _ -> VReporterT
 
@@ -237,6 +239,7 @@ vertexTypeName = \case
   VProjectPipelineT -> "project-pipeline"
   VRegexPipelineT -> "regex-pipeline"
   VTemplatePipelineT -> "template-pipeline"
+  VRepositoryT -> "repository"
   VTriggerT -> "trigger"
   VReporterT -> "reporter"
 
@@ -335,6 +338,28 @@ configLocUrl loc = case loc.url of
     buildGithubUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/" <> path
     buildGiteaUrl url = url <> "/" <> name <> "/src/branch/" <> branch <> "/" <> path
 
+projectUrl :: ConnectionUrl -> CanonicalProjectName -> Text
+projectUrl curl proj = case curl of
+  GerritUrl (trimedUrl -> url)
+    | url == "https://review.opendev.org" -> buildGiteaUrl "https://opendev.org"
+    | otherwise -> url <> "/plugins/gitiles/" <> name
+  GithubUrl url -> buildGithubUrl url
+  GitlabUrl url -> buildGitlabUrl url
+  PagureUrl url -> buildPagureUrl url
+  GitUrl url
+    | "gitlab.com" `Text.isInfixOf` url -> buildGitlabUrl url
+    | "github.com" `Text.isInfixOf` url -> buildGithubUrl url
+    | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
+    | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
+  GitUrl url -> trimedUrl url <> "/cgit/" <> name
+  where
+    CanonicalProjectName _ (ProjectName name) = proj
+    trimedUrl = Text.dropWhileEnd (== '/')
+    buildGitlabUrl url = trimedUrl url <> "/" <> name
+    buildPagureUrl url = trimedUrl url <> "/" <> name
+    buildGithubUrl url = trimedUrl url <> "/" <> name
+    buildGiteaUrl url = url <> "/" <> name
+
 -- | The data.json for the d3 graph (see dists/graph.js)
 toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
 toD3Graph scope g =
@@ -376,6 +401,7 @@ vertexTypeIcon vt = mkIconTitle (Just $ vertexTypeName vt) ("ri-" <> iconName)
       VRegexPipelineT -> "git-merge-line"
       VTemplatePipelineT -> "git-merge-line"
       VNodesetT -> "server-line"
+      VRepositoryT -> "stack-line"
       VTriggerT -> "download-fill"
       VReporterT -> "upload-fill"
 
@@ -542,14 +568,12 @@ debugComponent analysis = do
     ul_ do
       traverse_ (li_ . toHtml . take 512) analysis.graphErrors
 
-locLink :: ConfigLoc -> Html ()
-locLink loc =
+locLink :: Text -> Html ()
+locLink url =
   with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
     mkIcon "ri-link"
     toHtml locPath
   where
-    -- TODO: render valid link based on config connection
-    url = configLocUrl loc
     locPath = Text.drop 8 url
 
 objectInfo :: Context -> NonEmpty Vertex -> Analysis -> Html ()
@@ -561,28 +585,50 @@ objectInfo ctx vertices analysis = do
     traverse_ renderConfigLink configComponents
   with' div_ "grid grid-cols-2 gap-1 m-4" do
     div_ do
-      titleWithTooltip ("The dependents list require '" <> from vertex.name <> "'") "Dependents"
-      traverse_ (renderTree 0) dependents
+      unless (null dependents) do
+        titleWithTooltip ("The dependents list require '" <> from vertex.name <> "'") "Dependents"
+        traverse_ (renderTree 0) dependents
     div_ do
-      titleWithTooltip ("'" <> from vertex.name <> "' requires the dependency list") "Dependencies"
-      traverse_ (renderTree 0) dependencies
+      unless (null dependencies) do
+        titleWithTooltip ("'" <> from vertex.name <> "' requires the dependency list") "Dependencies"
+        traverse_ (renderTree 0) dependencies
+
+      unless (null owned) do
+        titleWithTooltip ("'" <> from vertex.name <> "' provides") "Provides"
+        with' ul_ "pl-2" do
+          traverse_ (\v -> li_ $ vertexLink ctx v.name (vertexName v.name)) owned
   script_ do
     "addTreeHandler()"
   where
-    renderConfigLink loc =
+    owned :: [Vertex]
+    owned = case vertex.name of
+      VRepository n -> case Map.lookup n analysis.repositoryContent of
+        Just objects -> sort $ Set.toList objects
+        Nothing -> []
+      _ -> []
+
+    renderConfigLink (Right loc) =
       li_ do
-        locLink loc
-        traverse_ (tenantLink ctx.rootURL vertex.name) loc.tenants
+        with div_ [title_ $ "'" <> from vertex.name <> "' is provided by this repo"] do
+          let vRepo = VRepository loc.project
+          vertexLink ctx vRepo (vertexName vRepo)
+          traverse_ (tenantLink ctx.rootURL vertex.name) loc.tenants
+        div_ do
+          locLink $ configLocUrl loc
+    renderConfigLink (Left (url, project, tenants)) =
+      li_ do
+        locLink $ projectUrl url project
+        traverse_ (tenantLink ctx.rootURL vertex.name) tenants
 
     vertex = NE.head vertices
-    forTenant :: ConfigLoc -> Bool
-    forTenant loc = case ctx.scope of
-      Scoped tenants -> tenants `Set.isSubsetOf` loc.tenants
+    forTenant :: Set TenantName -> Bool
+    forTenant locTenants = case ctx.scope of
+      Scoped tenants -> tenants `Set.isSubsetOf` locTenants
       UnScoped -> True
 
-    getLocs :: Maybe [(ConfigLoc, a)] -> [ConfigLoc]
-    getLocs = filter forTenant . maybe [] (fmap fst)
-    configComponents :: [ConfigLoc]
+    getLocs :: Maybe [(ConfigLoc, a)] -> [Either (ConnectionUrl, CanonicalProjectName, Set TenantName) ConfigLoc]
+    getLocs = fmap Right . filter (forTenant . (.tenants)) . maybe [] (fmap fst)
+    configComponents :: [Either (ConnectionUrl, CanonicalProjectName, Set TenantName) ConfigLoc]
     configComponents = case vertex.name of
       VAbstractJob name -> getLocs $ Map.lookup name analysis.config.jobs
       VJob name -> getLocs $ Map.lookup name analysis.config.jobs
@@ -598,6 +644,11 @@ objectInfo ctx vertices analysis = do
       VProjectPipeline _ name -> getLocs $ Map.lookup name analysis.config.projects
       VRegexPipeline _ name -> getLocs $ Map.lookup name analysis.config.projectRegexs
       VTemplatePipeline _ name -> getLocs $ Map.lookup name analysis.config.projectTemplates
+      VRepository name -> case Map.lookup name analysis.config.canonicalProjects of
+        Just tenants | forTenant tenants -> case Map.lookup name.provider analysis.config.urlBuilder of
+          Just cu -> [Left (cu, name, tenants)]
+          _ -> []
+        _ -> []
       VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
       VReporter name -> getLocs $ Map.lookup name analysis.config.reporters
     dependencies = getForest analysis.dependencyGraph
@@ -662,6 +713,7 @@ instance FromHttpApiData VertexTypeUrl where
     "template-pipeline" -> splitPipeline DecodeTemplate
     "trigger" -> VTrigger . ConnectionName
     "reporter" -> VReporter . ConnectionName
+    "repository" -> VRepository . decodeCanonical
     _ -> error $ "Unknown obj type: " <> from txt
     where
       -- Assume the provider name is the first element of a '/' separated path

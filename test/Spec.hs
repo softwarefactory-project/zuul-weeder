@@ -84,14 +84,14 @@ tests demo =
 
     -- Validate that tenants names are uniques after the merge
     validateTenantRenamer =
-      let c1 = emptyConfig mempty $ mkTenantSet ["a", "b"]
-          c2 = emptyConfig mempty $ mkTenantSet ["b", "c"]
+      let c1 = emptyConfig mempty mempty $ mkTenantSet ["a", "b"]
+          c2 = emptyConfig mempty mempty $ mkTenantSet ["b", "c"]
        in assertEqual "Tenant renamed" (mkTenantSet ["a", "b", "b1", "c"]) (mergeConfig c1 c2).tenants
 
     -- Validate that config location are uniques after the merge
     validateConfMerger =
-      let c1 = emptyConfig mempty (mkTenantSet ["a", "b"]) & #queues `set` mkMap [loc1, locShared1]
-          c2 = emptyConfig mempty (mkTenantSet ["b", "c"]) & #queues `set` mkMap [loc2, locShared2]
+      let c1 = emptyConfig mempty mempty (mkTenantSet ["a", "b"]) & #queues `set` mkMap [loc1, locShared1]
+          c2 = emptyConfig mempty mempty (mkTenantSet ["b", "c"]) & #queues `set` mkMap [loc2, locShared2]
           loc1 = mkLoc & #tenants `set` mkTenantSet ["a"]
           loc2 = mkLoc & (#tenants `set` mkTenantSet ["b"]) & (#path `set` FilePathT "other.yaml")
           -- The loc2 in the c2 has a new tenant name, because `b` is already present in c1
