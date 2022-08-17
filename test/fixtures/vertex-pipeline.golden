@@ -36,17 +36,6 @@
                                         ( SecretName "log-key" )
                                     , subForest = []
                                     }
-                                , Node
-                                    { rootLabel = VNodeset
-                                        ( NodesetName "centos" )
-                                    , subForest =
-                                        [ Node
-                                            { rootLabel = VNodeLabel
-                                                ( NodeLabelName "cloud-centos-7" )
-                                            , subForest = []
-                                            }
-                                        ]
-                                    }
                                 ]
                             }
                         ]
@@ -67,6 +56,17 @@
                         ( JobName "linter" )
                     , subForest =
                         [ Node
+                            { rootLabel = VNodeset
+                                ( NodesetName "centos" )
+                            , subForest =
+                                [ Node
+                                    { rootLabel = VNodeLabel
+                                        ( NodeLabelName "cloud-centos-7" )
+                                    , subForest = []
+                                    }
+                                ]
+                            }
+                        , Node
                             { rootLabel = VNodeLabel
                                 ( NodeLabelName "pod-centos-7" )
                             , subForest = []

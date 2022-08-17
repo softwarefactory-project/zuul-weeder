@@ -23,6 +23,7 @@ module ZuulWeeder.Graph
 where
 
 import Algebra.Graph qualified
+import Algebra.Graph.AdjacencyMap.Algorithm qualified
 import Algebra.Graph.ToGraph qualified
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
@@ -157,7 +158,7 @@ findReachableForest ::
   ConfigGraph ->
   -- | The forest
   Forest VertexName
-findReachableForest baseScope xs = concatMap goRoot . Algebra.Graph.ToGraph.dfsForestFrom vertices
+findReachableForest baseScope xs = concatMap goRoot . Algebra.Graph.AdjacencyMap.Algorithm.bfsForest vertices . Algebra.Graph.ToGraph.toAdjacencyMap
   where
     vertices = NE.toList xs
     goRoot (Node top child) = concatMap (go scope) child
