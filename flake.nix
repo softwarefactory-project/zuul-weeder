@@ -12,11 +12,9 @@
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";
-    calligraphy.url = "github:jonascarpay/calligraphy";
-    calligraphy.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, hspkgs, flake-utils, tailwind, calligraphy }:
+  outputs = { self, nixpkgs, hspkgs, flake-utils, tailwind }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
         pkgs = hspkgs.pkgs;
@@ -104,9 +102,7 @@
 
         apps.calligraphy = mkApp ''
           set -xe
-          exec ${
-            calligraphy.apps."x86_64-linux".calligraphy-ghc922
-          }/bin/calligraphy $*
+          exec ${hspkgs.pkgs.calligraphy}/bin/calligraphy $*
         '';
 
         apps.tailwind = mkApp ''
