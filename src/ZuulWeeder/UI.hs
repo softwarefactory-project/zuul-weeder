@@ -1,3 +1,6 @@
+-- TODO: remove warning when refactor is complet
+{-# OPTIONS_GHC -fno-warn-missing-export-lists #-}
+
 -- |
 -- Module      : ZuulWeeder.UI
 -- Description : The User Interface
@@ -14,37 +17,21 @@
 --
 --   * [htmx](https://htmx.org/docs/#introduction)
 --   * [tailwind](https://tailwindcss.com/docs/utility-first) (use Ctrl-K to search documentation)
-module ZuulWeeder.UI
-  ( app,
-    BasePath (..),
-    dotGraph,
-    dotLegend,
+module ZuulWeeder.UI where
 
-    -- * Test helpers
-    configLocUrl,
-  )
-where
-
--- After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
-
-import Algebra.Graph qualified
-import Data.Aeson qualified
-import Data.List qualified as List
-import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Lucid
-import Lucid.Base (makeAttribute)
 import Paths_zuul_weeder (version)
-import Servant hiding (Context)
-import Servant.HTML.Lucid (HTML)
-import Servant.Server.StaticFiles qualified
 import Web.FormUrlEncoded (FromForm)
 import Zuul.Config
-import Zuul.ConfigLoader (Config (..), ConfigMap)
+import Zuul.ConfigLoader (Config (..))
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
+import ZuulWeeder.UI.CSS
+import ZuulWeeder.UI.Colors
+import ZuulWeeder.UI.Vertex
 
 -- | The request context
 data Scope = UnScoped | Scoped (Set TenantName) deriving (Ord, Eq, Show)
@@ -130,7 +117,7 @@ navComponent ctx page =
   with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
     with' div_ "flex-grow" do
       with' span_ "font-semibold text-white" do
-        hxNavLink base Nothing "Zuul Weeder"
+        hxNavLink [] base Nothing "Zuul Weeder"
       navLink "search" "Search"
       navLink "info" "Info"
     div_ do
@@ -147,121 +134,13 @@ navComponent ctx page =
             | path == "about" = " right"
             | otherwise = ""
           linkClass = "m-4 p-1 cursor-pointer text-white rounded hover:text-teal-500" <> navLinkClass <> extra
-       in hxNavLinkWithAttr [id_ $ "nav-" <> path] (base <> path) (Just linkClass)
+       in hxNavLink [id_ $ "nav-" <> path] (base <> path) (Just linkClass)
     exitScope =
       case ctx.scope of
-        Scoped tenants -> hxNavLink (basePath ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
+        Scoped tenants -> hxNavLink [] (basePath ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
         UnScoped -> pure ()
       where
         tenantClass = "my-4 p-1 text-white font-semibold "
-
-data VertexType
-  = VAbstractJobT
-  | VJobT
-  | VSemaphoreT
-  | VSecretT
-  | VNodesetT
-  | VNodeLabelT
-  | VQueueT
-  | VPipelineT
-  | VProjectT
-  | VProjectPipelineT
-  | VProjectRegexT
-  | VRegexPipelineT
-  | VProjectTemplateT
-  | VTemplatePipelineT
-  | VRepositoryT
-  | VTriggerT
-  | VReporterT
-  deriving (Eq, Ord, Enum, Bounded)
-
-instance From VertexName VertexType where
-  from = \case
-    VAbstractJob _ -> VAbstractJobT
-    VJob _ -> VJobT
-    VSemaphore _ -> VSemaphoreT
-    VSecret _ -> VSecretT
-    VQueue _ -> VQueueT
-    VProject _ -> VProjectT
-    VProjectRegex _ -> VProjectRegexT
-    VNodeset _ -> VNodesetT
-    VProjectTemplate _ -> VProjectTemplateT
-    VPipeline _ -> VPipelineT
-    VNodeLabel _ -> VNodeLabelT
-    VProjectPipeline _ _ -> VProjectPipelineT
-    VRegexPipeline _ _ -> VRegexPipelineT
-    VTemplatePipeline _ _ -> VTemplatePipelineT
-    VRepository _ -> VRepositoryT
-    VTrigger _ -> VTriggerT
-    VReporter _ -> VReporterT
-
-vertexHue :: VertexType -> Int
-vertexHue vt = fromEnum vt' * step
-  where
-    vt' = case vt of
-      VTemplatePipelineT -> VProjectTemplateT
-      VProjectPipelineT -> VProjectT
-      _ -> vt
-    step :: Int
-    step = 300 `div` fromEnum @VertexType maxBound
-
-vertexColor :: VertexType -> Text
-vertexColor vt = "hsl(" <> from (show $ vertexHue vt) <> ", 50%, 50%)"
-
-cssColors :: Text
-cssColors = Text.unlines $ map mkCssColor [minBound .. maxBound]
-  where
-    mkCssColor :: VertexType -> Text
-    mkCssColor vt =
-      ".color-" <> vertexTypeName vt <> " { color: " <> vertexColor vt <> ";}"
-
-jsColors :: Text
-jsColors =
-  "const getColor = (group) => { switch (group) {\n" <> Text.unlines (map mkJsColor [minBound .. maxBound]) <> "}};"
-  where
-    mkJsColor :: VertexType -> Text
-    mkJsColor vt = "case " <> from (show (fromEnum vt)) <> ": return \"" <> vertexColor vt <> "\";"
-
--- | A text representation of a vertex type, useful for /object url piece.
-vertexTypeName :: VertexType -> Text
-vertexTypeName = \case
-  VAbstractJobT -> "abstract-job"
-  VJobT -> "job"
-  VSemaphoreT -> "semaphore"
-  VSecretT -> "secret"
-  VNodesetT -> "nodeset"
-  VNodeLabelT -> "label"
-  VQueueT -> "queue"
-  VProjectT -> "project-config"
-  VProjectRegexT -> "project-regex"
-  VProjectTemplateT -> "project-template"
-  VPipelineT -> "pipeline"
-  VProjectPipelineT -> "project-pipeline"
-  VRegexPipelineT -> "regex-pipeline"
-  VTemplatePipelineT -> "template-pipeline"
-  VRepositoryT -> "repository"
-  VTriggerT -> "trigger"
-  VReporterT -> "reporter"
-
-spinner :: Html ()
-spinner = with span_ [class_ "htmx-indicator font-semibold text-white", id_ "spinner"] "◌"
-
-hxNavLinkWithAttr :: [Attribute] -> Text -> Maybe Text -> Html () -> Html ()
-hxNavLinkWithAttr xs url extraClass =
-  with
-    a_
-    ( xs
-        <> [ hxGet url,
-             hxPushUrl,
-             hxIndicator "#spinner",
-             hxTarget "#main",
-             class_ ("cursor-pointer hover:font-semibold" <> maybe "" (mappend " ") extraClass),
-             href_ url
-           ]
-    )
-
-hxNavLink :: Text -> Maybe Text -> Html () -> Html ()
-hxNavLink = hxNavLinkWithAttr []
 
 welcomeComponent :: Context -> Html ()
 welcomeComponent ctx = do
@@ -271,18 +150,6 @@ welcomeComponent ctx = do
 
 titleWithTooltip :: Text -> Text -> Html ()
 titleWithTooltip tooltip value = with h2_ [class_ "font-bold", title_ tooltip] (toHtml value)
-
-title :: Text -> Html ()
-title = with' h2_ "font-bold" . toHtml
-
-mkIconTitle :: Maybe Text -> Text -> Html ()
-mkIconTitle iconTitle name =
-  with i_ ([class_ ("pr-1 font-bold align-bottom " <> name <> maybe "" (mappend " color-") iconTitle)] <> titleAttr) mempty
-  where
-    titleAttr = maybeToList (title_ <$> iconTitle)
-
-mkIcon :: Text -> Html ()
-mkIcon = mkIconTitle Nothing
 
 aboutComponent :: Html ()
 aboutComponent = do
@@ -295,8 +162,8 @@ aboutComponent = do
   where
     renderIconLegend :: VertexType -> Html ()
     renderIconLegend vt = li_ do
-      vertexTypeIcon vt
-      toHtml $ vertexTypeName vt
+      vertexIcon vt
+      toHtml $ vertexSlugName vt
 
 tenantsList :: Set TenantName -> Text
 tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)
@@ -313,143 +180,26 @@ baseUrl ctx =
     UnScoped -> ""
     Scoped tenants -> "tenant/" <> tenantsList tenants <> "/"
 
--- | Get the URL of a configuration element location
-configLocUrl :: ConfigLoc -> Text
-configLocUrl loc = case loc.url of
-  GerritUrl (trimedUrl -> url)
-    | url == "https://review.opendev.org" -> buildGiteaUrl "https://opendev.org"
-    | otherwise -> url <> "/plugins/gitiles/" <> name <> "/+/refs/heads/" <> branch <> "/" <> path
-  GithubUrl url -> buildGithubUrl url
-  GitlabUrl url -> buildGitlabUrl url
-  PagureUrl url -> buildPagureUrl url
-  GitUrl url
-    | "gitlab.com" `Text.isInfixOf` url -> buildGitlabUrl url
-    | "github.com" `Text.isInfixOf` url -> buildGithubUrl url
-    | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
-    | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
-  GitUrl url -> trimedUrl url <> "/cgit/" <> name <> "/tree/" <> path <> "?h=" <> branch
-  where
-    CanonicalProjectName _ (ProjectName name) = loc.project
-    BranchName branch = loc.branch
-    FilePathT path = loc.path
-    trimedUrl = Text.dropWhileEnd (== '/')
-    buildGitlabUrl url = trimedUrl url <> "/" <> name <> "/-/blob/" <> branch <> "/" <> path
-    buildPagureUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/f/" <> path
-    buildGithubUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/" <> path
-    buildGiteaUrl url = url <> "/" <> name <> "/src/branch/" <> branch <> "/" <> path
-
-projectUrl :: ConnectionUrl -> CanonicalProjectName -> Text
-projectUrl curl proj = case curl of
-  GerritUrl (trimedUrl -> url)
-    | url == "https://review.opendev.org" -> buildGiteaUrl "https://opendev.org"
-    | otherwise -> url <> "/plugins/gitiles/" <> name
-  GithubUrl url -> buildGithubUrl url
-  GitlabUrl url -> buildGitlabUrl url
-  PagureUrl url -> buildPagureUrl url
-  GitUrl url
-    | "gitlab.com" `Text.isInfixOf` url -> buildGitlabUrl url
-    | "github.com" `Text.isInfixOf` url -> buildGithubUrl url
-    | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
-    | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
-  GitUrl url -> trimedUrl url <> "/cgit/" <> name
-  where
-    CanonicalProjectName _ (ProjectName name) = proj
-    trimedUrl = Text.dropWhileEnd (== '/')
-    buildGitlabUrl url = trimedUrl url <> "/" <> name
-    buildPagureUrl url = trimedUrl url <> "/" <> name
-    buildGithubUrl url = trimedUrl url <> "/" <> name
-    buildGiteaUrl url = url <> "/" <> name
-
--- | The data.json for the d3 graph (see dists/graph.js)
-toD3Graph :: Scope -> ConfigGraph -> ZuulWeeder.UI.D3Graph
-toD3Graph scope g =
-  ZuulWeeder.UI.D3Graph
-    { ZuulWeeder.UI.nodes = toNodes <$> vertexes,
-      ZuulWeeder.UI.links = toLinks <$> edges
-    }
-  where
-    -- Keep the edges whose both vertex are in the current tenant
-    keepTenant (a, b) = case scope of
-      Scoped tenants -> tenants == a.tenants && tenants == b.tenants
-      UnScoped -> True
-
-    (edges, _) = splitAt 500 $ filter keepTenant $ Algebra.Graph.edgeList g
-    -- edges = Algebra.Graph.edgeList g
-    vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
-
-    toNodes :: Vertex -> ZuulWeeder.UI.D3Node
-    toNodes v = ZuulWeeder.UI.D3Node (from v.name) (hash v) $ fromEnum (into @VertexType v.name)
-
-    toLinks :: (Vertex, Vertex) -> ZuulWeeder.UI.D3Link
-    toLinks (a, b) = ZuulWeeder.UI.D3Link (hash a) (hash b)
-
-vertexTypeIcon :: VertexType -> Html ()
-vertexTypeIcon vt = mkIconTitle (Just $ vertexTypeName vt) ("ri-" <> iconName)
-  where
-    iconName = case vt of
-      VAbstractJobT -> "file-text-line"
-      VJobT -> "file-text-line"
-      VSemaphoreT -> "lock-line"
-      VSecretT -> "key-2-line"
-      VQueueT -> "traffic-light-line"
-      VProjectT -> "folder-open-line"
-      VProjectRegexT -> "folder-open-line"
-      VProjectTemplateT -> "draft-line"
-      VPipelineT -> "git-merge-line"
-      VNodeLabelT -> "price-tag-3-line"
-      VProjectPipelineT -> "git-merge-line"
-      VRegexPipelineT -> "git-merge-line"
-      VTemplatePipelineT -> "git-merge-line"
-      VNodesetT -> "server-line"
-      VRepositoryT -> "stack-line"
-      VTriggerT -> "download-fill"
-      VReporterT -> "upload-fill"
-
-data D3Node = D3Node
-  { name :: Text,
-    id :: Int,
-    group :: Int
-  }
-  deriving (Generic, Eq, Show)
-
-data D3Link = D3Link
-  { source :: Int,
-    target :: Int
-  }
-  deriving (Generic, Show)
-
-data D3Graph = D3Graph
-  { nodes :: [D3Node],
-    links :: [D3Link]
-  }
-  deriving (Generic, Show)
-
-instance Data.Aeson.ToJSON D3Node
-
-instance Data.Aeson.ToJSON D3Link
-
-instance Data.Aeson.ToJSON D3Graph
-
 vertexLink :: Context -> VertexName -> Html () -> Html ()
-vertexLink ctx name = hxNavLink ref Nothing
+vertexLink ctx name = hxNavLink [] ref Nothing
   where
     ref =
       Text.intercalate
         "/"
         [ baseUrl ctx <> "object",
-          vertexTypeName (from name),
+          vertexSlugName (from name),
           from name
         ]
 
 tenantBaseLink :: BasePath -> TenantName -> Html ()
 tenantBaseLink rootURL tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
-    hxNavLink (tenantUrl rootURL tenant) Nothing (toHtml (into @Text tenant))
+    hxNavLink [] (tenantUrl rootURL tenant) Nothing (toHtml (into @Text tenant))
 
 tenantInfoLink :: BasePath -> TenantName -> Html ()
 tenantInfoLink rootURL tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
-    hxNavLink (tenantUrl rootURL tenant <> "info") Nothing (toHtml (into @Text tenant))
+    hxNavLink [] (tenantUrl rootURL tenant <> "info") Nothing (toHtml (into @Text tenant))
 
 tenantLink :: BasePath -> VertexName -> TenantName -> Html ()
 tenantLink rootURL name tenant =
@@ -458,7 +208,7 @@ tenantLink rootURL name tenant =
 
 vertexName :: VertexName -> Html ()
 vertexName n = do
-  vertexTypeIcon (from n)
+  vertexIcon (from n)
   toHtml (into @Text n)
 
 -- | Return the search result
@@ -494,9 +244,6 @@ newtype SearchForm = SearchForm {query :: Text} deriving (Eq, Show, Generic)
 
 instance FromForm SearchForm
 
-with' :: With a => a -> Text -> a
-with' x n = with x [class_ n]
-
 searchComponent :: Context -> Maybe Text -> Html () -> Html ()
 searchComponent ctx queryM result = do
   with' div_ "grid p-4 place-content-center" do
@@ -516,61 +263,6 @@ searchComponent ctx queryM result = do
       Just q -> value_ q
       Nothing -> placeholder_ "Begin Typing To Search Config..."
 
-hxTrigger, hxTarget, hxGet, hxPost, hxIndicator :: Text -> Attribute
-hxTrigger = makeAttribute "hx-trigger"
-hxTarget = makeAttribute "hx-target"
-hxGet = makeAttribute "hx-get"
-hxPost = makeAttribute "hx-post"
-hxIndicator = makeAttribute "hx-indicator"
-
-hxPushUrl :: Attribute
-hxPushUrl = makeAttribute "hx-push-url" "true"
-
-infoComponent :: Context -> Analysis -> Html ()
-infoComponent ctx analysis = do
-  with' div_ "grid p-4 place-content-center" do
-    with' span_ "font-semibold pb-3" do
-      "Config details"
-      traverse_ (tenantBaseLink ctx.rootURL) scope
-    with' div_ "pb-3" do
-      unless (Set.null otherTenants) $ do
-        "Available tenants:"
-        traverse_ (tenantInfoLink ctx.rootURL) otherTenants
-    with' div_ "not-prose bg-slate-50 border rounded-xl w-80" do
-      with' table_ "table-auto border-collapse w-80" do
-        thead_ $ with' tr_ "border-b text-left" $ traverse_ (with' th_ "p-1") ["Object", "Count"]
-        with' tbody_ "bg-white" do
-          objectCounts "jobs" config.jobs
-          objectCounts "nodesets" config.nodesets
-          objectCounts "pipelines" config.pipelines
-          with' tr_ "border-b" do
-            with' td_ "p-1" "Vertices"
-            with' td_ "p-1" (toHtml $ show $ Set.size $ Set.filter vForTenants analysis.vertices)
-
-    with' div_ "pt-3" do
-      pipelinesInfoComponent ctx analysis (Map.filterWithKey forTenants config.pipelines)
-  where
-    scope = case ctx.scope of
-      Scoped tenants -> tenants
-      UnScoped -> mempty
-    otherTenants = Set.difference analysis.config.tenants scope
-    config = analysis.config
-    objectCounts :: Text -> Zuul.ConfigLoader.ConfigMap a b -> Html ()
-    objectCounts n m = do
-      with' tr_ "border-b" do
-        with' td_ "p-1" (toHtml n)
-        with' td_ "p-1" (toHtml $ show $ Map.size $ Map.filterWithKey forTenants m)
-    forTenants :: a -> [(ConfigLoc, b)] -> Bool
-    forTenants _ xs = case ctx.scope of
-      Scoped tenants -> any (keepTenants tenants . fst) xs
-      UnScoped -> True
-    vForTenants v = case ctx.scope of
-      Scoped tenants -> v.tenants `Set.isSubsetOf` tenants
-      UnScoped -> True
-
-    keepTenants :: Set TenantName -> ConfigLoc -> Bool
-    keepTenants tenants loc = loc.tenants `Set.isSubsetOf` tenants
-
 isJobVertex :: VertexName -> Bool
 isJobVertex = \case
   VJob {} -> True
@@ -582,70 +274,6 @@ isPipelineConfig = \case
   VTemplatePipeline n _ -> Just n
   VRegexPipeline n _ -> Just n
   _ -> Nothing
-
-pipelineJobCount :: Context -> Analysis -> PipelineName -> Int
-pipelineJobCount ctx analysis pipeline = sum $ map countJob pipelineForest
-  where
-    countJob :: Tree VertexName -> Int
-    countJob (Node root childs)
-      | isPipelineConfig root == Just pipeline = length $ filter isJob childs
-      | otherwise = 0
-    isJob :: Tree VertexName -> Bool
-    isJob (Node root _) = isJobVertex root
-
-    pipelineForest = case NE.nonEmpty pipelineVerticesList of
-      Just pipelineVertices -> ZuulWeeder.Graph.findReachableForest tenantM pipelineVertices analysis.dependentGraph
-      Nothing -> mempty
-
-    pipelineVerticesList = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
-      where
-        matchVertex v = v.name == VPipeline pipeline
-
-    tenantM = case ctx.scope of
-      UnScoped -> Nothing
-      Scoped tenants -> Just tenants
-
--- | Display the list of pipelines
-pipelinesInfoComponent :: Context -> Analysis -> Zuul.ConfigLoader.ConfigMap PipelineName Pipeline -> Html ()
-pipelinesInfoComponent ctx analysis pipelines = do
-  title "Pipelines"
-  ul_ do
-    forM_ (Map.toList perLocs) $ \(repo, xs) -> do
-      with' li_ "pt-2" do
-        let vProj = VRepository repo
-        with div_ [title_ $ "Pipelines defined in '" <> from vProj <> "'"] do
-          vertexLink ctx vProj (vertexName vProj)
-        with' ul_ "pl-2 pb-2" do
-          traverse_ (with' li_ "pb-2" . displayPipeline) xs
-  where
-    jobCounts :: Map PipelineName Int
-    jobCounts = Map.mapWithKey (\n _ -> pipelineJobCount ctx analysis n) pipelines
-    perLocs :: Map CanonicalProjectName [Pipeline]
-    perLocs = foldr addPipelines mempty (Map.elems pipelines)
-    addPipelines xs acc = foldr addPipeline acc xs
-    addPipeline (loc, pipeline)
-      | forTenant loc = Map.insertWith mappend loc.project [pipeline]
-      | otherwise = ZuulWeeder.Prelude.id
-
-    forTenant :: ConfigLoc -> Bool
-    forTenant loc = case ctx.scope of
-      Scoped tenants -> loc.tenants `Set.isSubsetOf` tenants
-      UnScoped -> True
-
-    displayPipeline :: Pipeline -> Html ()
-    displayPipeline pipeline = do
-      let vPipeline = VPipeline pipeline.name
-          jobCount = fromMaybe 0 $ Map.lookup pipeline.name jobCounts
-      vertexLink ctx vPipeline do
-        vertexName vPipeline
-        with span_ [class_ "pl-2", title_ "Job count"] do
-          toHtml $ show jobCount
-          vertexTypeIcon VJobT
-
-      unless (null pipeline.timers) do
-        with' ul_ "pl-2" do
-          forM_ pipeline.timers $ \timer -> do
-            li_ (toHtml timer)
 
 debugComponent :: Analysis -> Html ()
 debugComponent analysis = do
@@ -662,150 +290,10 @@ debugComponent analysis = do
 locLink :: Text -> Html ()
 locLink url =
   with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
-    mkIcon "ri-link"
+    mkIcon Nothing "ri-link"
     toHtml locPath
   where
     locPath = Text.drop 8 url
-
-objectInfo :: Context -> NonEmpty Vertex -> Analysis -> Html ()
-objectInfo ctx vertices analysis = do
-  h2_ do
-    vertexTypeIcon (from vertex.name)
-    toHtml (from vertex.name :: Text)
-  ul_ do
-    traverse_ li_ configComponents
-  with' div_ "grid grid-cols-2 gap-1 m-4" do
-    div_ do
-      unless (null dependents) do
-        titleWithTooltip ("The dependents list require '" <> from vertex.name <> "'") "Dependents"
-        traverse_ (renderTree filterJob 0) (filterDependentJob dependents)
-    div_ do
-      unless (null dependencies) do
-        titleWithTooltip ("'" <> from vertex.name <> "' requires the dependency list") "Dependencies"
-        traverse_ (renderTree (const False) 0) dependencies
-
-      unless (null owned) do
-        titleWithTooltip ("'" <> from vertex.name <> "' provides") "Provides"
-        with' ul_ "pl-2" do
-          traverse_ (\v -> li_ $ vertexLink ctx v.name (vertexName v.name)) owned
-  script_ do
-    "addTreeHandler()"
-  where
-    -- Hide jobs on the Dependents list when their parent are a pipeline config.
-    -- This is because if a job is needed by a pipeline config, then we don't want
-    -- to see all the jobs needed by that pipeline config
-    filterJob v
-      | isJobVertex vertex.name && isJust (isPipelineConfig v) = True
-      | otherwise = False
-
-    -- Hide jobs on the Dependent list when looking at a project pipeline config
-    -- This is because relevant jobs are already in the dependency list
-    filterDependentJob tree
-      | isJust (isPipelineConfig vertex.name) = filter doFilter tree
-      | otherwise = tree
-      where
-        doFilter (Node n _)
-          | isJobVertex n = False
-          | otherwise = True
-
-    owned :: [Vertex]
-    owned = case vertex.name of
-      VRepository n -> case Map.lookup n analysis.repositoryContent of
-        Just objects -> sort $ Set.toList objects
-        Nothing -> []
-      _ -> []
-
-    renderConfigLink :: Maybe (Html ()) -> ConfigLoc -> Html ()
-    renderConfigLink extra loc = do
-      case extra of
-        Just h -> h
-        Nothing -> pure ()
-      with div_ [title_ $ "'" <> from vertex.name <> "' is provided by this repo"] do
-        let vRepo = VRepository loc.project
-        vertexLink ctx vRepo (vertexName vRepo)
-        traverse_ (tenantLink ctx.rootURL vertex.name) loc.tenants
-      with div_ [title_ $ "'" <> from vertex.name <> "' is defined at this url"] do
-        locLink $ configLocUrl loc
-
-    renderProjectLink :: ConnectionUrl -> CanonicalProjectName -> Set TenantName -> Html ()
-    renderProjectLink url project tenants = do
-      locLink $ projectUrl url project
-      traverse_ (tenantLink ctx.rootURL vertex.name) tenants
-
-    vertex = NE.head vertices
-    forTenant :: Set TenantName -> Bool
-    forTenant locTenants = case ctx.scope of
-      Scoped tenants -> tenants `Set.isSubsetOf` locTenants
-      UnScoped -> True
-
-    getLocs :: Maybe [(ConfigLoc, a)] -> [Html ()]
-    getLocs = map (renderConfigLink Nothing) . filter (forTenant . (.tenants)) . maybe [] (fmap fst)
-
-    renderPipelineInfo :: Pipeline -> Html ()
-    renderPipelineInfo p = traverse_ (with div_ [title_ "Trigger frequency"] . toHtml) p.timers
-
-    getPipelineLocs :: Maybe [(ConfigLoc, Pipeline)] -> [Html ()]
-    getPipelineLocs =
-      map (\(loc, pipeline) -> renderConfigLink (Just $ renderPipelineInfo pipeline) loc)
-        . filter (forTenant . (.tenants) . fst)
-        . fromMaybe []
-
-    configComponents :: [Html ()]
-    configComponents = case vertex.name of
-      VAbstractJob name -> getLocs $ Map.lookup name analysis.config.jobs
-      VJob name -> getLocs $ Map.lookup name analysis.config.jobs
-      VSecret name -> getLocs $ Map.lookup name analysis.config.secrets
-      VSemaphore name -> getLocs $ Map.lookup name analysis.config.semaphores
-      VQueue name -> getLocs $ Map.lookup name analysis.config.queues
-      VProject name -> getLocs $ Map.lookup name analysis.config.projects
-      VProjectRegex name -> getLocs $ Map.lookup name analysis.config.projectRegexs
-      VProjectTemplate name -> getLocs $ Map.lookup name analysis.config.projectTemplates
-      VPipeline name -> getPipelineLocs $ Map.lookup name analysis.config.pipelines
-      VNodeset name -> getLocs $ Map.lookup name analysis.config.nodesets
-      VNodeLabel name -> getLocs $ Map.lookup name analysis.config.nodeLabels
-      VProjectPipeline _ name -> getLocs $ Map.lookup name analysis.config.projects
-      VRegexPipeline _ name -> getLocs $ Map.lookup name analysis.config.projectRegexs
-      VTemplatePipeline _ name -> getLocs $ Map.lookup name analysis.config.projectTemplates
-      VRepository name -> case Map.lookup name analysis.config.canonicalProjects of
-        Just tenants | forTenant tenants -> case Map.lookup name.provider analysis.config.urlBuilder of
-          Just cu -> [renderProjectLink cu name tenants] -- Left (cu, name, tenants)]
-          _ -> []
-        _ -> []
-      VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
-      VReporter name -> getLocs $ Map.lookup name analysis.config.reporters
-    dependencies = getForest analysis.dependencyGraph
-    dependents = getForest analysis.dependentGraph
-    getForest = ZuulWeeder.Graph.findReachableForest tenantsM vertices
-      where
-        tenantsM = case ctx.scope of
-          UnScoped -> Nothing
-          Scoped xs -> Just xs
-
-    stopDescent :: VertexType -> Bool
-    stopDescent = \case
-      VJobT -> True
-      VAbstractJobT -> True
-      VProjectT -> True
-      _ -> False
-
-    renderTree :: (VertexName -> Bool) -> Int -> Tree VertexName -> Html ()
-    renderTree filterLeaf depth (Node root childs) = do
-      let listStyle
-            | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
-            | otherwise = ""
-          isNested = depth > 2
-          stopHere = stopDescent (from root) || filterLeaf root
-          showCarret = not (List.null childs) && depth > 1 && not stopHere
-          nestedStyle
-            | isNested = " nested"
-            | otherwise = ""
-      with' ul_ (listStyle <> nestedStyle) do
-        li_ do
-          when showCarret do
-            with' span_ "tree-caret" mempty
-          vertexLink ctx root (vertexName root)
-          unless (List.null childs || stopHere) do
-            traverse_ (renderTree filterLeaf (depth + 1)) childs
 
 vertexScope :: Scope -> Set Vertex -> [Vertex]
 vertexScope scope vertices = Set.toList $ case scope of
@@ -813,267 +301,3 @@ vertexScope scope vertices = Set.toList $ case scope of
   Scoped tenants -> Set.filter (matchTenant tenants) vertices
   where
     matchTenant tenants v = tenants `Set.isSubsetOf` v.tenants
-
-newtype VertexTypeUrl = VTU (Text -> VertexName)
-
-data DecodeProject = DecodeCanonical | DecodeTemplate | DecodeRegex
-
-instance FromHttpApiData VertexTypeUrl where
-  parseUrlPiece txt = pure . VTU $ case txt of
-    "abstract-job" -> VAbstractJob . JobName
-    "job" -> VJob . JobName
-    "semaphore" -> VSemaphore . SemaphoreName
-    "secret" -> VSecret . SecretName
-    "nodeset" -> VNodeset . NodesetName
-    "label" -> VNodeLabel . NodeLabelName
-    "queue" -> VQueue . QueueName
-    "project-config" -> VProject . decodeCanonical
-    "project-regex" -> VProjectRegex . ProjectRegex
-    "project-template" -> VProjectTemplate . ProjectTemplateName
-    "pipeline" -> VPipeline . PipelineName
-    "project-pipeline" -> splitPipeline DecodeCanonical
-    "regex-pipeline" -> splitPipeline DecodeRegex
-    "template-pipeline" -> splitPipeline DecodeTemplate
-    "trigger" -> VTrigger . ConnectionName
-    "reporter" -> VReporter . ConnectionName
-    "repository" -> VRepository . decodeCanonical
-    _ -> error $ "Unknown obj type: " <> from txt
-    where
-      -- Assume the provider name is the first element of a '/' separated path
-      decodeCanonical :: Text -> CanonicalProjectName
-      decodeCanonical t =
-        let (ProviderName -> provider, Text.tail -> name) = Text.span (/= '/') t
-         in CanonicalProjectName provider (ProjectName name)
-
-      -- Project/Template Pipeline name is separated by a ':'
-      splitPipeline :: DecodeProject -> Text -> VertexName
-      splitPipeline dp t =
-        let (PipelineName -> pipeline, Text.tail -> name) = Text.span (/= ':') t
-         in case dp of
-              DecodeCanonical -> VProjectPipeline pipeline (decodeCanonical name)
-              DecodeTemplate -> VTemplatePipeline pipeline (ProjectTemplateName name)
-              DecodeRegex -> VRegexPipeline pipeline (ProjectRegex name)
-
-newtype VertexNameUrl = VNU {getVNU :: Text}
-
-instance FromHttpApiData VertexNameUrl where
-  parseUrlPiece = pure . VNU
-
-newtype TenantsUrl = TNU {getTNU :: Set TenantName}
-
-instance FromHttpApiData TenantsUrl where
-  parseUrlPiece piece = pure . TNU $ Set.fromList (TenantName <$> Text.split (== ',') piece)
-
-type GetRequest = Header "HX-Request" Text :> Get '[HTML] (Html ())
-
--- | The zuul-weeder base HTTP API.
--- The HX-Request header is set by inline navigation, when it is missing, the full body is returned.
-type BaseAPI =
-  GetRequest
-    :<|> "about" :> GetRequest
-    :<|> "search" :> GetRequest
-    :<|> "info" :> GetRequest
-    :<|> "debug" :> GetRequest
-    :<|> "export" :> Get '[JSON] Config
-    :<|> "object" :> Capture "type" VertexTypeUrl :> CaptureAll "name" VertexNameUrl :> GetRequest
-    :<|> "search_results" :> SearchPath
-    :<|> "search" :> Capture "query" Text :> Get '[HTML] (Html ())
-    :<|> "data.json" :> Get '[JSON] D3Graph
-
-type SearchPath =
-  ReqBody '[FormUrlEncoded] SearchForm
-    :> Post '[HTML] (Headers '[Header "HX-Push" Text] (Html ()))
-
-type TenantAPI = "tenant" :> Capture "tenant" TenantsUrl :> BaseAPI
-
-type StaticAPI = "dists" :> Raw
-
-type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
-
-newtype CacheRender = CacheRender
-  { infoPages :: Map Context CachePage
-  }
-
-data CachePage = CachePage
-  { _pageAge :: Int64,
-    _pageContent :: Html ()
-  }
-
-instance Semigroup CacheRender where
-  a <> b = CacheRender (a.infoPages <> b.infoPages)
-
-instance Monoid CacheRender where
-  mempty = CacheRender mempty
-
--- | Creates the Web Application Interface (wai).
-app ::
-  -- | An action to refresh the analysis
-  IO Analysis ->
-  MVar CacheRender ->
-  -- | The base path of the interface, used to render absolute links
-  BasePath ->
-  -- | The location of the static files
-  FilePath ->
-  -- | The application to serve
-  Application
-app config cache rootURL distPath = serve (Proxy @API) rootServer
-  where
-    rootServer :: Server API
-    rootServer =
-      Servant.Server.StaticFiles.serveDirectoryWebApp distPath
-        :<|> server (Context rootURL UnScoped)
-        :<|> server . Context rootURL . Scoped . getTNU
-
-    server :: Context -> Server BaseAPI
-    server ctx =
-      indexRoute "" (pure $ welcomeComponent ctx)
-        :<|> indexRoute "about" (pure aboutComponent)
-        :<|> flip searchRoute Nothing
-        :<|> indexRoute "info" infoCache
-        :<|> indexRoute "debug" (debugComponent <$> liftIO config)
-        :<|> exportRoute
-        :<|> objectRoute
-        :<|> searchResultRoute
-        :<|> searchRouteWithQuery
-        :<|> d3Route
-      where
-        infoCache :: Handler (Html ())
-        infoCache = do
-          now <- liftIO getSec
-          liftIO $ modifyMVar cache (go now)
-          where
-            go now m = case Map.lookup ctx m.infoPages of
-              Just (CachePage age render) | now - age < 3600 -> do
-                pure (m, render)
-              _ -> do
-                page <- infoComponent ctx <$> liftIO config
-                let newMap = Map.insert ctx (CachePage now page) m.infoPages
-                pure (CacheRender newMap, page)
-
-        indexRoute :: Text -> Handler (Html ()) -> Maybe a -> Handler (Html ())
-        -- The HX-Request header is missing, return the full body
-        indexRoute name component Nothing = mainBody ctx name <$> component
-        -- The HX-Request header is set, return the component and update the nav links
-        indexRoute name component (Just _htmxRequest) = do
-          componentHtml <- component
-          pure do
-            navComponent ctx name
-            with div_ [class_ "container grid p-4"] componentHtml
-
-        objectRoute :: VertexTypeUrl -> [VertexNameUrl] -> Maybe Text -> Handler (Html ())
-        objectRoute (VTU mkName) name htmxRequest = do
-          analysis <- liftIO config
-          let vname = mkName $ Text.intercalate "/" $ getVNU <$> name
-          let vertices = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
-                where
-                  matchVertex v = v.name == vname
-          let component = case NE.nonEmpty vertices of
-                Just xs -> pure (objectInfo ctx xs analysis)
-                Nothing -> pure "not found!"
-          indexRoute "object" component htmxRequest
-
-        -- /search/query does not come from htmx, the body is always served
-        searchRouteWithQuery query = searchRoute Nothing (Just query)
-
-        searchRoute htmxRequest queryM = do
-          result <- case queryM of
-            Just query -> do
-              analysis <- liftIO config
-              pure . snd $ searchResults ctx query analysis.names
-            Nothing -> pure mempty
-          indexRoute "search" (pure $ searchComponent ctx queryM result) htmxRequest
-
-        searchResultRoute req = do
-          analysis <- liftIO config
-          let (value, result) = searchResults ctx req.query analysis.names
-          pure $ addHeader (maybe "false" (mappend (baseUrl ctx <> "search/")) value) result
-
-        d3Route = do
-          analysis <- liftIO config
-          let graph = dependencyGraph analysis
-          pure (toD3Graph ctx.scope graph)
-
-        exportRoute = do
-          analysis <- liftIO config
-          -- TODO: filter with tenant scope
-          pure (analysis.config)
-
--- | Render the analysis as a graphviz graph.
-dotGraph :: Analysis -> Text
-dotGraph analysis = "digraph G {" <> Text.unlines dotGraph' <> "}"
-  where
-    dotGraph' =
-      (Text.unlines . nodeStyles <$> Map.toList allNodes)
-        <> ["edge [color=\"gold2\"]"]
-        <> dotEdges analysis.dependencyGraph
-        <> ["edge [color=\"pink\"]"]
-        <> dotEdges analysis.dependentGraph
-    nodeStyles :: (VertexType, [Text]) -> [Text]
-    nodeStyles (vt, objs) =
-      mappend "   "
-        <$> [ "node [" <> dotShape vt <> " " <> dotColor vt <> "];",
-              Text.unwords (map (\v -> "\"" <> v <> "\"") objs) <> ";"
-            ]
-    allNodes :: Map VertexType [Text]
-    allNodes =
-      Map.fromListWith mappend $
-        Set.toList $
-          Set.map (\v -> (from v.name, [from v.name])) $
-            analysis.vertices
-
-    dotEdges :: ConfigGraph -> [Text]
-    dotEdges = fmap dotEdge . Algebra.Graph.edgeList
-    dotEdge :: (Vertex, Vertex) -> Text
-    dotEdge (v1, v2) = "  \"" <> from v1.name <> "\" -> \"" <> from v2.name <> "\""
-
-dotColor :: VertexType -> Text
-dotColor vt = from msg
-  where
-    msg :: String
-    msg = printf "color=\"%0.2f+0.5+0.5\"" (fromInteger (toInteger (vertexHue vt)) / 360.0 :: Float)
-
-dotShape :: VertexType -> Text
-dotShape vt = from msg
-  where
-    msg :: String
-    msg = printf "shape=%s style=filled" $ case vt of
-      VProjectT -> "box"
-      VProjectTemplateT -> "box"
-      VProjectRegexT -> "box"
-      VPipelineT -> pipelineShape
-      VProjectPipelineT -> pipelineShape
-      VRegexPipelineT -> pipelineShape
-      VTemplatePipelineT -> pipelineShape
-      VReporterT -> "rarrow"
-      VTriggerT -> "larrow"
-      VJobT -> "ellipse"
-      VAbstractJobT -> "ellipse"
-      VNodeLabelT -> "tab"
-      VNodesetT -> "component"
-      _ -> "cylinder"
-    pipelineShape :: String
-    pipelineShape = "hexagon"
-
--- | A graphviz graph for the legend.
-dotLegend :: Text
-dotLegend = "digraph G {" <> Text.unlines dotGraph' <> "}"
-  where
-    dotGraph' =
-      mappend " "
-        <$> [ "rankdir=\"RL\";",
-              "label = \"Legend\";",
-              "shape = rectable;",
-              "color = black;",
-              "\"-dependent->\" [fontcolor=pink shape=plaintext fontsize=20 fontname=\"times bold\"];",
-              "\"-dependency->\" [fontcolor=gold2 shape=plaintext fontsize=20 fontname=\"times bold\"];"
-            ]
-          <> map mkLegend [minBound .. maxBound]
-    mkLegend :: VertexType -> Text
-    mkLegend vt =
-      Text.unwords
-        [ "\"" <> vertexTypeName vt <> "\"",
-          "[",
-          dotShape vt,
-          dotColor vt,
-          "];"
-        ]

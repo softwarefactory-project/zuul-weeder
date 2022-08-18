@@ -134,6 +134,14 @@ library
                      , ZuulWeeder.Graph
                      , ZuulWeeder.Monitoring
                      , ZuulWeeder.UI
+                     , ZuulWeeder.UI.App
+                     , ZuulWeeder.UI.CSS
+                     , ZuulWeeder.UI.Colors
+                     , ZuulWeeder.UI.D3
+                     , ZuulWeeder.UI.Dot
+                     , ZuulWeeder.UI.Vertex
+                     , ZuulWeeder.UI.Info
+                     , ZuulWeeder.UI.Tree
   other-modules:       Paths_zuul_weeder
   autogen-modules:     Paths_zuul_weeder
 

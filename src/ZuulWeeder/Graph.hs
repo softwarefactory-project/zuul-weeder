@@ -15,6 +15,7 @@ module ZuulWeeder.Graph
   ( ConfigGraph,
     Analysis (..),
     Vertex (..),
+    VertexType (..),
     VertexName (..),
     analyzeConfig,
     findReachable,
@@ -81,6 +82,46 @@ data VertexName
   | -- | A pipeline reporter
     VReporter ConnectionName
   deriving (Eq, Ord, Show, Generic, Hashable)
+
+data VertexType
+  = VAbstractJobT
+  | VJobT
+  | VSemaphoreT
+  | VSecretT
+  | VNodesetT
+  | VNodeLabelT
+  | VQueueT
+  | VPipelineT
+  | VProjectT
+  | VProjectPipelineT
+  | VProjectRegexT
+  | VRegexPipelineT
+  | VProjectTemplateT
+  | VTemplatePipelineT
+  | VRepositoryT
+  | VTriggerT
+  | VReporterT
+  deriving (Eq, Ord, Enum, Bounded)
+
+instance From VertexName VertexType where
+  from = \case
+    VAbstractJob _ -> VAbstractJobT
+    VJob _ -> VJobT
+    VSemaphore _ -> VSemaphoreT
+    VSecret _ -> VSecretT
+    VQueue _ -> VQueueT
+    VProject _ -> VProjectT
+    VProjectRegex _ -> VProjectRegexT
+    VNodeset _ -> VNodesetT
+    VProjectTemplate _ -> VProjectTemplateT
+    VPipeline _ -> VPipelineT
+    VNodeLabel _ -> VNodeLabelT
+    VProjectPipeline _ _ -> VProjectPipelineT
+    VRegexPipeline _ _ -> VRegexPipelineT
+    VTemplatePipeline _ _ -> VTemplatePipelineT
+    VRepository _ -> VRepositoryT
+    VTrigger _ -> VTriggerT
+    VReporter _ -> VReporterT
 
 instance From VertexName Text where
   from = \case

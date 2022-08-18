@@ -3,7 +3,7 @@
     "ZuulWeeder.Graph.findReachable"
   , "ZuulWeeder.Prelude..*JSON"
   , -- Used for doc rendering
-    "ZuulWeeder.UI.dot.*"
+    "ZuulWeeder.UI.Dot..*"
   , "ZuulWeeder.Prelude.writeFileText"
   , -- The entrypoints
     "ZuulWeeder.main"

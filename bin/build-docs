@@ -3,13 +3,13 @@
 # render the module dependencies with calligraphy
 cabal clean # clean to avoid duplicate calligraphy links
 cabal build -O0 lib:zuul-weeder # build the hie files
-MODULES=$(find src/ -name "*.hs" | sed -e 's/^src.//' -e 's/.hs$//' | tr '/' '.' | egrep -v "ZuulWeeder.Prelude|Zuul.Config") # get the module lists, except the common ones
+MODULES=$(find src/ -name "*.hs" | sed -e 's/^src.//' -e 's/.hs$//' | tr '/' '.' | egrep -v "ZuulWeeder.Prelude|Zuul.Config|ZuulWeeder.UI.*") # get the module lists, except the common ones
 nix run .#calligraphy -- calligraphy -s doc/modules.svg --collapse-modules $MODULES
 
 # render the demo analysis with graphviz
 cabal repl <<EOF
-(writeFileText "dist-newstyle/graph.dot" . ZuulWeeder.UI.dotGraph =<< ZuulWeeder.demoConfig) \
-  >> writeFileText "dist-newstyle/legend.dot" ZuulWeeder.UI.dotLegend
+(writeFileText "dist-newstyle/graph.dot" . ZuulWeeder.UI.Dot.dotGraph =<< ZuulWeeder.demoConfig) \
+  >> writeFileText "dist-newstyle/legend.dot" ZuulWeeder.UI.Dot.dotLegend
 EOF
 dot -Tsvg dist-newstyle/legend.dot > dist-newstyle/legend.svg
 dot -Tsvg dist-newstyle/graph.dot  > dist-newstyle/graph.svg

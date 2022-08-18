@@ -18,7 +18,7 @@ import Zuul.ZooKeeper
 import ZuulWeeder qualified
 import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
-import ZuulWeeder.UI
+import ZuulWeeder.UI.Vertex
 
 main :: IO ()
 main = do

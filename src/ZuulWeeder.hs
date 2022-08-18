@@ -30,6 +30,7 @@ import ZuulWeeder.Graph
 import ZuulWeeder.Monitoring qualified
 import ZuulWeeder.Prelude
 import ZuulWeeder.UI qualified
+import ZuulWeeder.UI.App qualified
 
 data Args = Args
   { zkPath :: FilePathT,
@@ -72,7 +73,7 @@ runWeb logger config = do
   port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
   info logger ("[+] serving 0.0.0.0:" <> toHeader port <> from rootUrl)
   cache <- newMVar mempty
-  let app = ZuulWeeder.UI.app config cache (ZuulWeeder.UI.BasePath rootUrl) distPath
+  let app = ZuulWeeder.UI.App.app config cache (ZuulWeeder.UI.BasePath rootUrl) distPath
   -- monitornig
   monitoring <- ZuulWeeder.Monitoring.mkMonitoring logger
   Warp.run port (monitoring app)
