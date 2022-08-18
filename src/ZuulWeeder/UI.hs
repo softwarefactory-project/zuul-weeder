@@ -47,19 +47,19 @@ import ZuulWeeder.Graph
 import ZuulWeeder.Prelude
 
 -- | The request context
-data Scope = UnScoped | Scoped (Set TenantName) deriving (Show)
+data Scope = UnScoped | Scoped (Set TenantName) deriving (Ord, Eq, Show)
 
 -- | The base path of the web interface, when served behing a sub path proxy.
 newtype BasePath = BasePath
   { basePath :: Text
   }
-  deriving newtype (Show)
+  deriving newtype (Ord, Eq, Show)
 
 data Context = Context
   { rootURL :: BasePath,
     scope :: Scope
   }
-  deriving (Show)
+  deriving (Ord, Eq, Show)
 
 mainBody :: Context -> Text -> Html () -> Html ()
 mainBody ctx page mainComponent =
@@ -873,17 +873,33 @@ type StaticAPI = "dists" :> Raw
 
 type API = StaticAPI :<|> BaseAPI :<|> TenantAPI
 
+newtype CacheRender = CacheRender
+  { infoPages :: Map Context CachePage
+  }
+
+data CachePage = CachePage
+  { _pageAge :: Int64,
+    _pageContent :: Html ()
+  }
+
+instance Semigroup CacheRender where
+  a <> b = CacheRender (a.infoPages <> b.infoPages)
+
+instance Monoid CacheRender where
+  mempty = CacheRender mempty
+
 -- | Creates the Web Application Interface (wai).
 app ::
   -- | An action to refresh the analysis
   IO Analysis ->
+  MVar CacheRender ->
   -- | The base path of the interface, used to render absolute links
   BasePath ->
   -- | The location of the static files
   FilePath ->
   -- | The application to serve
   Application
-app config rootURL distPath = serve (Proxy @API) rootServer
+app config cache rootURL distPath = serve (Proxy @API) rootServer
   where
     rootServer :: Server API
     rootServer =
@@ -896,7 +912,7 @@ app config rootURL distPath = serve (Proxy @API) rootServer
       indexRoute "" (pure $ welcomeComponent ctx)
         :<|> indexRoute "about" (pure aboutComponent)
         :<|> flip searchRoute Nothing
-        :<|> indexRoute "info" (infoComponent ctx <$> liftIO config)
+        :<|> indexRoute "info" infoCache
         :<|> indexRoute "debug" (debugComponent <$> liftIO config)
         :<|> exportRoute
         :<|> objectRoute
@@ -904,6 +920,19 @@ app config rootURL distPath = serve (Proxy @API) rootServer
         :<|> searchRouteWithQuery
         :<|> d3Route
       where
+        infoCache :: Handler (Html ())
+        infoCache = do
+          now <- liftIO getSec
+          liftIO $ modifyMVar cache (go now)
+          where
+            go now m = case Map.lookup ctx m.infoPages of
+              Just (CachePage age render) | now - age < 3600 -> do
+                pure (m, render)
+              _ -> do
+                page <- infoComponent ctx <$> liftIO config
+                let newMap = Map.insert ctx (CachePage now page) m.infoPages
+                pure (CacheRender newMap, page)
+
         indexRoute :: Text -> Handler (Html ()) -> Maybe a -> Handler (Html ())
         -- The HX-Request header is missing, return the full body
         indexRoute name component Nothing = mainBody ctx name <$> component

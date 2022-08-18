@@ -71,7 +71,8 @@ runWeb logger config = do
   distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
   port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
   info logger ("[+] serving 0.0.0.0:" <> toHeader port <> from rootUrl)
-  let app = ZuulWeeder.UI.app config (ZuulWeeder.UI.BasePath rootUrl) distPath
+  cache <- newMVar mempty
+  let app = ZuulWeeder.UI.app config cache (ZuulWeeder.UI.BasePath rootUrl) distPath
   -- monitornig
   monitoring <- ZuulWeeder.Monitoring.mkMonitoring logger
   Warp.run port (monitoring app)
