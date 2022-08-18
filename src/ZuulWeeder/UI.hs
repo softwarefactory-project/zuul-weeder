@@ -538,6 +538,8 @@ infoComponent ctx analysis = do
           objectCounts "jobs" config.jobs
           objectCounts "nodesets" config.nodesets
           objectCounts "pipelines" config.pipelines
+    with' div_ "pt-3" do
+      pipelinesInfoComponent ctx (Map.filterWithKey forTenants config.pipelines)
   where
     scope = case ctx.scope of
       Scoped tenants -> tenants
@@ -555,6 +557,32 @@ infoComponent ctx analysis = do
       UnScoped -> True
     keepTenants :: Set TenantName -> ConfigLoc -> Bool
     keepTenants tenants loc = tenants `Set.isSubsetOf` loc.tenants
+
+-- | Display the list of pipelines
+pipelinesInfoComponent :: Context -> Zuul.ConfigLoader.ConfigMap PipelineName Pipeline -> Html ()
+pipelinesInfoComponent ctx pipelines = do
+  title "Pipelines"
+  ul_ do
+    forM_ (Map.toList pipelines) $ \(name, locs) -> do
+      let vPipeline = VPipeline name
+      li_ do
+        vertexLink ctx vPipeline (vertexName vPipeline)
+        with' ul_ "pl-2" do
+          traverse_ displayPipelines (filter forTenant locs)
+  where
+    forTenant :: (ConfigLoc, b) -> Bool
+    forTenant (loc, _) = case ctx.scope of
+      Scoped tenants -> tenants `Set.isSubsetOf` loc.tenants
+      UnScoped -> True
+    displayPipelines :: (ConfigLoc, Pipeline) -> Html ()
+    displayPipelines (loc, pipeline) = do
+      let vProj = VRepository loc.project
+      li_ do
+        forM_ pipeline.timers $ \timer -> do
+          toHtml timer
+        div_ do
+          "Defined in: "
+          vertexLink ctx vProj (vertexName vProj)
 
 debugComponent :: Analysis -> Html ()
 debugComponent analysis = do
