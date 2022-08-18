@@ -11,6 +11,11 @@
                 )
             , subForest =
                 [ Node
+                    { rootLabel = VJob
+                        ( JobName "config-check" )
+                    , subForest = []
+                    }
+                , Node
                     { rootLabel = VProject
                         ( CanonicalProjectName
                             { provider = ProviderName "sftests.com"
@@ -31,19 +36,28 @@
                 )
             , subForest =
                 [ Node
+                    { rootLabel = VJob
+                        ( JobName "linter" )
+                    , subForest = []
+                    }
+                , Node
+                    { rootLabel = VJob
+                        ( JobName "wallaby-job" )
+                    , subForest = []
+                    }
+                , Node
+                    { rootLabel = VJob
+                        ( JobName "zena-job" )
+                    , subForest = []
+                    }
+                , Node
                     { rootLabel = VProject
                         ( CanonicalProjectName
                             { provider = ProviderName "sftests.com"
                             , project = ProjectName "triple-o"
                             }
                         )
-                    , subForest =
-                        [ Node
-                            { rootLabel = VJob
-                                ( JobName "wallaby-job" )
-                            , subForest = []
-                            }
-                        ]
+                    , subForest = []
                     }
                 ]
             }
@@ -87,6 +101,39 @@
                 )
             , subForest =
                 [ Node
+                    { rootLabel = VJob
+                        ( JobName "linter" )
+                    , subForest =
+                        [ Node
+                            { rootLabel = VTemplatePipeline
+                                ( PipelineName "check" )
+                                ( ProjectTemplateName "common" )
+                            , subForest =
+                                [ Node
+                                    { rootLabel = VProjectTemplate
+                                        ( ProjectTemplateName "common" )
+                                    , subForest =
+                                        [ Node
+                                            { rootLabel = VProject
+                                                ( CanonicalProjectName
+                                                    { provider = ProviderName "sftests.com"
+                                                    , project = ProjectName "config"
+                                                    }
+                                                )
+                                            , subForest = []
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                , Node
+                    { rootLabel = VJob
+                        ( JobName "zena-job" )
+                    , subForest = []
+                    }
+                , Node
                     { rootLabel = VProject
                         ( CanonicalProjectName
                             { provider = ProviderName "sftests.com"

@@ -307,7 +307,9 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
       -- handle pipeline jobs
       forM_ (filter (\j -> from j /= JobName "noop") pipeline.jobs) $ \pJob -> do
         case lookupTenant loc.tenants (from pJob) config.jobs of
-          Just jobs -> vPipelineConfig `connects` jobs
+          Just jobs -> do
+            traverse_ (\job -> vPipelineConfig `allows` job) jobs
+            vPipelineConfig `connects` jobs
           Nothing -> #graphErrors %= (("Can't find : " <> show (into @JobName pJob)) :)
         case pJob of
           PJName _ ->
