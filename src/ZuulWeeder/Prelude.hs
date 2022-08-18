@@ -210,6 +210,7 @@ import Data.Aeson (Object, Value (Array, Object, String))
 import Data.Aeson qualified
 import Data.Aeson.Key qualified
 import Data.Aeson.KeyMap qualified as HM
+import Data.Attoparsec.Text qualified
 import Data.Bifunctor qualified
 import Data.Bool qualified
 import Data.ByteString (ByteString)
@@ -232,8 +233,8 @@ import Data.Set qualified
 import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
-import Data.Text.IO qualified as Text (readFile, writeFile)
 import Data.Text qualified
+import Data.Text.IO qualified as Text (readFile, writeFile)
 import Data.Tree qualified
 import Data.Vector qualified as V
 import Data.Version qualified
@@ -256,14 +257,12 @@ import System.Timeout qualified (timeout)
 import Text.Pretty.Simple qualified
 import Text.Printf qualified
 import Witch qualified
-import Data.Attoparsec.Text  qualified
 
 describeCronSchedule :: System.Cron.Types.CronSchedule -> Text
 describeCronSchedule = Witch.from . System.Cron.Describe.describe System.Cron.Describe.defaultOpts
 
 parseCronScheduleLoose :: Text -> Either String System.Cron.Types.CronSchedule
 parseCronScheduleLoose = Data.Attoparsec.Text.parseOnly System.Cron.Parser.cronScheduleLoose . Data.Text.toLower
-
 
 encodeJSON :: Data.Aeson.ToJSON a => a -> ByteString
 encodeJSON = Witch.from . Data.Aeson.encode
