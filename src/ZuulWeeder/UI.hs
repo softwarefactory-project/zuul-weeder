@@ -719,7 +719,8 @@ objectInfo ctx vertices analysis = do
             | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
             | otherwise = ""
           isNested = depth > 2
-          showCarret = not (List.null childs) && depth > 1
+          stopHere = stopDescent (from root)
+          showCarret = not (List.null childs) && depth > 1 && not stopHere
           nestedStyle
             | isNested = " nested"
             | otherwise = ""
@@ -728,7 +729,7 @@ objectInfo ctx vertices analysis = do
           when showCarret do
             with' span_ "tree-caret" mempty
           vertexLink ctx root (vertexName root)
-          unless (List.null childs || stopDescent (from root)) do
+          unless (List.null childs || stopHere) do
             traverse_ (renderTree (depth + 1)) childs
 
 vertexScope :: Scope -> Set Vertex -> [Vertex]
