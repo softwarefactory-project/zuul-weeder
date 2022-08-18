@@ -678,11 +678,11 @@ objectInfo ctx vertices analysis = do
     div_ do
       unless (null dependents) do
         titleWithTooltip ("The dependents list require '" <> from vertex.name <> "'") "Dependents"
-        traverse_ (renderTree 0) dependents
+        traverse_ (renderTree filterJob 0) (filterDependentJob dependents)
     div_ do
       unless (null dependencies) do
         titleWithTooltip ("'" <> from vertex.name <> "' requires the dependency list") "Dependencies"
-        traverse_ (renderTree 0) dependencies
+        traverse_ (renderTree (const False) 0) dependencies
 
       unless (null owned) do
         titleWithTooltip ("'" <> from vertex.name <> "' provides") "Provides"
@@ -691,6 +691,23 @@ objectInfo ctx vertices analysis = do
   script_ do
     "addTreeHandler()"
   where
+    -- Hide jobs on the Dependents list when their parent are a pipeline config.
+    -- This is because if a job is needed by a pipeline config, then we don't want
+    -- to see all the jobs needed by that pipeline config
+    filterJob v
+      | isJobVertex vertex.name && isJust (isPipelineConfig v) = True
+      | otherwise = False
+
+    -- Hide jobs on the Dependent list when looking at a project pipeline config
+    -- This is because relevant jobs are already in the dependency list
+    filterDependentJob tree
+      | isJust (isPipelineConfig vertex.name) = filter doFilter tree
+      | otherwise = tree
+      where
+        doFilter (Node n _)
+          | isJobVertex n = False
+          | otherwise = True
+
     owned :: [Vertex]
     owned = case vertex.name of
       VRepository n -> case Map.lookup n analysis.repositoryContent of
@@ -771,13 +788,13 @@ objectInfo ctx vertices analysis = do
       VProjectT -> True
       _ -> False
 
-    renderTree :: Int -> Tree VertexName -> Html ()
-    renderTree depth (Node root childs) = do
+    renderTree :: (VertexName -> Bool) -> Int -> Tree VertexName -> Html ()
+    renderTree filterLeaf depth (Node root childs) = do
       let listStyle
             | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
             | otherwise = ""
           isNested = depth > 2
-          stopHere = stopDescent (from root)
+          stopHere = stopDescent (from root) || filterLeaf root
           showCarret = not (List.null childs) && depth > 1 && not stopHere
           nestedStyle
             | isNested = " nested"
@@ -788,7 +805,7 @@ objectInfo ctx vertices analysis = do
             with' span_ "tree-caret" mempty
           vertexLink ctx root (vertexName root)
           unless (List.null childs || stopHere) do
-            traverse_ (renderTree (depth + 1)) childs
+            traverse_ (renderTree filterLeaf (depth + 1)) childs
 
 vertexScope :: Scope -> Set Vertex -> [Vertex]
 vertexScope scope vertices = Set.toList $ case scope of
