@@ -320,6 +320,13 @@ unparsed_abide:
     name: base
     nodeset: rhel
 
+- pipeline:
+    name: check
+    trigger:
+      gerrit: {}
+    success:
+      elastic:
+
 - nodeset:
     name: rhel
     nodes:

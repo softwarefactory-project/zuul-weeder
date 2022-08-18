@@ -544,7 +544,7 @@ infoComponent ctx analysis = do
           objectCounts "nodesets" config.nodesets
           objectCounts "pipelines" config.pipelines
     with' div_ "pt-3" do
-      pipelinesInfoComponent ctx (Map.filterWithKey forTenants config.pipelines)
+      pipelinesInfoComponent ctx analysis (Map.filterWithKey forTenants config.pipelines)
   where
     scope = case ctx.scope of
       Scoped tenants -> tenants
@@ -563,31 +563,81 @@ infoComponent ctx analysis = do
     keepTenants :: Set TenantName -> ConfigLoc -> Bool
     keepTenants tenants loc = tenants `Set.isSubsetOf` loc.tenants
 
+isJobVertex :: VertexName -> Bool
+isJobVertex = \case
+  VJob {} -> True
+  _ -> False
+
+isPipelineConfig :: VertexName -> Maybe PipelineName
+isPipelineConfig = \case
+  VProjectPipeline n _ -> Just n
+  VTemplatePipeline n _ -> Just n
+  VRegexPipeline n _ -> Just n
+  _ -> Nothing
+
+pipelineJobCount :: Context -> Analysis -> PipelineName -> Int
+pipelineJobCount ctx analysis pipeline = sum $ map countJob pipelineForest
+  where
+    countJob :: Tree VertexName -> Int
+    countJob (Node root childs)
+      | isPipelineConfig root == Just pipeline = length $ filter isJob childs
+      | otherwise = 0
+    isJob :: Tree VertexName -> Bool
+    isJob (Node root _) = isJobVertex root
+
+    pipelineForest = case NE.nonEmpty pipelineVerticesList of
+      Just pipelineVertices -> ZuulWeeder.Graph.findReachableForest tenantM pipelineVertices analysis.dependentGraph
+      Nothing -> mempty
+
+    pipelineVerticesList = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
+      where
+        matchVertex v = v.name == VPipeline pipeline
+
+    tenantM = case ctx.scope of
+      UnScoped -> Nothing
+      Scoped tenants -> Just tenants
+
 -- | Display the list of pipelines
-pipelinesInfoComponent :: Context -> Zuul.ConfigLoader.ConfigMap PipelineName Pipeline -> Html ()
-pipelinesInfoComponent ctx pipelines = do
+pipelinesInfoComponent :: Context -> Analysis -> Zuul.ConfigLoader.ConfigMap PipelineName Pipeline -> Html ()
+pipelinesInfoComponent ctx analysis pipelines = do
   title "Pipelines"
   ul_ do
-    forM_ (Map.toList pipelines) $ \(name, locs) -> do
-      let vPipeline = VPipeline name
-      li_ do
-        vertexLink ctx vPipeline (vertexName vPipeline)
-        with' ul_ "pl-2" do
-          traverse_ displayPipelines (filter forTenant locs)
+    forM_ (Map.toList perLocs) $ \(repo, xs) -> do
+      with' li_ "pt-2" do
+        let vProj = VRepository repo
+        with div_ [title_ $ "Pipelines defined in '" <> from vProj <> "'"] do
+          vertexLink ctx vProj (vertexName vProj)
+        with' ul_ "pl-2 pb-2" do
+          traverse_ (with' li_ "pb-2" . displayPipeline) xs
   where
-    forTenant :: (ConfigLoc, b) -> Bool
-    forTenant (loc, _) = case ctx.scope of
+    jobCounts :: Map PipelineName Int
+    jobCounts = Map.mapWithKey (\n _ -> pipelineJobCount ctx analysis n) pipelines
+    perLocs :: Map CanonicalProjectName [Pipeline]
+    perLocs = foldr addPipelines mempty (Map.elems pipelines)
+    addPipelines xs acc = foldr addPipeline acc xs
+    addPipeline (loc, pipeline)
+      | forTenant loc = Map.insertWith mappend loc.project [pipeline]
+      | otherwise = ZuulWeeder.Prelude.id
+
+    forTenant :: ConfigLoc -> Bool
+    forTenant loc = case ctx.scope of
       Scoped tenants -> tenants `Set.isSubsetOf` loc.tenants
       UnScoped -> True
-    displayPipelines :: (ConfigLoc, Pipeline) -> Html ()
-    displayPipelines (loc, pipeline) = do
-      let vProj = VRepository loc.project
-      li_ do
-        forM_ pipeline.timers $ \timer -> do
-          toHtml timer
-        div_ do
-          "Defined in: "
-          vertexLink ctx vProj (vertexName vProj)
+
+    displayPipeline :: Pipeline -> Html ()
+    displayPipeline pipeline = do
+      let vPipeline = VPipeline pipeline.name
+          jobCount = fromMaybe 0 $ Map.lookup pipeline.name jobCounts
+      vertexLink ctx vPipeline do
+        vertexName vPipeline
+        with span_ [class_ "pl-2", title_ "Job count"] do
+          toHtml $ show jobCount
+          vertexTypeIcon VJobT
+
+      unless (null pipeline.timers) do
+        with' ul_ "pl-2" do
+          forM_ pipeline.timers $ \timer -> do
+            li_ (toHtml timer)
 
 debugComponent :: Analysis -> Html ()
 debugComponent analysis = do
