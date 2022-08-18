@@ -543,6 +543,10 @@ infoComponent ctx analysis = do
           objectCounts "jobs" config.jobs
           objectCounts "nodesets" config.nodesets
           objectCounts "pipelines" config.pipelines
+          with' tr_ "border-b" do
+            with' td_ "p-1" "Vertices"
+            with' td_ "p-1" (toHtml $ show $ Set.size $ Set.filter vForTenants analysis.vertices)
+
     with' div_ "pt-3" do
       pipelinesInfoComponent ctx analysis (Map.filterWithKey forTenants config.pipelines)
   where
@@ -560,8 +564,12 @@ infoComponent ctx analysis = do
     forTenants _ xs = case ctx.scope of
       Scoped tenants -> any (keepTenants tenants . fst) xs
       UnScoped -> True
+    vForTenants v = case ctx.scope of
+      Scoped tenants -> v.tenants `Set.isSubsetOf` tenants
+      UnScoped -> True
+
     keepTenants :: Set TenantName -> ConfigLoc -> Bool
-    keepTenants tenants loc = tenants `Set.isSubsetOf` loc.tenants
+    keepTenants tenants loc = loc.tenants `Set.isSubsetOf` tenants
 
 isJobVertex :: VertexName -> Bool
 isJobVertex = \case
@@ -621,7 +629,7 @@ pipelinesInfoComponent ctx analysis pipelines = do
 
     forTenant :: ConfigLoc -> Bool
     forTenant loc = case ctx.scope of
-      Scoped tenants -> tenants `Set.isSubsetOf` loc.tenants
+      Scoped tenants -> loc.tenants `Set.isSubsetOf` tenants
       UnScoped -> True
 
     displayPipeline :: Pipeline -> Html ()
