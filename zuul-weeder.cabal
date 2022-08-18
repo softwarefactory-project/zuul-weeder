@@ -82,6 +82,7 @@ library
   import:              common-options
   build-depends:       aeson >= 2
                      , algebraic-graphs
+                     , cgroup-rts-threads
                      , mtl
                      , attoparsec
                      , transformers
@@ -142,7 +143,7 @@ executable zuul-weeder
   hs-source-dirs:      app
   main-is:             Main.hs
   build-depends:       zuul-weeder
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -with-rtsopts=-T
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-T
 
 test-suite zuul-weeder-test
   import:              common-options

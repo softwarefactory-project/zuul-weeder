@@ -8,7 +8,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
     hspkgs.url =
-      "github:podenv/hspkgs/24d2028871584f71313ac06e23ef143db61aea34";
+      "github:podenv/hspkgs/cc4beb99e1c29a6109a1867c0c3f178b2b27c34c";
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";

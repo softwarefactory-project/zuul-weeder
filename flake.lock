@@ -84,43 +84,20 @@
     },
     "hspkgs": {
       "inputs": {
-        "nixGL": "nixGL",
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1660059949,
-        "narHash": "sha256-Fa3L/MQLZFbvd9z8TsqBwAPTGqHjQkntEbXHNdvQ760=",
+        "lastModified": 1660329321,
+        "narHash": "sha256-AKy1dY4ua/PIIhPmXTJKyxrIEzTIw5sj+mTB6uzRfWM=",
         "owner": "podenv",
         "repo": "hspkgs",
-        "rev": "24d2028871584f71313ac06e23ef143db61aea34",
+        "rev": "cc4beb99e1c29a6109a1867c0c3f178b2b27c34c",
         "type": "github"
       },
       "original": {
         "owner": "podenv",
         "repo": "hspkgs",
-        "rev": "24d2028871584f71313ac06e23ef143db61aea34",
-        "type": "github"
-      }
-    },
-    "nixGL": {
-      "inputs": {
-        "nixpkgs": [
-          "hspkgs",
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1656321324,
-        "narHash": "sha256-Sz0uWspqvshGFbT+XmRVVayuW514rNNLLvrre8jBLLU=",
-        "owner": "guibou",
-        "repo": "nixGL",
-        "rev": "047a34b2f087e2e3f93d43df8e67ada40bf70e5c",
-        "type": "github"
-      },
-      "original": {
-        "owner": "guibou",
-        "repo": "nixGL",
-        "rev": "047a34b2f087e2e3f93d43df8e67ada40bf70e5c",
+        "rev": "cc4beb99e1c29a6109a1867c0c3f178b2b27c34c",
         "type": "github"
       }
     },

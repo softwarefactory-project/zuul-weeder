@@ -11,6 +11,7 @@
 -- The project entrypoint.
 module ZuulWeeder (main, runDemo, demoConfig) where
 
+import Control.Concurrent.CGroup qualified
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
@@ -44,7 +45,9 @@ getEnvArgs =
 
 -- | The main function loads the config, prepare the analysis and serve the UI.
 main :: IO ()
-main = withUtf8 $ withLogger (\l -> getEnvArgs >>= mainWithArgs l)
+main = do
+  Control.Concurrent.CGroup.initRTSThreads
+  withUtf8 $ withLogger (\l -> getEnvArgs >>= mainWithArgs l)
 
 mainWithArgs :: Logger -> Args -> IO ()
 mainWithArgs logger args = do
