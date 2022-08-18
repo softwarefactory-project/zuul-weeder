@@ -446,6 +446,11 @@ tenantBaseLink rootURL tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
     hxNavLink (tenantUrl rootURL tenant) Nothing (toHtml (into @Text tenant))
 
+tenantInfoLink :: BasePath -> TenantName -> Html ()
+tenantInfoLink rootURL tenant =
+  with' span_ "ml-2 px-1 bg-slate-300 rounded" do
+    hxNavLink (tenantUrl rootURL tenant <> "info") Nothing (toHtml (into @Text tenant))
+
 tenantLink :: BasePath -> VertexName -> TenantName -> Html ()
 tenantLink rootURL name tenant =
   with' span_ "ml-2 px-1 bg-slate-300 rounded" do
@@ -530,7 +535,7 @@ infoComponent ctx analysis = do
     with' div_ "pb-3" do
       unless (Set.null otherTenants) $ do
         "Available tenants:"
-        traverse_ (tenantBaseLink ctx.rootURL) otherTenants
+        traverse_ (tenantInfoLink ctx.rootURL) otherTenants
     with' div_ "not-prose bg-slate-50 border rounded-xl w-80" do
       with' table_ "table-auto border-collapse w-80" do
         thead_ $ with' tr_ "border-b text-left" $ traverse_ (with' th_ "p-1") ["Object", "Count"]
