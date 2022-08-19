@@ -29,11 +29,11 @@ treeComponent ctx vertices analysis = do
     div_ do
       unless (null dependents) do
         titleWithTooltip ("The dependents list require '" <> from vertex.name <> "'") "Dependents"
-        traverse_ (renderTree filterJob 0) (filterDependentJob dependents)
+        traverse_ (renderTree ctx Dependent vertex) dependents
     div_ do
       unless (null dependencies) do
         titleWithTooltip ("'" <> from vertex.name <> "' requires the dependency list") "Dependencies"
-        traverse_ (renderTree (const False) 0) dependencies
+        traverse_ (renderTree ctx Dependency vertex) dependencies
 
       unless (null owned) do
         titleWithTooltip ("'" <> from vertex.name <> "' provides") "Provides"
@@ -42,23 +42,6 @@ treeComponent ctx vertices analysis = do
   script_ do
     "addTreeHandler()"
   where
-    -- Hide jobs on the Dependents list when their parent are a pipeline config.
-    -- This is because if a job is needed by a pipeline config, then we don't want
-    -- to see all the jobs needed by that pipeline config
-    filterJob v
-      | isJobVertex vertex.name && isJust (isPipelineConfig v) = True
-      | otherwise = False
-
-    -- Hide jobs on the Dependent list when looking at a project pipeline config
-    -- This is because relevant jobs are already in the dependency list
-    filterDependentJob tree
-      | isJust (isPipelineConfig vertex.name) = filter doFilter tree
-      | otherwise = tree
-      where
-        doFilter (Node n _)
-          | isJobVertex n = False
-          | otherwise = True
-
     owned :: [Vertex]
     owned = case vertex.name of
       VRepository n -> case Map.lookup n analysis.repositoryContent of
@@ -132,28 +115,57 @@ treeComponent ctx vertices analysis = do
           UnScoped -> Nothing
           Scoped xs -> Just xs
 
-    stopDescent :: VertexType -> Bool
-    stopDescent = \case
-      VJobT -> True
-      VAbstractJobT -> True
-      VProjectT -> True
-      _ -> False
+data TreeDirection = Dependent | Dependency deriving (Eq)
 
-    renderTree :: (VertexName -> Bool) -> Int -> Tree VertexName -> Html ()
-    renderTree filterLeaf depth (Node root childs) = do
-      let listStyle
-            | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
-            | otherwise = ""
-          isNested = depth > 2
-          stopHere = stopDescent (from root) || filterLeaf root
-          showCarret = not (List.null childs) && depth > 1 && not stopHere
-          nestedStyle
-            | isNested = " nested"
-            | otherwise = ""
-      with' ul_ (listStyle <> nestedStyle) do
-        li_ do
-          when showCarret do
-            with' span_ "tree-caret" mempty
-          vertexLink ctx root (vertexName root)
-          unless (List.null childs || stopHere) do
-            traverse_ (renderTree filterLeaf (depth + 1)) childs
+renderTree :: Context -> TreeDirection -> Vertex -> Tree VertexName -> Html ()
+renderTree ctx treeDirection rootVertex = go (0 :: Int) Nothing
+  where
+    isPpc = isJust $ isPipelineConfig (rootVertex.name)
+    isDependent = treeDirection == Dependent
+
+    -- This function defines when to stop a tree representation
+    stopTree :: Maybe VertexName -> VertexName -> Bool
+    stopTree parent root = stopParent || stopPipelineJob || stopProjectPipelineJob
+      where
+        -- Hide jobs on the Dependents list when their parent are a pipeline config.
+        -- This is because if a job is needed by a pipeline config, then we don't want
+        -- to see all the jobs needed by that pipeline config
+        isParentPipeline = maybe False (isJust . isPipelineConfig . from) parent
+        stopPipelineJob =
+          isDependent && isParentPipeline && case from root of
+            VJobT -> True
+            _ -> False
+
+        -- Hide jobs on the Dependent list when looking at a project pipeline config
+        -- This is because relevant jobs are already in the dependency list
+        stopProjectPipelineJob =
+          isDependent && isPpc && case from root of
+            VJobT -> True
+            _ -> False
+
+        -- Stop the tree after we reach a job or a project.
+        stopParent = maybe False (whenParent . from) parent
+        whenParent = \case
+          VJobT -> True
+          VAbstractJobT -> True
+          VProjectT -> True
+          _ -> False
+
+    go depth parent (Node root childs)
+      | stopTree parent root = pure ()
+      | otherwise = do
+          let listStyle
+                | depth > 0 = "pl-2 border-solid rounded border-l-2 border-slate-500"
+                | otherwise = ""
+              isNested = depth > 2
+              showCarret = not (List.null childs) && depth > 1
+              nestedStyle
+                | isNested = " nested"
+                | otherwise = ""
+          with' ul_ (listStyle <> nestedStyle) do
+            li_ do
+              when showCarret do
+                with' span_ "tree-caret" mempty
+              vertexLink ctx root (vertexName root)
+              unless (List.null childs) do
+                traverse_ (go (depth + 1) (Just root)) childs
