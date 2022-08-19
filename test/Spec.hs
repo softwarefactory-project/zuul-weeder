@@ -121,9 +121,9 @@ tests demo =
       let mkInfo n =
             let f = ZuulWeeder.Graph.findReachableForest Nothing (NE.singleton $ Vertex n (Set.fromList [TenantName "local"]))
              in ( from n <> " is needed by" :: Text,
-                  f demo.dependentGraph,
+                  f demo.dependentMap,
                   from n <> " requires" :: Text,
-                  f demo.dependencyGraph
+                  f demo.dependencyMap
                 )
       pure
         [ mkInfo (VPipeline (PipelineName "check")),

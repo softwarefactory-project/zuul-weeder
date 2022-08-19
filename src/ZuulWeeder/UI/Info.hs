@@ -28,7 +28,7 @@ pipelineJobCount ctx analysis pipeline = sum $ map countJob pipelineForest
     isJob (Node root _) = isJobVertex root
 
     pipelineForest = case NE.nonEmpty pipelineVerticesList of
-      Just pipelineVertices -> ZuulWeeder.Graph.findReachableForest tenantM pipelineVertices analysis.dependentGraph
+      Just pipelineVertices -> ZuulWeeder.Graph.findReachableForest tenantM pipelineVertices analysis.dependentMap
       Nothing -> mempty
 
     pipelineVerticesList = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices

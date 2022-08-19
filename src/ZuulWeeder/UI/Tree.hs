@@ -107,8 +107,8 @@ treeComponent ctx vertices analysis = do
         _ -> []
       VTrigger name -> getLocs $ Map.lookup name analysis.config.triggers
       VReporter name -> getLocs $ Map.lookup name analysis.config.reporters
-    dependencies = getForest analysis.dependencyGraph
-    dependents = getForest analysis.dependentGraph
+    dependencies = getForest analysis.dependencyMap
+    dependents = getForest analysis.dependentMap
     getForest = ZuulWeeder.Graph.findReachableForest tenantsM vertices
       where
         tenantsM = case ctx.scope of

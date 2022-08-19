@@ -24,6 +24,7 @@ module ZuulWeeder.Graph
 where
 
 import Algebra.Graph qualified
+import Algebra.Graph.AdjacencyMap qualified as AM
 import Algebra.Graph.AdjacencyMap.Algorithm qualified
 import Algebra.Graph.ToGraph qualified
 import Data.List.NonEmpty qualified as NE
@@ -199,10 +200,10 @@ findReachableForest ::
   -- | The list of 'Vertex' to search
   NonEmpty Vertex ->
   -- | The graph to search in
-  ConfigGraph ->
+  AM.AdjacencyMap Vertex ->
   -- | The forest
   Forest VertexName
-findReachableForest baseScope xs = concatMap goRoot . Algebra.Graph.AdjacencyMap.Algorithm.bfsForest vertices . Algebra.Graph.ToGraph.toAdjacencyMap
+findReachableForest baseScope xs = concatMap goRoot . Algebra.Graph.AdjacencyMap.Algorithm.bfsForest vertices
   where
     vertices = NE.toList xs
     goRoot (Node top child) = concatMap (go scope) child
@@ -227,6 +228,8 @@ data Analysis = Analysis
     dependencyGraph :: ConfigGraph,
     -- | The dependents graph, e.g. nodeset allows job.
     dependentGraph :: ConfigGraph,
+    dependencyMap :: AM.AdjacencyMap Vertex,
+    dependentMap :: AM.AdjacencyMap Vertex,
     -- | The link between repositories and configuration objects.
     repositoryContent :: Map CanonicalProjectName (Set Vertex),
     -- | The list of vertex, used for displaying search result.
@@ -241,12 +244,15 @@ data Analysis = Analysis
   deriving (Show, Generic)
 
 defaultAnalysis :: Config -> Analysis
-defaultAnalysis = Analysis Algebra.Graph.empty Algebra.Graph.empty mempty mempty mempty mempty
+defaultAnalysis = Analysis Algebra.Graph.empty Algebra.Graph.empty AM.empty AM.empty mempty mempty mempty mempty
 
 -- | The main function to build the 'Analysis' .
 analyzeConfig :: TenantsConfig -> Config -> Analysis
 analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
-  runIdentity (execStateT go (defaultAnalysis config))
+  let result = runIdentity (execStateT go (defaultAnalysis config))
+      depMap = Algebra.Graph.ToGraph.toAdjacencyMap result.dependencyGraph
+      dependentMap = Algebra.Graph.ToGraph.toAdjacencyMap result.dependentGraph
+   in result & (#dependencyMap `set` depMap) . (#dependentMap `set` dependentMap)
   where
     -- All the default base jobs defined by the tenants
     -- Given:
