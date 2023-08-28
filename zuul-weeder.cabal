@@ -81,7 +81,7 @@ common common-options
 library
   import:              common-options
   build-depends:       aeson >= 2
-                     , algebraic-graphs
+                     , algebraic-graphs < 0.7
                      , cgroup-rts-threads
                      , mtl
                      , attoparsec
@@ -100,7 +100,7 @@ library
                      , unordered-containers
                      , vector
                      , ini
-                     , witch
+                     , witch < 1.1
                      , clock
                      , typed-process
                      , exceptions

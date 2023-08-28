@@ -23,7 +23,7 @@ import ZuulWeeder.UI.Vertex
 main :: IO ()
 main = do
   demo <- ZuulWeeder.demoConfig
-  defaultMain (testGroup "Tests" $ tests demo)
+  defaultMain (testGroup "Tests" $ tests demo.analysis)
 
 fixturesPath :: FilePathT
 fixturesPath = "test/fixtures"

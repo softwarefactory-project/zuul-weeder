@@ -48,8 +48,8 @@ data Context = Context
   }
   deriving (Ord, Eq, Show)
 
-mainBody :: Context -> Text -> Html () -> Html ()
-mainBody ctx page mainComponent =
+mainBody :: Context -> Text -> AnalysisStatus -> Html () -> Html ()
+mainBody ctx page analysisStatus mainComponent =
   doctypehtml_ do
     head_ do
       title_ "Zuul Weeder"
@@ -63,7 +63,7 @@ mainBody ctx page mainComponent =
       with (script_ mempty) [src_ $ distUrl ctx ("graph.js?version=" <> gitVersion)]
       with (script_ mempty) [src_ $ distUrl ctx "htmx.min.js"]
     with body_ [id_ "main"] do
-      navComponent ctx page
+      navComponent ctx page analysisStatus
       with div_ [class_ "container grid p-4"] mainComponent
   where
     css :: Text
@@ -112,8 +112,8 @@ svg#d3 {
 |]
         <> cssColors
 
-navComponent :: Context -> Text -> Html ()
-navComponent ctx page =
+navComponent :: Context -> Text -> AnalysisStatus -> Html ()
+navComponent ctx page analysisStatus =
   with' nav_ "bg-slate-700 p-1 shadow w-full flex" do
     with' div_ "flex-grow" do
       with' span_ "font-semibold text-white" do
@@ -124,6 +124,10 @@ navComponent ctx page =
       exitScope
       navLink "about" "About"
       spinner
+      when (analysisStatus.refreshing) do
+        with span_ [class_ "font-semibold text-white mr-2", title_ "Configuration is reloading!"] "↻"
+      when (isJust analysisStatus.loadingError) do
+        hxNavLink [] (base <> "about") (Just "cursor-pointer rounded font-semibold bg-slate-200 text-red-800") "ERROR"
   where
     base = baseUrl ctx
     navLink path =

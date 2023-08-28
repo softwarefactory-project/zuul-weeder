@@ -116,7 +116,7 @@ instance Monoid CacheRender where
 -- | Creates the Web Application Interface (wai).
 app ::
   -- | An action to refresh the analysis
-  IO Analysis ->
+  IO AnalysisStatus ->
   MVar CacheRender ->
   -- | The base path of the interface, used to render absolute links
   BasePath ->
@@ -134,11 +134,11 @@ app config cache rootURL distPath = serve (Proxy @API) rootServer
 
     server :: Context -> Server BaseAPI
     server ctx =
-      indexRoute "" (pure $ welcomeComponent ctx)
-        :<|> indexRoute "about" (pure aboutComponent)
+      indexRoute Nothing "" (pure $ welcomeComponent ctx)
+        :<|> indexRoute Nothing "about" (pure aboutComponent)
         :<|> flip searchRoute Nothing
-        :<|> indexRoute "info" infoCache
-        :<|> indexRoute "debug" (debugComponent <$> liftIO config)
+        :<|> indexRoute Nothing "info" infoCache
+        :<|> indexRoute Nothing "debug" (debugComponent . analysis <$> liftIO config)
         :<|> exportRoute
         :<|> objectRoute
         :<|> searchResultRoute
@@ -158,50 +158,58 @@ app config cache rootURL distPath = serve (Proxy @API) rootServer
                 let newMap = Map.insert ctx (CachePage now page) m.infoPages
                 pure (CacheRender newMap, page)
 
-        indexRoute :: Text -> Handler (Html ()) -> Maybe a -> Handler (Html ())
+        getAnalysisStatus :: Maybe AnalysisStatus -> Handler AnalysisStatus
+        getAnalysisStatus = \case
+          Nothing -> liftIO config
+          Just analysisStatus -> pure analysisStatus
+
+        indexRoute :: Maybe AnalysisStatus -> Text -> Handler (Html ()) -> Maybe a -> Handler (Html ())
         -- The HX-Request header is missing, return the full body
-        indexRoute name component Nothing = mainBody ctx name <$> component
+        indexRoute mAnalysisStatus name component Nothing = do
+          analysisStatus <- getAnalysisStatus mAnalysisStatus
+          mainBody ctx name analysisStatus <$> component
         -- The HX-Request header is set, return the component and update the nav links
-        indexRoute name component (Just _htmxRequest) = do
+        indexRoute mAnalysisStatus name component (Just _htmxRequest) = do
+          analysisStatus <- getAnalysisStatus mAnalysisStatus
           componentHtml <- component
           pure do
-            navComponent ctx name
+            navComponent ctx name analysisStatus
             with div_ [class_ "container grid p-4"] componentHtml
 
         objectRoute :: VertexTypeUrl -> [VertexNameUrl] -> Maybe Text -> Handler (Html ())
         objectRoute (VTU mkName) name htmxRequest = do
-          analysis <- liftIO config
+          analysisStatus <- liftIO config
           let vname = mkName $ Text.intercalate "/" $ getVNU <$> name
-          let vertices = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
+          let vertices = vertexScope ctx.scope $ Set.filter matchVertex analysisStatus.analysis.vertices
                 where
                   matchVertex v = v.name == vname
           let component = case NE.nonEmpty vertices of
-                Just xs -> pure (treeComponent ctx xs analysis)
+                Just xs -> pure (treeComponent ctx xs analysisStatus.analysis)
                 Nothing -> pure "not found!"
-          indexRoute "object" component htmxRequest
+          indexRoute (Just analysisStatus) "object" component htmxRequest
 
         -- /search/query does not come from htmx, the body is always served
         searchRouteWithQuery query = searchRoute Nothing (Just query)
 
         searchRoute htmxRequest queryM = do
+          analysisStatus <- liftIO config
           result <- case queryM of
             Just query -> do
-              analysis <- liftIO config
-              pure . snd $ searchResults ctx query analysis.names
+              pure . snd $ searchResults ctx query analysisStatus.analysis.names
             Nothing -> pure mempty
-          indexRoute "search" (pure $ searchComponent ctx queryM result) htmxRequest
+          indexRoute (Just analysisStatus) "search" (pure $ searchComponent ctx queryM result) htmxRequest
 
         searchResultRoute req = do
-          analysis <- liftIO config
+          analysis <- (.analysis) <$> liftIO config
           let (value, result) = searchResults ctx req.query analysis.names
           pure $ addHeader (maybe "false" (mappend (baseUrl ctx <> "search/")) value) result
 
         d3Route = do
-          analysis <- liftIO config
+          analysis <- (.analysis) <$> liftIO config
           let graph = dependencyGraph analysis
           pure (toD3Graph ctx.scope graph)
 
         exportRoute = do
-          analysis <- liftIO config
+          analysisStatus <- liftIO config
           -- TODO: filter with tenant scope
-          pure (analysis.config)
+          pure (analysisStatus.analysis.config)

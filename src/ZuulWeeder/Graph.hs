@@ -14,6 +14,8 @@
 module ZuulWeeder.Graph
   ( ConfigGraph,
     Analysis (..),
+    AnalysisStatus (..),
+    newAnalysisStatus,
     Vertex (..),
     VertexType (..),
     VertexName (..),
@@ -242,6 +244,16 @@ data Analysis = Analysis
     config :: Config
   }
   deriving (Show, Generic)
+
+data AnalysisStatus = AnalysisStatus
+  { loadingError :: Maybe Text,
+    refreshing :: Bool,
+    analysis :: Analysis
+  }
+  deriving (Show, Generic)
+
+newAnalysisStatus :: Analysis -> AnalysisStatus
+newAnalysisStatus = AnalysisStatus Nothing False
 
 defaultAnalysis :: Config -> Analysis
 defaultAnalysis = Analysis Algebra.Graph.empty Algebra.Graph.empty AM.empty AM.empty mempty mempty mempty mempty

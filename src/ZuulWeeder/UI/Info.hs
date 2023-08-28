@@ -81,12 +81,22 @@ pipelinesInfoComponent ctx analysis pipelines = do
           forM_ pipeline.timers $ \timer -> do
             li_ (toHtml timer)
 
-infoComponent :: Context -> Analysis -> Html ()
-infoComponent ctx analysis = do
+infoComponent :: Context -> AnalysisStatus -> Html ()
+infoComponent ctx analysisStatus = do
   with' div_ "grid p-4 place-content-center" do
     with' span_ "font-semibold pb-3" do
       "Config details"
       traverse_ (tenantBaseLink ctx.rootURL) scope
+
+    forM_ analysisStatus.loadingError \err -> do
+      p_ do
+        with' span_ "font-semibold" "The configuration couldn't be loaded because of this error: "
+        toHtml err
+    p_ do
+      if analysisStatus.refreshing
+        then "The configuration is being refreshed..."
+        else "Configuration loaded"
+
     with' div_ "pb-3" do
       unless (Set.null otherTenants) $ do
         "Available tenants:"
@@ -109,6 +119,7 @@ infoComponent ctx analysis = do
       Scoped tenants -> tenants
       UnScoped -> mempty
     otherTenants = Set.difference analysis.config.tenants scope
+    analysis = analysisStatus.analysis
     config = analysis.config
     objectCounts :: Text -> Zuul.ConfigLoader.ConfigMap a b -> Html ()
     objectCounts n m = do

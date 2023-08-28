@@ -123,6 +123,7 @@ module ZuulWeeder.Prelude
     Data.IORef.newIORef,
     Data.IORef.readIORef,
     Data.IORef.writeIORef,
+    Data.IORef.modifyIORef,
     Control.Concurrent.MVar.MVar,
     Control.Concurrent.MVar.newMVar,
     Control.Concurrent.MVar.modifyMVar,

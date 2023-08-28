@@ -66,7 +66,7 @@ runDemo :: IO ()
 runDemo = do
   withLogger $ flip runWeb demoConfig
 
-runWeb :: Logger -> IO Analysis -> IO ()
+runWeb :: Logger -> IO AnalysisStatus -> IO ()
 runWeb logger config = do
   rootUrl <- ensureTrailingSlash . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
   distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
@@ -88,29 +88,32 @@ newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 newtype ConfigLoader = ConfigLoader {loadConfig :: ExceptT Text IO (TenantsConfig, Config)}
 
 -- | Create a IO action that reloads the config every hour.
-configReloader :: Logger -> ConfigDumper -> ConfigLoader -> IO (IO Analysis)
+configReloader :: Logger -> ConfigDumper -> ConfigLoader -> IO (IO AnalysisStatus)
 configReloader logger configDumper configLoader = do
   -- Get current time
   now <- getSec
   -- Read the inital conf, error is fatal here
   conf <- either (error . Text.unpack) id <$> runExceptT (configLoader.loadConfig)
   -- Cache the result
-  cache <- newIORef (uncurry analyzeConfig conf)
+  cache <- newIORef (newAnalysisStatus $ uncurry analyzeConfig conf)
   ts <- newMVar (now, cache)
   pure (modifyMVar ts go)
   where
-    go :: (Int64, IORef Analysis) -> IO ((Int64, IORef Analysis), Analysis)
+    go :: (Int64, IORef AnalysisStatus) -> IO ((Int64, IORef AnalysisStatus), AnalysisStatus)
     go (ts, cache) = do
-      analysis <- readIORef cache
+      status <- readIORef cache
       now <- getSec
       if now - ts < 3600
-        then pure ((ts, cache), analysis)
+        then pure ((ts, cache), status)
         else do
+          modifyIORef cache (#refreshing `set` True)
           reload cache
-          pure ((now, cache), analysis)
+          pure ((now, cache), status)
 
-    reload :: IORef Analysis -> IO ()
+    -- Load the config in a background thread
+    reload :: IORef AnalysisStatus -> IO ()
     reload cache = void $ forkIO do
+      let setError err = modifyIORef cache ((#loadingError `set` Just err) . (#refreshing `set` False))
       res <- timeout 600_000_000 $ do
         info logger "ReLoading the configuration"
         confE <- runExceptT do
@@ -119,11 +122,13 @@ configReloader logger configDumper configLoader = do
         case confE of
           Left e -> do
             info logger ("Error reloading config: " <> from e)
+            setError e
           Right conf -> do
             info logger "Caching the graph result"
-            writeIORef cache (uncurry analyzeConfig conf)
+            writeIORef cache (newAnalysisStatus $ uncurry analyzeConfig conf)
       when (isNothing res) do
         info logger "Error reloading config timeout"
+        setError "Loading config timeout"
 
 -- | Create IO actions to dump and load the config
 mkConfigLoader :: Logger -> FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
@@ -168,7 +173,7 @@ loadConfigFiles projs tenants ub tr =
     . walkConfigNodes
 
 -- | The demo configuration.
-demoConfig :: IO Analysis
+demoConfig :: IO AnalysisStatus
 demoConfig = do
   (tenantsConfig, config) <-
     either (error . show) id
@@ -229,7 +234,7 @@ unparsed_abide:
   let analysis = analyzeConfig tenantsConfig config
   -- pPrint analysis.config.triggers
   -- pPrint (Algebra.Graph.edgeList analysis.dependentGraph)
-  pure analysis
+  pure (newAnalysisStatus analysis)
   where
     mkConfigFile conn proj conf =
       ZKFile conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
