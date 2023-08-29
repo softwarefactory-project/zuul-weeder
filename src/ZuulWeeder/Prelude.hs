@@ -46,6 +46,7 @@ module ZuulWeeder.Prelude
     -- * text, bytestring
     Data.Text.Text,
     Data.ByteString.ByteString,
+    Data.Text.Encoding.encodeUtf8,
 
     -- * containers
     Data.Map.Map,
@@ -235,6 +236,7 @@ import Data.String (IsString)
 import Data.String.QQ qualified (s)
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified
+import Data.Text.Encoding qualified
 import Data.Text.IO qualified as Text (readFile, writeFile)
 import Data.Tree qualified
 import Data.Vector qualified as V
@@ -265,10 +267,10 @@ describeCronSchedule = Witch.from . System.Cron.Describe.describe System.Cron.De
 parseCronScheduleLoose :: Text -> Either String System.Cron.Types.CronSchedule
 parseCronScheduleLoose = Data.Attoparsec.Text.parseOnly System.Cron.Parser.cronScheduleLoose . Data.Text.toLower
 
-encodeJSON :: Data.Aeson.ToJSON a => a -> ByteString
+encodeJSON :: (Data.Aeson.ToJSON a) => a -> ByteString
 encodeJSON = Witch.from . Data.Aeson.encode
 
-decodeJSON :: Data.Aeson.FromJSON a => ByteString -> Either String a
+decodeJSON :: (Data.Aeson.FromJSON a) => ByteString -> Either String a
 decodeJSON = Data.Aeson.eitherDecodeStrict
 
 -- | The content of the GIT_COMMIT environment variable, default to HEAD.
@@ -291,7 +293,7 @@ info :: Logger -> ByteString -> IO ()
 info (Logger logger) msg = logger (\time -> System.Log.FastLogger.toLogStr $ time <> msg <> "\n")
 
 -- | lifted 'Control.Monad.when'
-whenM :: Monad m => m Bool -> m () -> m ()
+whenM :: (Monad m) => m Bool -> m () -> m ()
 whenM test action = do
   res <- test
   Control.Monad.when res action
@@ -352,7 +354,7 @@ Just a `orDie` _ = Right a
 Nothing `orDie` err = Left err
 
 -- | Die with on the Left case
-fromEither :: Show a => Either a b -> b
+fromEither :: (Show a) => Either a b -> b
 fromEither e = case e of
   Left x -> error (show x)
   Right x -> x

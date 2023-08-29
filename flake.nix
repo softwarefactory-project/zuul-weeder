@@ -8,7 +8,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs";
     hspkgs.url =
-      "github:podenv/hspkgs/cc4beb99e1c29a6109a1867c0c3f178b2b27c34c";
+      "github:podenv/hspkgs/286d957e295f231de917921e4b9cfb835db0b6d9";
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";
@@ -39,7 +39,16 @@
 
         python = pkgs.python310.withPackages (ps: with ps; [ kazoo ]);
 
-        haskellPackages = pkgs.hspkgs;
+        haskellPackages = pkgs.hspkgs.extend (hpPrev: hpFinal: {
+            cron = let
+              src = pkgs.fetchFromGitHub {
+                owner = "MichaelXavier";
+                repo = "cron";
+                rev = "5f5b662a1d7abc3951ea5a2a625bbf3e83f7a11a";
+                sha256 = "sha256-IRVFi+Z0v3SQYLOzTqQfquL7o6V3JE0luX9wKUaZRNo=";
+              };
+            in hpPrev.callCabal2nix "cron" src { };
+        });
         zuulWeederPackage = haskellPackages.callCabal2nix packageName self { };
         finalPackage =
           zuulWeederPackage.overrideAttrs (_: { GIT_COMMIT = rev; });
@@ -85,7 +94,7 @@
           buildInputs = with haskellPackages; [
             python
             pkgs.ghcid
-            pkgs.ormolu
+            ormolu_0_7_1_0
             pkgs.cabal-install
             pkgs.hlint
             pkgs.weeder

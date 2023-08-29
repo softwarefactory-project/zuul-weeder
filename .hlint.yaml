@@ -4,3 +4,6 @@
 - ignore: {name: "Avoid lambda using `infix`"}
 - ignore: {name: "Use section"}
 - ignore: {name: "Use tuple-section"}
+- ignore: {name: "Fuse traverse_/<$>"}
+- ignore: {name: "Move concatMap out"}
+- ignore: {name: "Unused LANGUAGE pragma"}

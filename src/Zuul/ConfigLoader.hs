@@ -112,7 +112,7 @@ mergeConfig c1 c2 =
         renameLoc :: ConfigLoc -> ConfigLoc
         renameLoc loc = loc & #tenants `set` Set.map renameTenant loc.tenants
 
-    mergeConfigLoc :: Eq b => [(ConfigLoc, b)] -> (ConfigLoc, b) -> [(ConfigLoc, b)]
+    mergeConfigLoc :: (Eq b) => [(ConfigLoc, b)] -> (ConfigLoc, b) -> [(ConfigLoc, b)]
     mergeConfigLoc xs x@(loc2, obj2) = go False xs
       where
         -- The object was not found in c1
@@ -154,7 +154,7 @@ mergeConfig c1 c2 =
         newName = TenantName $ Text.snoc n c
     allTenants = Set.union c1.tenants c2.tenants
 
-doUpdateTopConfig :: Monad m => TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config m ()
+doUpdateTopConfig :: (Monad m) => TenantResolver -> ConfigLoc -> ZuulConfigElement -> StateT Config m ()
 doUpdateTopConfig tr configLoc ze = case ze of
   ZJob baseJob -> do
     job <- doResolveJob baseJob
@@ -180,35 +180,35 @@ doUpdateTopConfig tr configLoc ze = case ze of
   ZQueue queue -> #queues %= insertConfig queue queue
   ZSemaphore semaphore -> #semaphores %= insertConfig semaphore semaphore
   where
-    doResolveProjectTemplateJob :: Monad m => BaseProjectTemplate ProjectName -> StateT Config m ProjectTemplate
+    doResolveProjectTemplateJob :: (Monad m) => BaseProjectTemplate ProjectName -> StateT Config m ProjectTemplate
     doResolveProjectTemplateJob pt = do
       pipelines <- mapMSet doResolveProjectPipeline pt.pipelines
       pure $ pt & #pipelines `set` pipelines
 
-    doResolveProjectJob :: Monad m => BaseProject ProjectName -> StateT Config m Project
+    doResolveProjectJob :: (Monad m) => BaseProject ProjectName -> StateT Config m Project
     doResolveProjectJob p = do
       pipelines <- mapMSet doResolveProjectPipeline p.pipelines
       pure $ p & #pipelines `set` pipelines
 
-    doResolveProjectPipeline :: Monad m => ProjectPipeline ProjectName -> StateT Config m (ProjectPipeline CanonicalProjectName)
+    doResolveProjectPipeline :: (Monad m) => ProjectPipeline ProjectName -> StateT Config m (ProjectPipeline CanonicalProjectName)
     doResolveProjectPipeline projectPipeline = do
       jobs <- mapM doResolvePipelineJob projectPipeline.jobs
       pure $ projectPipeline & #jobs `set` jobs
 
-    doResolvePipelineJob :: Monad m => PipelineJob ProjectName -> StateT Config m (PipelineJob CanonicalProjectName)
+    doResolvePipelineJob :: (Monad m) => PipelineJob ProjectName -> StateT Config m (PipelineJob CanonicalProjectName)
     doResolvePipelineJob = \case
       PJName jobName -> pure $ PJName jobName
       PJJob job -> PJJob <$> doResolveJob job
 
-    doResolveJob :: Monad m => BaseJob ProjectName -> StateT Config m Job
+    doResolveJob :: (Monad m) => BaseJob ProjectName -> StateT Config m Job
     doResolveJob job = do
       requiredProjects <- doResolveProjects job.requiredProjects
       pure $ job & #requiredProjects `set` requiredProjects
 
-    doResolveProjects :: Monad m => Maybe [ProjectName] -> StateT Config m (Maybe [CanonicalProjectName])
+    doResolveProjects :: (Monad m) => Maybe [ProjectName] -> StateT Config m (Maybe [CanonicalProjectName])
     doResolveProjects (Just xs) = Just . catMaybes <$> traverse doResolveProject xs
     doResolveProjects Nothing = pure Nothing
-    doResolveProject :: Monad m => ProjectName -> StateT Config m (Maybe CanonicalProjectName)
+    doResolveProject :: (Monad m) => ProjectName -> StateT Config m (Maybe CanonicalProjectName)
     doResolveProject pn = case tr.resolveProject configLoc pn of
       Just cpn -> pure (Just cpn)
       Nothing -> do

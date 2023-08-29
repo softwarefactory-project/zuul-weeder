@@ -174,9 +174,9 @@ fetchConfigs :: Logger -> FilePathT -> ZKConnection -> ExceptT Text IO ()
 fetchConfigs logger dataDir (ZKConnection zkConf) = do
   exitCode <- lift $ do
     whenM (doesDirectoryExist dataDir) $ do
-      info logger $ "Removing " <> from (getPath dataDir)
+      info logger $ "Removing " <> encodeUtf8 (from dataDir)
       System.Directory.removeDirectoryRecursive $ getPath dataDir
-    info logger $ "Dumping with " <> from (show zkConf)
+    info logger $ "Dumping with " <> encodeUtf8 (from $ show zkConf)
     System.Process.Typed.runProcess process
   case exitCode of
     System.Process.Typed.ExitSuccess -> pure ()

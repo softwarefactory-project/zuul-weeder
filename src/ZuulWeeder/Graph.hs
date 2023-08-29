@@ -178,7 +178,7 @@ instance From Nodeset VertexName where
 instance From NodeLabelName VertexName where
   from = VNodeLabel
 
-mkVertex :: From a VertexName => ConfigLoc -> a -> Vertex
+mkVertex :: (From a VertexName) => ConfigLoc -> a -> Vertex
 mkVertex loc x = Vertex (from x) loc.tenants
 
 -- | A convenient type alias.
@@ -192,7 +192,7 @@ findReachable ::
   ConfigGraph ->
   -- | The list of reachable 'Vertex'
   Set Vertex
-findReachable xs = Set.fromList . filter (/= v) . Algebra.Graph.ToGraph.dfs (NE.toList xs)
+findReachable xs graph = Set.fromList . filter (/= v) $ Algebra.Graph.ToGraph.dfs graph (NE.toList xs)
   where
     v = NE.head xs
 
@@ -205,7 +205,7 @@ findReachableForest ::
   AM.AdjacencyMap Vertex ->
   -- | The forest
   Forest VertexName
-findReachableForest baseScope xs = concatMap goRoot . Algebra.Graph.AdjacencyMap.Algorithm.bfsForest vertices
+findReachableForest baseScope xs graph = concatMap goRoot $ Algebra.Graph.AdjacencyMap.Algorithm.bfsForest graph vertices
   where
     vertices = NE.toList xs
     goRoot (Node top child) = concatMap (go scope) child

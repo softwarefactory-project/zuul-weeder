@@ -171,10 +171,10 @@ data BaseJob project = BaseJob
 
 type Job = BaseJob CanonicalProjectName
 
-instance FromJSON a => FromJSON (BaseJob a) where
+instance (FromJSON a) => FromJSON (BaseJob a) where
   parseJSON = genericParseJSON defaultOptions {omitNothingFields = True}
 
-instance ToJSON a => ToJSON (BaseJob a) where
+instance (ToJSON a) => ToJSON (BaseJob a) where
   toJSON = genericToJSON defaultOptions {omitNothingFields = True}
 
 data PipelineJob a

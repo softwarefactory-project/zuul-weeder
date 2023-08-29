@@ -112,7 +112,7 @@ decodeTenantsConfig (ZKTenantsConfig value) = case decoded of
       Data.Aeson.Object hm -> do
         abide <- decodeObject =<< decodeObjectAttribute "unparsed_abide" hm
         tenantsValues <- HM.toList <$> (decodeObject =<< decodeObjectAttribute "tenants" abide)
-        tenants <- traverse decodeTenant (first Data.Aeson.Key.toText <$> tenantsValues)
+        tenants <- traverse (decodeTenant . first Data.Aeson.Key.toText) tenantsValues
         pure $ TenantsConfig $ Map.fromList tenants
       _ -> decodeFail "Invalid root tenants config" value
 
@@ -125,7 +125,7 @@ decodeTenantsConfig (ZKTenantsConfig value) = case decoded of
     decodeTenantConfig :: Object -> Decoder TenantConfig
     decodeTenantConfig obj = do
       sources <- decodeObject =<< decodeObjectAttribute "source" obj
-      connections <- Map.fromList <$> traverse decodeConnection (first Data.Aeson.Key.toText <$> HM.toList sources)
+      connections <- Map.fromList <$> traverse (decodeConnection . first Data.Aeson.Key.toText) (HM.toList sources)
       defaultParent <-
         JobName <$> case HM.lookup "default-parent" obj of
           Just (Data.Aeson.String n) -> pure n

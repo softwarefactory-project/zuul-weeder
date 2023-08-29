@@ -71,7 +71,7 @@ runWeb logger config = do
   rootUrl <- ensureTrailingSlash . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
   distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
   port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
-  info logger ("[+] serving 0.0.0.0:" <> toHeader port <> from rootUrl)
+  info logger ("[+] serving 0.0.0.0:" <> toHeader port <> encodeUtf8 rootUrl)
   cache <- newMVar mempty
   let app = ZuulWeeder.UI.App.app config cache (ZuulWeeder.UI.BasePath rootUrl) distPath
   -- monitornig
@@ -121,7 +121,7 @@ configReloader logger configDumper configLoader = do
           configLoader.loadConfig
         case confE of
           Left e -> do
-            info logger ("Error reloading config: " <> from e)
+            info logger ("Error reloading config: " <> encodeUtf8 e)
             setError e
           Right conf -> do
             info logger "Caching the graph result"
