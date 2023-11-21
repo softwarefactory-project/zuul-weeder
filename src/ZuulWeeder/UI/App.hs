@@ -3,7 +3,7 @@
 -- Description : The User Interface entrypoint and API
 -- Copyright   : (c) Red Hat, 2022
 -- License     : Apache-2.0
-module ZuulWeeder.UI.App (app) where
+module ZuulWeeder.UI.App (app, CacheRender) where
 
 import Data.List.NonEmpty qualified as NE
 import Data.Map qualified as Map

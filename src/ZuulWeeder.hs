@@ -31,6 +31,7 @@ import ZuulWeeder.Monitoring qualified
 import ZuulWeeder.Prelude
 import ZuulWeeder.UI qualified
 import ZuulWeeder.UI.App qualified
+import ZuulWeeder.UI.App (CacheRender)
 
 data Args = Args
   { zkPath :: FilePathT,
@@ -57,23 +58,24 @@ mainWithArgs logger args = do
     case configLoader of
       Left e -> error $ Text.unpack $ "Can't load config: " <> e
       Right x -> pure x
-  config <- configReloader logger configDump configLoader
-  runWeb logger config
+  cacheRender <- newMVar mempty
+  config <- configReloader logger configDump configLoader cacheRender
+  runWeb logger config cacheRender
 
 -- | Start the web interface with the "demoConfig".
 -- This is useful for ghcid powered hot-reload development.
 runDemo :: IO ()
 runDemo = do
-  withLogger $ flip runWeb demoConfig
+  cacheRender <- newMVar mempty
+  withLogger $ \logger -> runWeb logger demoConfig cacheRender
 
-runWeb :: Logger -> IO AnalysisStatus -> IO ()
-runWeb logger config = do
+runWeb :: Logger -> IO AnalysisStatus -> MVar CacheRender -> IO ()
+runWeb logger config cacheRender = do
   rootUrl <- ensureTrailingSlash . Text.pack . fromMaybe "/" <$> lookupEnv "WEEDER_ROOT_URL"
   distPath <- fromMaybe "dists" <$> lookupEnv "WEEDER_DIST_PATH"
   port <- maybe 9001 read <$> lookupEnv "WEEDER_PORT"
   info logger ("[+] serving 0.0.0.0:" <> toHeader port <> encodeUtf8 rootUrl)
-  cache <- newMVar mempty
-  let app = ZuulWeeder.UI.App.app config cache (ZuulWeeder.UI.BasePath rootUrl) distPath
+  let app = ZuulWeeder.UI.App.app config cacheRender (ZuulWeeder.UI.BasePath rootUrl) distPath
   -- monitornig
   monitoring <- ZuulWeeder.Monitoring.mkMonitoring logger
   Warp.run port (monitoring app)
@@ -88,8 +90,8 @@ newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 newtype ConfigLoader = ConfigLoader {loadConfig :: ExceptT Text IO (TenantsConfig, Config)}
 
 -- | Create a IO action that reloads the config every hour.
-configReloader :: Logger -> ConfigDumper -> ConfigLoader -> IO (IO AnalysisStatus)
-configReloader logger configDumper configLoader = do
+configReloader :: Logger -> ConfigDumper -> ConfigLoader -> MVar CacheRender -> IO (IO AnalysisStatus)
+configReloader logger configDumper configLoader cacheRender = do
   -- Get current time
   now <- getSec
   -- Read the inital conf, error is fatal here
@@ -126,6 +128,7 @@ configReloader logger configDumper configLoader = do
           Right conf -> do
             info logger "Caching the graph result"
             writeIORef cache (newAnalysisStatus $ uncurry analyzeConfig conf)
+            modifyMVar cacheRender (\_ -> pure (mempty, ()))
       when (isNothing res) do
         info logger "Error reloading config timeout"
         setError "Loading config timeout"
