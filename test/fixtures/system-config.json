@@ -58,7 +58,8 @@
               {
                 "include": [],
                 "projects": [
-                  "no-include-proj"
+                  "no-include-proj",
+                  {"nested-proj-config": {"include-branches": []}}
                 ]
               }
             ]

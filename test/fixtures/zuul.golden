@@ -98,6 +98,16 @@ Right
                                             , "zuul.d/"
                                             ]
                                         }
+                                    , TenantProject
+                                        { name = ProjectName "nested-proj-config"
+                                        , includedConfigElements = fromList []
+                                        , configPaths =
+                                            [ ".zuul.yaml"
+                                            , "zuul.yaml"
+                                            , ".zuul.d/"
+                                            , "zuul.d/"
+                                            ]
+                                        }
                                     ]
                                 }
                             )

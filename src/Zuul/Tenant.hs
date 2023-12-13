@@ -29,6 +29,7 @@ import Data.Aeson.Types qualified
 import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
+import Data.Vector qualified as V
 import Zuul.Config
 import Zuul.ServiceConfig (ServiceConfig (..))
 import Zuul.ZooKeeper (ZKTenantsConfig (..))
@@ -153,11 +154,12 @@ decodeTenantsConfig (ZKTenantsConfig value) = case decoded of
         -- Decode a single project or a project configuration list
         decodeProjects :: Value -> Decoder [(Text, Value)]
         decodeProjects = \case
-          x@(Data.Aeson.Object o)
+          x@(Data.Aeson.Object o) -> case HM.lookup "projects" o of
             -- Project configuration is a list of project name with a shared config
-            | isJust (HM.lookup "projects" o) -> map (,x) <$> decodeAsList "projects" id o
+            Just (Data.Aeson.Array xs) -> map (,x) <$> traverse decodeProjectsList (V.toList xs)
+            Just _ -> decodeFail "Unexpected projects value" x
             -- It's a single project with a custom config
-            | otherwise -> pure $ first Data.Aeson.Key.toText <$> HM.toList o
+            Nothing -> pure $ first Data.Aeson.Key.toText <$> HM.toList o
           -- Project configuration is a single name
           Data.Aeson.String name -> pure [(name, Data.Aeson.Types.emptyObject)]
           anyOther -> decodeFail "Invalid project definition" anyOther
@@ -270,3 +272,11 @@ resolveTenant serviceConfig tenantsConfig configLoc zct =
                 ]
         matchPath :: FilePathT -> Bool
         matchPath fp = from fp `Text.isPrefixOf` from configLoc.path
+
+decodeProjectsList :: Value -> Decoder Text
+decodeProjectsList = \case
+  (Data.Aeson.String v) -> pure v
+  v@(Data.Aeson.Object o) -> case HM.toList o of
+    [(k, _)] -> pure $ Data.Aeson.Key.toText k
+    _ -> decodeFail "Expected a project object with one key" v
+  v -> decodeFail "Expected a string" v

@@ -30,8 +30,8 @@ import ZuulWeeder.Graph
 import ZuulWeeder.Monitoring qualified
 import ZuulWeeder.Prelude
 import ZuulWeeder.UI qualified
-import ZuulWeeder.UI.App qualified
 import ZuulWeeder.UI.App (CacheRender)
+import ZuulWeeder.UI.App qualified
 
 data Args = Args
   { zkPath :: FilePathT,
