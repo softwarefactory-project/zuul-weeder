@@ -26,17 +26,17 @@ mkMonitoring logger = do
   Prometheus.unregisterAll
   void $ Prometheus.register Prometheus.Metric.GHC.ghcMetrics
   counter <- Prometheus.register $ Prometheus.counter (Prometheus.Info "http_request" "")
-  pure $ monitoring logger counter
+  error_counter <- Prometheus.register $ Prometheus.counter (Prometheus.Info "http_request_error" "")
+  pure $ monitoring logger (counter, error_counter)
 
-monitoring :: Logger -> Prometheus.Counter -> Wai.Middleware
-monitoring logger counter baseApp req resp = case Wai.rawPathInfo req of
+monitoring :: Logger -> (Prometheus.Counter, Prometheus.Counter) -> Wai.Middleware
+monitoring logger (counter, error_counter) baseApp req resp = case Wai.rawPathInfo req of
   "/health" -> resp $ Wai.responseLBS HTTP.ok200 [] mempty
   "/metrics" -> resp . Wai.responseLBS HTTP.ok200 [] =<< Prometheus.exportMetricsAsText
   p | "/dists/" `BS.isPrefixOf` p -> baseApp req resp
   p -> do
     measure <- intervalMilliSec
     baseApp req $ \r -> do
-      Prometheus.incCounter counter
       result <- resp r
       elapsed <- measure
       let statusCode = HTTP.statusCode $ Wai.responseStatus r
@@ -48,6 +48,9 @@ monitoring logger counter baseApp req resp = case Wai.rawPathInfo req of
               <> (" ms=" <> toHeader elapsed)
               <> (" htmx=" <> toHeader htmx)
               <> (" client=" <> toHeader client)
+      if statusCode >= 200 && statusCode < 300
+        then Prometheus.incCounter counter
+        else Prometheus.incCounter error_counter
       info logger msg
       pure result
   where
