@@ -65,7 +65,7 @@ configLocUrl loc = case loc.url of
   GitlabUrl url -> buildGitlabUrl url
   PagureUrl url -> buildPagureUrl url
   GitUrl url
-    | "gitlab.com" `Text.isInfixOf` url -> buildGitlabUrl url
+    | "gitlab" `Text.isInfixOf` url -> buildGitlabUrl url
     | "github.com" `Text.isInfixOf` url -> buildGithubUrl url
     | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
     | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
