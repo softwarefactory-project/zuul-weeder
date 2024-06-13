@@ -22,7 +22,7 @@ import Streaming.Prelude qualified as S
 import System.Environment
 import Web.HttpApiData (toHeader)
 import Zuul.Config (CanonicalProjectName, TenantName)
-import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, emptyConfig, loadConfig)
+import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, emptyConfig, loadConfig, postProcess)
 import Zuul.ServiceConfig (ServiceConfig (..), readServiceConfig)
 import Zuul.Tenant
 import Zuul.ZooKeeper
@@ -161,7 +161,7 @@ mkConfigLoader logger dataBaseDir configFile = do
           allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
           allProjects = getCanonicalProjects serviceConfig.connections tenantsConfig
       config <- lift $ loadConfigFiles allProjects allTenants serviceConfig.urlBuilders tr dataDir
-      pure (tenantsConfig, config)
+      pure (tenantsConfig, Zuul.ConfigLoader.postProcess config)
 
 loadConfigFiles :: Map CanonicalProjectName (Set TenantName) -> Set TenantName -> ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
 loadConfigFiles projs tenants ub tr =
@@ -232,7 +232,7 @@ unparsed_abide:
         conf <- lift $ flip execStateT initialConfig do
           xs <- sequence configFiles
           traverse_ (Zuul.ConfigLoader.loadConfig serviceConfig.urlBuilders tr) (pure <$> xs)
-        pure (tenantsConfig, conf)
+        pure (tenantsConfig, Zuul.ConfigLoader.postProcess conf)
 
   let analysis = analyzeConfig tenantsConfig config
   -- pPrint analysis.config.triggers
@@ -329,6 +329,7 @@ unparsed_abide:
 - job:
     name: base
     nodeset: rhel
+    semaphores: testy-sem
 
 - pipeline:
     name: check

@@ -17,6 +17,7 @@ module Zuul.ConfigLoader
     loadConfig,
     mergeConfig,
     emptyConfig,
+    postProcess,
     TenantResolver,
     ConnectionUrlMap,
 
@@ -76,6 +77,33 @@ data Config = Config
     tenants :: Set TenantName
   }
   deriving (Show, Generic, FromJSON, ToJSON)
+
+-- | Process the config after it was fully loaded
+postProcess :: Config -> Config
+postProcess = ensureImplicitSemaphores
+
+-- | Ensure the implicit semaphores are registered in the graph
+ensureImplicitSemaphores :: Config -> Config
+ensureImplicitSemaphores config = config & #semaphores `set` (config.semaphores <> implicitSemaphoresMap)
+  where
+    implicitSemaphoresMap :: ConfigMap SemaphoreName SemaphoreName
+    implicitSemaphoresMap = foldl' insertSemaphore mempty implicitSemaphores
+      where
+        insertSemaphore m (loc, sem) = Map.insertWith mappend sem [(loc, sem)] m
+
+    -- The list of implicit semaphores and their locations
+    implicitSemaphores :: [(ConfigLoc, SemaphoreName)]
+    implicitSemaphores = Map.foldl (foldl' collect) [] config.jobs
+
+    -- Collect the implicit semaphores of a given job location
+    collect acc (loc, job) = case job.semaphores of
+      Just semaphores ->
+        let -- Collect the semaphores that are implicits
+            implicits = filter (\semaphore -> Map.notMember semaphore config.semaphores) semaphores
+            -- Use the job location for the semaphore location
+            implicitsLocs = map (\sem -> (loc, sem)) implicits
+         in implicitsLocs <> acc
+      Nothing -> acc
 
 -- | Merge two configurations by assigning unique tenant names.
 mergeConfig :: Config -> Config -> Config
