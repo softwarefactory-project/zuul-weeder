@@ -220,7 +220,7 @@ searchResults :: Context -> Text -> Map VertexName (Set TenantName) -> (Maybe Te
 searchResults ctx (Text.strip -> query) names
   | Text.null query = (Nothing, pure ())
   | otherwise = case mapMaybe matchQuery (Map.toList names) of
-      [] -> trace (from $ pShowNoColor names) (Nothing, div_ "no results :(")
+      [] -> (Nothing, div_ "no results :(")
       results -> (Just query, ul_ $ traverse_ renderResult results)
   where
     renderResult :: (VertexName, Set TenantName) -> Html ()
