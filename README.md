@@ -46,7 +46,7 @@ The results can be scoped to a specific tenant by using the `/tenant/$tenant` ur
 Start the service at `http://localhost:9001` (needs access to the zuul.conf):
 
 ```
-podman run -p 9001:9001 -v /etc/zuul:/etc/zuul:ro --rm quay.io/software-factory/zuul-weeder
+podman run -p 9001:9001 -v /etc/zuul:/etc/zuul:ro --rm ghcr.io/softwarefactory-project/zuul-weeder
 ```
 
 Serve behind a sub-path using this argument `-e WEEDER_ROOT_URL=/weeder/` and this httpd.conf:

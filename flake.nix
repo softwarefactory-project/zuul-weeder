@@ -56,19 +56,11 @@
 
         exe = pkgs.haskell.lib.justStaticExecutables finalPackage;
 
-        mkApp = script: {
-          type = "app";
-          program =
-            builtins.toString (pkgs.writers.writeBash "app-wrapper.sh" script);
-        };
-
-      in {
-        apps.default = exe;
-        packages.default = finalPackage;
-
-        packages.containerImage = pkgs.dockerTools.buildLayeredImage {
-          name = "quay.io/software-factory/zuul-weeder";
+        container-name = "ghcr.io/softwarefactory-project/zuul-weeder";
+        container = pkgs.dockerTools.streamLayeredImage {
+          name = container-name;
           tag = "latest";
+          created = "now";
           extraCommands = ''
             #!${pkgs.runtimeShell}
             mkdir -p var/tmp/weeder
@@ -79,7 +71,35 @@
             Env = [ "WEEDER_DIST_PATH=${toString distFiles}" ];
           };
         };
+        publish-container-release =
+          pkgs.writeShellScriptBin "container-release" ''
+            set -e
+            export PATH=$PATH:${pkgs.gzip}/bin:${pkgs.skopeo}/bin
+            IMAGE="docker://${container-name}"
 
+            echo "Logging to registry..."
+            echo $GH_TOKEN | skopeo login --username $GH_USERNAME --password-stdin ghcr.io
+
+            echo "Building and publishing the image..."
+            ${container} | gzip --fast | skopeo copy docker-archive:/dev/stdin $IMAGE:${exe.version}
+
+            echo "Tagging latest"
+            skopeo copy $IMAGE:${exe.version} $IMAGE:latest
+          '';
+
+        mkApp = script: {
+          type = "app";
+          program =
+            builtins.toString (pkgs.writers.writeBash "app-wrapper.sh" script);
+        };
+
+      in {
+        apps.default = exe;
+        packages.default = finalPackage;
+
+        packages.container = container;
+        apps.publish-container-release =
+          flake-utils.lib.mkApp { drv = publish-container-release; };
         devShell = haskellPackages.shellFor {
           packages = p: [ zuulWeederPackage ];
 
