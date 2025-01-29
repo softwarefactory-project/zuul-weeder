@@ -476,6 +476,12 @@ analyzeConfig (Zuul.Tenant.TenantsConfig tenantsConfig) config =
         Just tenants -> vJob `connect` Vertex (from dProj) tenants
         Nothing -> #graphErrors %= (("Can't find : " <> show dProj) :)
 
+    -- handle job roles
+    forM_ (concat job.rolesProjects) $ \rolesProj ->
+      case Map.lookup rolesProj config.canonicalProjects of
+        Just tenants -> vJob `connect` Vertex (from rolesProj) tenants
+        Nothing -> #graphErrors %= (("Can't find : " <> show rolesProj) :)
+
     -- handle job secrets
     forM_ (concat job.secrets) $ \secret -> do
       case lookupTenant loc.tenants secret config.secrets of

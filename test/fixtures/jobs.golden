@@ -10,6 +10,10 @@
         , branches = Nothing
         , dependencies = Nothing
         , requiredProjects = Nothing
+        , rolesProjects = Just
+            [ ProjectName "sf-jobs"
+            , ProjectName "zuul-jobs"
+            ]
         , semaphores = Nothing
         , secrets = Just
             [ SecretName "site_sflogs" ]
@@ -32,6 +36,7 @@
             , JobName "job2"
             ]
         , requiredProjects = Nothing
+        , rolesProjects = Nothing
         , semaphores = Nothing
         , secrets = Just
             [ SecretName "service_user" ]
@@ -52,6 +57,7 @@
             [ ProjectName "config"
             , ProjectName "config-named"
             ]
+        , rolesProjects = Nothing
         , semaphores = Just
             [ SemaphoreName "semaphore-config-update" ]
         , secrets = Just
@@ -70,6 +76,7 @@
         , branches = Nothing
         , dependencies = Nothing
         , requiredProjects = Nothing
+        , rolesProjects = Nothing
         , semaphores = Nothing
         , secrets = Nothing
         }

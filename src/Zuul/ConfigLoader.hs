@@ -233,7 +233,8 @@ doUpdateTopConfig tr configLoc ze = case ze of
   doResolveJob :: Monad m => BaseJob ProjectName -> StateT Config m Job
   doResolveJob job = do
     requiredProjects <- doResolveProjects job.requiredProjects
-    pure $ job & #requiredProjects `set` requiredProjects
+    rolesProjects <- doResolveProjects job.rolesProjects
+    pure $ job {requiredProjects, rolesProjects}
 
   doResolveProjects :: Monad m => Maybe [ProjectName] -> StateT Config m (Maybe [CanonicalProjectName])
   doResolveProjects (Just xs) = Just . catMaybes <$> traverse doResolveProject xs
@@ -335,6 +336,7 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
       <*> fmap toMaybe (decodeAsList "branches" BranchName va)
       <*> fmap toMaybe decodeJobDependencies
       <*> fmap toMaybe decodeRequiredProjects
+      <*> fmap toMaybe decodeJobRoles
       <*> fmap toMaybe decodeSemaphores
       <*> fmap toMaybe decodeSecrets
    where
@@ -393,10 +395,21 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
       Just _ -> decodeFail "Unexpected required-projects value" (Object va)
       Nothing -> pure []
 
+    decodeJobRoles :: Decoder [ProjectName]
+    decodeJobRoles = case HM.lookup "roles" va of
+      Just (Array xs) -> traverse decodeRoleProject (V.toList xs)
+      Just _ -> decodeFail "Unexpected required-projects value" (Object va)
+      Nothing -> pure []
+
     decodeRequiredProject :: Value -> Decoder ProjectName
     decodeRequiredProject = \case
       String v -> pure $ ProjectName v
       Object v -> ProjectName <$> getName v
+      anyOther -> decodeFail "Unexpected job required-projects value" anyOther
+
+    decodeRoleProject :: Value -> Decoder ProjectName
+    decodeRoleProject = \case
+      Object v -> ProjectName <$> getZuulName v
       anyOther -> decodeFail "Unexpected job required-projects value" anyOther
 
     decodeJobNodesetNodes xs = do
@@ -489,6 +502,9 @@ decodeConfig (CanonicalProjectName (ProviderName providerName) (ProjectName proj
 
   getName :: Object -> Decoder Text
   getName = decodeString <=< decodeObjectAttribute "name"
+
+  getZuulName :: Object -> Decoder Text
+  getZuulName = decodeString <=< decodeObjectAttribute "zuul"
 
 -- | Convenient alias
 type ConnectionUrlMap = Map ProviderName ConnectionUrl

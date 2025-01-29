@@ -50,6 +50,7 @@
                             , branches = Nothing
                             , dependencies = Nothing
                             , requiredProjects = Nothing
+                            , rolesProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -71,6 +72,7 @@
                             , dependencies = Just
                                 [ JobName "sf-rpm-build" ]
                             , requiredProjects = Nothing
+                            , rolesProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }
@@ -92,6 +94,7 @@
                             , branches = Nothing
                             , dependencies = Nothing
                             , requiredProjects = Nothing
+                            , rolesProjects = Nothing
                             , semaphores = Nothing
                             , secrets = Nothing
                             }

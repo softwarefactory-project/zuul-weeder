@@ -164,6 +164,7 @@ data BaseJob project = BaseJob
   , branches :: Maybe [BranchName]
   , dependencies :: Maybe [JobName]
   , requiredProjects :: Maybe [project]
+  , rolesProjects :: Maybe [project]
   , semaphores :: Maybe [SemaphoreName]
   , secrets :: Maybe [SecretName]
   }
