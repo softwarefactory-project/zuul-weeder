@@ -3,23 +3,23 @@
 -- Description : CSS utility
 -- Copyright   : (c) Red Hat, 2022
 -- License     : Apache-2.0
-module ZuulWeeder.UI.CSS
-  ( with',
-    mkIcon,
-    title,
-    spinner,
-    hxNavLink,
-    hxTrigger,
-    hxPost,
-    hxTarget,
-  )
+module ZuulWeeder.UI.CSS (
+  with',
+  mkIcon,
+  title,
+  spinner,
+  hxNavLink,
+  hxTrigger,
+  hxPost,
+  hxTarget,
+)
 where
 
 import Lucid
 import Lucid.Base (makeAttribute)
 import ZuulWeeder.Prelude
 
-with' :: (With a) => a -> Text -> a
+with' :: With a => a -> Text -> a
 with' x n = with x [class_ n]
 
 -- After adding css class, run `nix run .#tailwind` to update the tailwind.css file. Then hard refresh the web page.
@@ -27,8 +27,8 @@ with' x n = with x [class_ n]
 mkIcon :: Maybe Text -> Text -> Html ()
 mkIcon iconTitle name =
   with i_ ([class_ ("pr-1 font-bold align-bottom " <> name <> maybe "" (mappend " color-") iconTitle)] <> titleAttr) mempty
-  where
-    titleAttr = maybeToList (title_ <$> iconTitle)
+ where
+  titleAttr = maybeToList (title_ <$> iconTitle)
 
 title :: Text -> Html ()
 title = with' h2_ "font-bold" . toHtml
@@ -41,12 +41,12 @@ hxNavLink xs url extraClass =
   with
     a_
     ( xs
-        <> [ hxGet url,
-             hxPushUrl,
-             hxIndicator "#spinner",
-             hxTarget "#main",
-             class_ ("cursor-pointer hover:font-semibold" <> maybe "" (mappend " ") extraClass),
-             href_ url
+        <> [ hxGet url
+           , hxPushUrl
+           , hxIndicator "#spinner"
+           , hxTarget "#main"
+           , class_ ("cursor-pointer hover:font-semibold" <> maybe "" (mappend " ") extraClass)
+           , href_ url
            ]
     )
 

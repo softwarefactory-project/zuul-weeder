@@ -6,18 +6,17 @@
   nixConfig.bash-prompt = "[nix(zuul-weeder)]$ ";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
-    hspkgs.url =
-      "github:podenv/hspkgs/286d957e295f231de917921e4b9cfb835db0b6d9";
+    nixpkgs.url =
+      "github:NixOS/nixpkgs/d3780c92e64472e8f9aa54f7bbb0dd4483b98303";
     flake-utils.url = "github:numtide/flake-utils";
     tailwind.url = "github:srid/tailwind-haskell";
     tailwind.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, hspkgs, flake-utils, tailwind }:
+  outputs = { self, nixpkgs, flake-utils, tailwind }:
     flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
       let
-        pkgs = hspkgs.pkgs;
+        pkgs = import nixpkgs { inherit system; };
         packageName = "zuul-weeder";
 
         rev = if self ? rev then
@@ -39,15 +38,12 @@
 
         python = pkgs.python310.withPackages (ps: with ps; [ kazoo ]);
 
-        haskellPackages = pkgs.hspkgs.extend (hpPrev: hpFinal: {
-            cron = let
-              src = pkgs.fetchFromGitHub {
-                owner = "MichaelXavier";
-                repo = "cron";
-                rev = "5f5b662a1d7abc3951ea5a2a625bbf3e83f7a11a";
-                sha256 = "sha256-IRVFi+Z0v3SQYLOzTqQfquL7o6V3JE0luX9wKUaZRNo=";
-              };
-            in hpPrev.callCabal2nix "cron" src { };
+        haskellPackages = pkgs.haskellPackages.extend (hpFinal: hpPrev: {
+          # there is a test failure: resolveGroupController should resolve a direct mount root
+          cgroup-rts-threads = pkgs.haskell.lib.dontCheck
+            (pkgs.haskell.lib.overrideCabal hpPrev.cgroup-rts-threads {
+              broken = false;
+            });
         });
         zuulWeederPackage = haskellPackages.callCabal2nix packageName self { };
         finalPackage =
@@ -94,11 +90,11 @@
           buildInputs = with haskellPackages; [
             python
             pkgs.ghcid
-            ormolu_0_7_1_0
+            pkgs.haskellPackages.fourmolu
             pkgs.cabal-install
             pkgs.hlint
-            pkgs.weeder
-            pkgs.haskell-language-server
+            pkgs.haskellPackages.weeder
+            pkgs.haskellPackages.haskell-language-server
             pkgs.graphviz
             svg_stack
           ];
@@ -111,7 +107,7 @@
 
         apps.calligraphy = mkApp ''
           set -xe
-          exec ${hspkgs.pkgs.calligraphy}/bin/calligraphy $*
+          exec ${pkgs.haskellPackages.calligraphy}/bin/calligraphy $*
         '';
 
         apps.tailwind = mkApp ''

@@ -11,186 +11,186 @@
 -- Portability : portable
 --
 -- This module exports common functions and helpers.
-module ZuulWeeder.Prelude
-  ( -- * clock
-    getSec,
-    intervalMilliSec,
+module ZuulWeeder.Prelude (
+  -- * clock
+  getSec,
+  intervalMilliSec,
 
-    -- * th-env
-    gitVersion,
+  -- * th-env
+  gitVersion,
 
-    -- * fast-logger
-    Logger,
-    info,
-    withLogger,
+  -- * fast-logger
+  Logger,
+  info,
+  withLogger,
 
-    -- * pretty-simple
-    Text.Pretty.Simple.pPrint,
-    Text.Pretty.Simple.pShowNoColor,
+  -- * pretty-simple
+  Text.Pretty.Simple.pPrint,
+  Text.Pretty.Simple.pShowNoColor,
 
-    -- * exceptions
-    Control.Exception.SomeException,
-    Control.Exception.try,
-    Control.Monad.Catch.catchAll,
+  -- * exceptions
+  Control.Exception.SomeException,
+  Control.Exception.try,
+  Control.Monad.Catch.catchAll,
 
-    -- * filepath text
-    FilePathT (..),
-    (</>),
-    getPath,
-    listDirectory,
-    doesDirectoryExist,
-    readFileBS,
-    readFileText,
-    writeFileText,
+  -- * filepath text
+  FilePathT (..),
+  (</>),
+  getPath,
+  listDirectory,
+  doesDirectoryExist,
+  readFileBS,
+  readFileText,
+  writeFileText,
 
-    -- * text, bytestring
-    Data.Text.Text,
-    Data.ByteString.ByteString,
-    Data.Text.Encoding.encodeUtf8,
+  -- * text, bytestring
+  Data.Text.Text,
+  Data.ByteString.ByteString,
+  Data.Text.Encoding.encodeUtf8,
 
-    -- * containers
-    Data.Map.Map,
-    Data.Set.Set,
-    Data.Tree.Forest,
-    Data.Tree.Tree (..),
-    mapMSet,
+  -- * containers
+  Data.Map.Map,
+  Data.Set.Set,
+  Data.Tree.Forest,
+  Data.Tree.Tree (..),
+  mapMSet,
 
-    -- * witch
-    Witch.From,
-    Witch.from,
-    Witch.via,
-    Witch.into,
-    Witch.unsafeFrom,
-    Witch.unsafeInto,
+  -- * witch
+  Witch.From,
+  Witch.from,
+  Witch.via,
+  Witch.into,
+  Witch.unsafeFrom,
+  Witch.unsafeInto,
 
-    -- * mtl
-    Control.Monad.Trans.lift,
-    Control.Monad.Reader.Reader,
-    Control.Monad.Reader.ReaderT,
-    Control.Monad.Reader.runReaderT,
-    Control.Monad.State.State,
-    Control.Monad.State.StateT,
-    Control.Monad.State.execStateT,
-    Control.Monad.Except.ExceptT,
-    Control.Monad.Except.runExceptT,
-    Control.Monad.Except.throwError,
-    Control.Monad.Trans.Except.except,
-    Data.Functor.Identity.Identity,
-    Data.Functor.Identity.runIdentity,
+  -- * mtl
+  Control.Monad.Trans.lift,
+  Control.Monad.Reader.Reader,
+  Control.Monad.Reader.ReaderT,
+  Control.Monad.Reader.runReaderT,
+  Control.Monad.State.State,
+  Control.Monad.State.StateT,
+  Control.Monad.State.execStateT,
+  Control.Monad.Except.ExceptT,
+  Control.Monad.Except.runExceptT,
+  Control.Monad.Except.throwError,
+  Control.Monad.Trans.Except.except,
+  Data.Functor.Identity.Identity,
+  Data.Functor.Identity.runIdentity,
 
-    -- * lens
-    Control.Lens.set,
-    Control.Lens.over,
-    Control.Lens.use,
-    (%=),
+  -- * lens
+  Control.Lens.set,
+  Control.Lens.over,
+  Control.Lens.use,
+  (%=),
 
-    -- * aeson
-    Data.Aeson.FromJSON (..),
-    Data.Aeson.FromJSONKey (..),
-    Data.Aeson.ToJSON (..),
-    Data.Aeson.ToJSONKey (..),
-    Data.Aeson.Value (Object),
-    Data.Aeson.genericParseJSON,
-    Data.Aeson.genericToJSON,
-    Data.Aeson.defaultOptions,
-    Data.Aeson.omitNothingFields,
-    encodeJSON,
-    decodeJSON,
+  -- * aeson
+  Data.Aeson.FromJSON (..),
+  Data.Aeson.FromJSONKey (..),
+  Data.Aeson.ToJSON (..),
+  Data.Aeson.ToJSONKey (..),
+  Data.Aeson.Value (Object),
+  Data.Aeson.genericParseJSON,
+  Data.Aeson.genericToJSON,
+  Data.Aeson.defaultOptions,
+  Data.Aeson.omitNothingFields,
+  encodeJSON,
+  decodeJSON,
 
-    -- * aeson helpers
-    Decoder (..),
-    decodeFail,
-    decodeObject,
-    decodeObjectAttribute,
-    decodeAsList,
-    decodeString,
-    decodeList,
+  -- * aeson helpers
+  Decoder (..),
+  decodeFail,
+  decodeObject,
+  decodeObjectAttribute,
+  decodeAsList,
+  decodeString,
+  decodeList,
 
-    -- * qq
-    Data.String.QQ.s,
+  -- * qq
+  Data.String.QQ.s,
 
-    -- * with-utf8
-    Main.Utf8.withUtf8,
+  -- * with-utf8
+  Main.Utf8.withUtf8,
 
-    -- * utilities
-    whenM,
-    orDie,
-    fromEither,
+  -- * utilities
+  whenM,
+  orDie,
+  fromEither,
 
-    -- * base concurrent
-    Control.Concurrent.forkIO,
-    Control.Concurrent.threadDelay,
-    Data.IORef.IORef,
-    Data.IORef.newIORef,
-    Data.IORef.readIORef,
-    Data.IORef.writeIORef,
-    Data.IORef.modifyIORef,
-    Control.Concurrent.MVar.MVar,
-    Control.Concurrent.MVar.newMVar,
-    Control.Concurrent.MVar.modifyMVar,
+  -- * base concurrent
+  Control.Concurrent.forkIO,
+  Control.Concurrent.threadDelay,
+  Data.IORef.IORef,
+  Data.IORef.newIORef,
+  Data.IORef.readIORef,
+  Data.IORef.writeIORef,
+  Data.IORef.modifyIORef,
+  Control.Concurrent.MVar.MVar,
+  Control.Concurrent.MVar.newMVar,
+  Control.Concurrent.MVar.modifyMVar,
 
-    -- * base list
-    Data.List.sort,
-    Data.List.nub,
-    Data.List.NonEmpty.NonEmpty,
-    Data.List.NonEmpty.nonEmpty,
+  -- * base list
+  Data.List.sort,
+  Data.List.nub,
+  Data.List.NonEmpty.NonEmpty,
+  Data.List.NonEmpty.nonEmpty,
 
-    -- * base data
-    Int64,
-    (&),
-    Data.Void.Void,
-    Data.Proxy.Proxy (..),
-    Data.Bifunctor.first,
-    Data.Bool.bool,
-    Data.Foldable.traverse_,
-    Data.Foldable.foldl',
-    Data.Maybe.catMaybes,
-    Data.Maybe.mapMaybe,
-    Data.Maybe.isJust,
-    Data.Maybe.isNothing,
-    Data.Maybe.fromMaybe,
-    Data.Maybe.maybeToList,
-    Data.Either.fromRight,
+  -- * base data
+  Int64,
+  (&),
+  Data.Void.Void,
+  Data.Proxy.Proxy (..),
+  Data.Bifunctor.first,
+  Data.Bool.bool,
+  Data.Foldable.traverse_,
+  Data.Foldable.foldl',
+  Data.Maybe.catMaybes,
+  Data.Maybe.mapMaybe,
+  Data.Maybe.isJust,
+  Data.Maybe.isNothing,
+  Data.Maybe.fromMaybe,
+  Data.Maybe.maybeToList,
+  Data.Either.fromRight,
 
-    -- * base control
-    Control.Monad.forM,
-    Control.Monad.forM_,
-    Control.Monad.foldM,
-    Control.Monad.unless,
-    Control.Monad.when,
-    Control.Monad.void,
-    Control.Monad.IO.Class.liftIO,
-    (<=<),
-    (>=>),
-    (<|>),
+  -- * base control
+  Control.Monad.forM,
+  Control.Monad.forM_,
+  Control.Monad.foldM,
+  Control.Monad.unless,
+  Control.Monad.when,
+  Control.Monad.void,
+  Control.Monad.IO.Class.liftIO,
+  (<=<),
+  (>=>),
+  (<|>),
 
-    -- * base debug
-    Debug.Trace.trace,
-    System.IO.hPutStrLn,
-    System.IO.stderr,
-    Text.Printf.printf,
-    GHC.Stack.HasCallStack,
+  -- * base debug
+  Debug.Trace.trace,
+  System.IO.hPutStrLn,
+  System.IO.stderr,
+  Text.Printf.printf,
+  GHC.Stack.HasCallStack,
 
-    -- * base system
-    Data.Version.showVersion,
-    System.Environment.lookupEnv,
-    System.Environment.getArgs,
-    System.Timeout.timeout,
+  -- * base system
+  Data.Version.showVersion,
+  System.Environment.lookupEnv,
+  System.Environment.getArgs,
+  System.Timeout.timeout,
 
-    -- * hashable
-    Data.Hashable.hash,
-    Data.Hashable.Hashable,
+  -- * hashable
+  Data.Hashable.hash,
+  Data.Hashable.Hashable,
 
-    -- * cron
-    System.Cron.Types.CronSchedule,
-    System.Cron.Parser.parseCronSchedule,
-    parseCronScheduleLoose,
-    describeCronSchedule,
+  -- * cron
+  System.Cron.Types.CronSchedule,
+  System.Cron.Parser.parseCronSchedule,
+  parseCronScheduleLoose,
+  describeCronSchedule,
 
-    -- * base
-    module Prelude,
-    Generic,
-  )
+  -- * base
+  module Prelude,
+  Generic,
+)
 where
 
 import Control.Applicative ((<|>))
@@ -267,10 +267,10 @@ describeCronSchedule = Witch.from . System.Cron.Describe.describe System.Cron.De
 parseCronScheduleLoose :: Text -> Either String System.Cron.Types.CronSchedule
 parseCronScheduleLoose = Data.Attoparsec.Text.parseOnly System.Cron.Parser.cronScheduleLoose . Data.Text.toLower
 
-encodeJSON :: (Data.Aeson.ToJSON a) => a -> ByteString
+encodeJSON :: Data.Aeson.ToJSON a => a -> ByteString
 encodeJSON = Witch.from . Data.Aeson.encode
 
-decodeJSON :: (Data.Aeson.FromJSON a) => ByteString -> Either String a
+decodeJSON :: Data.Aeson.FromJSON a => ByteString -> Either String a
 decodeJSON = Data.Aeson.eitherDecodeStrict
 
 -- | The content of the GIT_COMMIT environment variable, default to HEAD.
@@ -285,15 +285,15 @@ withLogger :: (Logger -> IO a) -> IO a
 withLogger cb = do
   tc <- System.Log.FastLogger.newTimeCache "%F %T "
   System.Log.FastLogger.withTimedFastLogger tc l (cb . Logger)
-  where
-    l = System.Log.FastLogger.LogStderr 1024
+ where
+  l = System.Log.FastLogger.LogStderr 1024
 
 -- | Log a message.
 info :: Logger -> ByteString -> IO ()
 info (Logger logger) msg = logger (\time -> System.Log.FastLogger.toLogStr $ time <> msg <> "\n")
 
 -- | lifted 'Control.Monad.when'
-whenM :: (Monad m) => m Bool -> m () -> m ()
+whenM :: Monad m => m Bool -> m () -> m ()
 whenM test action = do
   res <- test
   Control.Monad.when res action
@@ -354,7 +354,7 @@ Just a `orDie` _ = Right a
 Nothing `orDie` err = Left err
 
 -- | Die with on the Left case
-fromEither :: (Show a) => Either a b -> b
+fromEither :: Show a => Either a b -> b
 fromEither e = case e of
   Left x -> error (show x)
   Right x -> x

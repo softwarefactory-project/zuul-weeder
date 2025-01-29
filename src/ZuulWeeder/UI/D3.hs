@@ -15,41 +15,41 @@ import ZuulWeeder.UI
 toD3Graph :: Scope -> ConfigGraph -> D3Graph
 toD3Graph scope g =
   D3Graph
-    { nodes = toNodes <$> vertexes,
-      links = toLinks <$> edges
+    { nodes = toNodes <$> vertexes
+    , links = toLinks <$> edges
     }
-  where
-    -- Keep the edges whose both vertex are in the current tenant
-    keepTenant (a, b) = case scope of
-      Scoped tenants -> tenants == a.tenants && tenants == b.tenants
-      UnScoped -> True
+ where
+  -- Keep the edges whose both vertex are in the current tenant
+  keepTenant (a, b) = case scope of
+    Scoped tenants -> tenants == a.tenants && tenants == b.tenants
+    UnScoped -> True
 
-    (edges, _) = splitAt 500 $ filter keepTenant $ Algebra.Graph.edgeList g
-    -- edges = Algebra.Graph.edgeList g
-    vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
+  (edges, _) = splitAt 500 $ filter keepTenant $ Algebra.Graph.edgeList g
+  -- edges = Algebra.Graph.edgeList g
+  vertexes = nub $ concatMap (\(a, b) -> [a, b]) edges
 
-    toNodes :: Vertex -> D3Node
-    toNodes v = D3Node (from v.name) (hash v) $ fromEnum (into @VertexType v.name)
+  toNodes :: Vertex -> D3Node
+  toNodes v = D3Node (from v.name) (hash v) $ fromEnum (into @VertexType v.name)
 
-    toLinks :: (Vertex, Vertex) -> D3Link
-    toLinks (a, b) = D3Link (hash a) (hash b)
+  toLinks :: (Vertex, Vertex) -> D3Link
+  toLinks (a, b) = D3Link (hash a) (hash b)
 
 data D3Node = D3Node
-  { name :: Text,
-    id :: Int,
-    group :: Int
+  { name :: Text
+  , id :: Int
+  , group :: Int
   }
   deriving (Generic, Eq, Show)
 
 data D3Link = D3Link
-  { source :: Int,
-    target :: Int
+  { source :: Int
+  , target :: Int
   }
   deriving (Generic, Show)
 
 data D3Graph = D3Graph
-  { nodes :: [D3Node],
-    links :: [D3Link]
+  { nodes :: [D3Node]
+  , links :: [D3Link]
   }
   deriving (Generic, Show)
 

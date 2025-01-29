@@ -53,9 +53,9 @@ monitoring logger (counter, error_counter) baseApp req resp = case Wai.rawPathIn
         else Prometheus.incCounter error_counter
       info logger msg
       pure result
-  where
-    remoteHash :: Network.Socket.SockAddr -> Int
-    remoteHash = \case
-      Network.Socket.SockAddrInet _ h -> hash h
-      Network.Socket.SockAddrInet6 _ h _ _ -> hash h
-      Network.Socket.SockAddrUnix _ -> 0
+ where
+  remoteHash :: Network.Socket.SockAddr -> Int
+  remoteHash = \case
+    Network.Socket.SockAddrInet _ h -> hash h
+    Network.Socket.SockAddrInet6 _ h _ _ -> hash h
+    Network.Socket.SockAddrUnix _ -> 0

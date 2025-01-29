@@ -35,25 +35,25 @@ vertexSlugName = \case
 
 vertexIcon :: VertexType -> Html ()
 vertexIcon vt = mkIcon (Just $ vertexSlugName vt) ("ri-" <> iconName)
-  where
-    iconName = case vt of
-      VAbstractJobT -> "file-text-line"
-      VJobT -> "file-text-line"
-      VSemaphoreT -> "lock-line"
-      VSecretT -> "key-2-line"
-      VQueueT -> "traffic-light-line"
-      VProjectT -> "folder-open-line"
-      VProjectRegexT -> "folder-open-line"
-      VProjectTemplateT -> "draft-line"
-      VPipelineT -> "git-merge-line"
-      VNodeLabelT -> "price-tag-3-line"
-      VProjectPipelineT -> "git-merge-line"
-      VRegexPipelineT -> "git-merge-line"
-      VTemplatePipelineT -> "git-merge-line"
-      VNodesetT -> "server-line"
-      VRepositoryT -> "stack-line"
-      VTriggerT -> "download-fill"
-      VReporterT -> "upload-fill"
+ where
+  iconName = case vt of
+    VAbstractJobT -> "file-text-line"
+    VJobT -> "file-text-line"
+    VSemaphoreT -> "lock-line"
+    VSecretT -> "key-2-line"
+    VQueueT -> "traffic-light-line"
+    VProjectT -> "folder-open-line"
+    VProjectRegexT -> "folder-open-line"
+    VProjectTemplateT -> "draft-line"
+    VPipelineT -> "git-merge-line"
+    VNodeLabelT -> "price-tag-3-line"
+    VProjectPipelineT -> "git-merge-line"
+    VRegexPipelineT -> "git-merge-line"
+    VTemplatePipelineT -> "git-merge-line"
+    VNodesetT -> "server-line"
+    VRepositoryT -> "stack-line"
+    VTriggerT -> "download-fill"
+    VReporterT -> "upload-fill"
 
 -- | Get the URL of a configuration element location
 configLocUrl :: ConfigLoc -> Text
@@ -70,15 +70,15 @@ configLocUrl loc = case loc.url of
     | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
     | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
   GitUrl url -> trimedUrl url <> "/cgit/" <> name <> "/tree/" <> path <> "?h=" <> branch
-  where
-    CanonicalProjectName _ (ProjectName name) = loc.project
-    BranchName branch = loc.branch
-    FilePathT path = loc.path
-    trimedUrl = Text.dropWhileEnd (== '/')
-    buildGitlabUrl url = trimedUrl url <> "/" <> name <> "/-/blob/" <> branch <> "/" <> path
-    buildPagureUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/f/" <> path
-    buildGithubUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/" <> path
-    buildGiteaUrl url = url <> "/" <> name <> "/src/branch/" <> branch <> "/" <> path
+ where
+  CanonicalProjectName _ (ProjectName name) = loc.project
+  BranchName branch = loc.branch
+  FilePathT path = loc.path
+  trimedUrl = Text.dropWhileEnd (== '/')
+  buildGitlabUrl url = trimedUrl url <> "/" <> name <> "/-/blob/" <> branch <> "/" <> path
+  buildPagureUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/f/" <> path
+  buildGithubUrl url = trimedUrl url <> "/" <> name <> "/blob/" <> branch <> "/" <> path
+  buildGiteaUrl url = url <> "/" <> name <> "/src/branch/" <> branch <> "/" <> path
 
 projectUrl :: ConnectionUrl -> CanonicalProjectName -> Text
 projectUrl curl proj = case curl of
@@ -94,10 +94,10 @@ projectUrl curl proj = case curl of
     | "pagure.io" `Text.isInfixOf` url -> buildPagureUrl url
     | "src.fedoraproject.io" `Text.isInfixOf` url -> buildPagureUrl url
   GitUrl url -> trimedUrl url <> "/cgit/" <> name
-  where
-    CanonicalProjectName _ (ProjectName name) = proj
-    trimedUrl = Text.dropWhileEnd (== '/')
-    buildGitlabUrl url = trimedUrl url <> "/" <> name
-    buildPagureUrl url = trimedUrl url <> "/" <> name
-    buildGithubUrl url = trimedUrl url <> "/" <> name
-    buildGiteaUrl url = url <> "/" <> name
+ where
+  CanonicalProjectName _ (ProjectName name) = proj
+  trimedUrl = Text.dropWhileEnd (== '/')
+  buildGitlabUrl url = trimedUrl url <> "/" <> name
+  buildPagureUrl url = trimedUrl url <> "/" <> name
+  buildGithubUrl url = trimedUrl url <> "/" <> name
+  buildGiteaUrl url = url <> "/" <> name

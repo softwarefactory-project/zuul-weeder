@@ -43,8 +43,8 @@ newtype BasePath = BasePath
   deriving newtype (Ord, Eq, Show)
 
 data Context = Context
-  { rootURL :: BasePath,
-    scope :: Scope
+  { rootURL :: BasePath
+  , scope :: Scope
   }
   deriving (Ord, Eq, Show)
 
@@ -65,10 +65,10 @@ mainBody ctx page analysisStatus mainComponent =
     with body_ [id_ "main"] do
       navComponent ctx page analysisStatus
       with div_ [class_ "container grid p-4"] mainComponent
-  where
-    css :: Text
-    css =
-      [s|
+ where
+  css :: Text
+  css =
+    [s|
 .links line {
   stroke: #999;
   stroke-opacity: 0.6;
@@ -110,7 +110,7 @@ svg#d3 {
   display: block;
 }
 |]
-        <> cssColors
+      <> cssColors
 
 navComponent :: Context -> Text -> AnalysisStatus -> Html ()
 navComponent ctx page analysisStatus =
@@ -128,23 +128,23 @@ navComponent ctx page analysisStatus =
         with span_ [class_ "font-semibold text-white mr-2", title_ "Configuration is reloading!"] "↻"
       when (isJust analysisStatus.loadingError) do
         hxNavLink [] (base <> "about") (Just "cursor-pointer rounded font-semibold bg-slate-200 text-red-800") "ERROR"
-  where
-    base = baseUrl ctx
-    navLink path =
-      let navLinkClass
-            | path == page || (path == "search" && page == "") = " bg-slate-500"
-            | otherwise = ""
-          extra
-            | path == "about" = " right"
-            | otherwise = ""
-          linkClass = "m-4 p-1 cursor-pointer text-white rounded hover:text-teal-500" <> navLinkClass <> extra
-       in hxNavLink [id_ $ "nav-" <> path] (base <> path) (Just linkClass)
-    exitScope =
-      case ctx.scope of
-        Scoped tenants -> hxNavLink [] (basePath ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
-        UnScoped -> pure ()
-      where
-        tenantClass = "my-4 p-1 text-white font-semibold "
+ where
+  base = baseUrl ctx
+  navLink path =
+    let navLinkClass
+          | path == page || (path == "search" && page == "") = " bg-slate-500"
+          | otherwise = ""
+        extra
+          | path == "about" = " right"
+          | otherwise = ""
+        linkClass = "m-4 p-1 cursor-pointer text-white rounded hover:text-teal-500" <> navLinkClass <> extra
+     in hxNavLink [id_ $ "nav-" <> path] (base <> path) (Just linkClass)
+  exitScope =
+    case ctx.scope of
+      Scoped tenants -> hxNavLink [] (basePath ctx.rootURL) (Just tenantClass) (toHtml $ tenantsList tenants)
+      UnScoped -> pure ()
+   where
+    tenantClass = "my-4 p-1 text-white font-semibold "
 
 welcomeComponent :: Context -> Html ()
 welcomeComponent ctx = do
@@ -163,11 +163,11 @@ aboutComponent = do
   with' ul_ "pb-5" do
     traverse_ renderIconLegend [minBound .. maxBound]
   div_ . toHtml $ "Version: " <> from (showVersion version) <> " (" <> gitVersion <> ")"
-  where
-    renderIconLegend :: VertexType -> Html ()
-    renderIconLegend vt = li_ do
-      vertexIcon vt
-      toHtml $ vertexSlugName vt
+ where
+  renderIconLegend :: VertexType -> Html ()
+  renderIconLegend vt = li_ do
+    vertexIcon vt
+    toHtml $ vertexSlugName vt
 
 tenantsList :: Set TenantName -> Text
 tenantsList tenants = Text.intercalate "," (from <$> Set.toList tenants)
@@ -186,14 +186,14 @@ baseUrl ctx =
 
 vertexLink :: Context -> VertexName -> Html () -> Html ()
 vertexLink ctx name = hxNavLink [] ref Nothing
-  where
-    ref =
-      Text.intercalate
-        "/"
-        [ baseUrl ctx <> "object",
-          vertexSlugName (from name),
-          from name
-        ]
+ where
+  ref =
+    Text.intercalate
+      "/"
+      [ baseUrl ctx <> "object"
+      , vertexSlugName (from name)
+      , from name
+      ]
 
 tenantBaseLink :: BasePath -> TenantName -> Html ()
 tenantBaseLink rootURL tenant =
@@ -222,27 +222,27 @@ searchResults ctx (Text.strip -> query) names
   | otherwise = case mapMaybe matchQuery (Map.toList names) of
       [] -> (Nothing, div_ "no results :(")
       results -> (Just query, ul_ $ traverse_ renderResult results)
-  where
-    renderResult :: (VertexName, Set TenantName) -> Html ()
-    renderResult (name, tenants) =
-      with' li_ "bg-white/75" $ do
-        vertexLink ctx name (vertexName name)
-        case ctx.scope of
-          -- When scoped, don't display tenant badge
-          Scoped _ -> pure ()
-          UnScoped -> traverse_ (tenantLink ctx.rootURL name) tenants
+ where
+  renderResult :: (VertexName, Set TenantName) -> Html ()
+  renderResult (name, tenants) =
+    with' li_ "bg-white/75" $ do
+      vertexLink ctx name (vertexName name)
+      case ctx.scope of
+        -- When scoped, don't display tenant badge
+        Scoped _ -> pure ()
+        UnScoped -> traverse_ (tenantLink ctx.rootURL name) tenants
 
-    matchTenant vertexTenants = case ctx.scope of
-      -- The provided context match the vertex, keep the context
-      Scoped tenants | tenants `Set.isSubsetOf` vertexTenants -> Just tenants
-      -- The provided context does not match
-      Scoped _ -> Nothing
-      -- No context was provided, keep the vertex tenants
-      UnScoped -> Just vertexTenants
-    matchQuery :: (VertexName, Set TenantName) -> Maybe (VertexName, Set TenantName)
-    matchQuery (name, tenants) = case (query `Text.isInfixOf` from name, matchTenant tenants) of
-      (True, Just matchingTenants) -> Just (name, matchingTenants)
-      _ -> Nothing
+  matchTenant vertexTenants = case ctx.scope of
+    -- The provided context match the vertex, keep the context
+    Scoped tenants | tenants `Set.isSubsetOf` vertexTenants -> Just tenants
+    -- The provided context does not match
+    Scoped _ -> Nothing
+    -- No context was provided, keep the vertex tenants
+    UnScoped -> Just vertexTenants
+  matchQuery :: (VertexName, Set TenantName) -> Maybe (VertexName, Set TenantName)
+  matchQuery (name, tenants) = case (query `Text.isInfixOf` from name, matchTenant tenants) of
+    (True, Just matchingTenants) -> Just (name, matchingTenants)
+    _ -> Nothing
 
 newtype SearchForm = SearchForm {query :: Text} deriving (Eq, Show, Generic)
 
@@ -252,20 +252,20 @@ searchComponent :: Context -> Maybe Text -> Html () -> Html ()
 searchComponent ctx queryM result = do
   with' div_ "grid p-4 place-content-center" do
     input_
-      [ class_ "form-control",
-        size_ "42",
-        type_ "search",
-        name_ "query",
-        hxPost (baseUrl ctx <> "search_results"),
-        hxTrigger "keyup changed delay:500ms, search",
-        hxTarget "#search-results",
-        attr
+      [ class_ "form-control"
+      , size_ "42"
+      , type_ "search"
+      , name_ "query"
+      , hxPost (baseUrl ctx <> "search_results")
+      , hxTrigger "keyup changed delay:500ms, search"
+      , hxTarget "#search-results"
+      , attr
       ]
     with div_ [id_ "search-results"] result
-  where
-    attr = case queryM of
-      Just q -> value_ q
-      Nothing -> placeholder_ "Begin Typing To Search Config..."
+ where
+  attr = case queryM of
+    Just q -> value_ q
+    Nothing -> placeholder_ "Begin Typing To Search Config..."
 
 isJobVertex :: VertexName -> Bool
 isJobVertex = \case
@@ -296,12 +296,12 @@ locLink url =
   with a_ [href_ url, class_ "no-underline hover:text-slate-500 p-1 text-slate-700"] do
     mkIcon Nothing "ri-link"
     toHtml locPath
-  where
-    locPath = Text.drop 8 url
+ where
+  locPath = Text.drop 8 url
 
 vertexScope :: Scope -> Set Vertex -> [Vertex]
 vertexScope scope vertices = Set.toList $ case scope of
   UnScoped -> vertices
   Scoped tenants -> Set.filter (matchTenant tenants) vertices
-  where
-    matchTenant tenants v = tenants `Set.isSubsetOf` v.tenants
+ where
+  matchTenant tenants v = tenants `Set.isSubsetOf` v.tenants

@@ -19,25 +19,25 @@ import ZuulWeeder.UI.Vertex
 
 pipelineJobCount :: Context -> Analysis -> PipelineName -> Int
 pipelineJobCount ctx analysis pipeline = sum $ map countJob pipelineForest
-  where
-    countJob :: Tree VertexName -> Int
-    countJob (Node root childs)
-      | isPipelineConfig root == Just pipeline = length $ filter isJob childs
-      | otherwise = 0
-    isJob :: Tree VertexName -> Bool
-    isJob (Node root _) = isJobVertex root
+ where
+  countJob :: Tree VertexName -> Int
+  countJob (Node root childs)
+    | isPipelineConfig root == Just pipeline = length $ filter isJob childs
+    | otherwise = 0
+  isJob :: Tree VertexName -> Bool
+  isJob (Node root _) = isJobVertex root
 
-    pipelineForest = case NE.nonEmpty pipelineVerticesList of
-      Just pipelineVertices -> ZuulWeeder.Graph.findReachableForest tenantM pipelineVertices analysis.dependentMap
-      Nothing -> mempty
+  pipelineForest = case NE.nonEmpty pipelineVerticesList of
+    Just pipelineVertices -> ZuulWeeder.Graph.findReachableForest tenantM pipelineVertices analysis.dependentMap
+    Nothing -> mempty
 
-    pipelineVerticesList = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
-      where
-        matchVertex v = v.name == VPipeline pipeline
+  pipelineVerticesList = vertexScope ctx.scope $ Set.filter matchVertex analysis.vertices
+   where
+    matchVertex v = v.name == VPipeline pipeline
 
-    tenantM = case ctx.scope of
-      UnScoped -> Nothing
-      Scoped tenants -> Just tenants
+  tenantM = case ctx.scope of
+    UnScoped -> Nothing
+    Scoped tenants -> Just tenants
 
 -- | Display the list of pipelines
 pipelinesInfoComponent :: Context -> Analysis -> Zuul.ConfigLoader.ConfigMap PipelineName Pipeline -> Html ()
@@ -51,35 +51,35 @@ pipelinesInfoComponent ctx analysis pipelines = do
           vertexLink ctx vProj (vertexName vProj)
         with' ul_ "pl-2 pb-2" do
           traverse_ (with' li_ "pb-2" . displayPipeline) xs
-  where
-    jobCounts :: Map PipelineName Int
-    jobCounts = Map.mapWithKey (\n _ -> pipelineJobCount ctx analysis n) pipelines
-    perLocs :: Map CanonicalProjectName [Pipeline]
-    perLocs = foldr addPipelines mempty (Map.elems pipelines)
-    addPipelines xs acc = foldr addPipeline acc xs
-    addPipeline (loc, pipeline)
-      | forTenant loc = Map.insertWith mappend loc.project [pipeline]
-      | otherwise = ZuulWeeder.Prelude.id
+ where
+  jobCounts :: Map PipelineName Int
+  jobCounts = Map.mapWithKey (\n _ -> pipelineJobCount ctx analysis n) pipelines
+  perLocs :: Map CanonicalProjectName [Pipeline]
+  perLocs = foldr addPipelines mempty (Map.elems pipelines)
+  addPipelines xs acc = foldr addPipeline acc xs
+  addPipeline (loc, pipeline)
+    | forTenant loc = Map.insertWith mappend loc.project [pipeline]
+    | otherwise = ZuulWeeder.Prelude.id
 
-    forTenant :: ConfigLoc -> Bool
-    forTenant loc = case ctx.scope of
-      Scoped tenants -> loc.tenants `Set.isSubsetOf` tenants
-      UnScoped -> True
+  forTenant :: ConfigLoc -> Bool
+  forTenant loc = case ctx.scope of
+    Scoped tenants -> loc.tenants `Set.isSubsetOf` tenants
+    UnScoped -> True
 
-    displayPipeline :: Pipeline -> Html ()
-    displayPipeline pipeline = do
-      let vPipeline = VPipeline pipeline.name
-          jobCount = fromMaybe 0 $ Map.lookup pipeline.name jobCounts
-      vertexLink ctx vPipeline do
-        vertexName vPipeline
-        with span_ [class_ "pl-2", title_ "Job count"] do
-          toHtml $ show jobCount
-          vertexIcon VJobT
+  displayPipeline :: Pipeline -> Html ()
+  displayPipeline pipeline = do
+    let vPipeline = VPipeline pipeline.name
+        jobCount = fromMaybe 0 $ Map.lookup pipeline.name jobCounts
+    vertexLink ctx vPipeline do
+      vertexName vPipeline
+      with span_ [class_ "pl-2", title_ "Job count"] do
+        toHtml $ show jobCount
+        vertexIcon VJobT
 
-      unless (null pipeline.timers) do
-        with' ul_ "pl-2" do
-          forM_ pipeline.timers $ \timer -> do
-            li_ (toHtml timer)
+    unless (null pipeline.timers) do
+      with' ul_ "pl-2" do
+        forM_ pipeline.timers $ \timer -> do
+          li_ (toHtml timer)
 
 infoComponent :: Context -> AnalysisStatus -> Html ()
 infoComponent ctx analysisStatus = do
@@ -114,25 +114,25 @@ infoComponent ctx analysisStatus = do
 
     with' div_ "pt-3" do
       pipelinesInfoComponent ctx analysis (Map.filterWithKey forTenants config.pipelines)
-  where
-    scope = case ctx.scope of
-      Scoped tenants -> tenants
-      UnScoped -> mempty
-    otherTenants = Set.difference analysis.config.tenants scope
-    analysis = analysisStatus.analysis
-    config = analysis.config
-    objectCounts :: Text -> Zuul.ConfigLoader.ConfigMap a b -> Html ()
-    objectCounts n m = do
-      with' tr_ "border-b" do
-        with' td_ "p-1" (toHtml n)
-        with' td_ "p-1" (toHtml $ show $ Map.size $ Map.filterWithKey forTenants m)
-    forTenants :: a -> [(ConfigLoc, b)] -> Bool
-    forTenants _ xs = case ctx.scope of
-      Scoped tenants -> any (keepTenants tenants . fst) xs
-      UnScoped -> True
-    vForTenants v = case ctx.scope of
-      Scoped tenants -> v.tenants `Set.isSubsetOf` tenants
-      UnScoped -> True
+ where
+  scope = case ctx.scope of
+    Scoped tenants -> tenants
+    UnScoped -> mempty
+  otherTenants = Set.difference analysis.config.tenants scope
+  analysis = analysisStatus.analysis
+  config = analysis.config
+  objectCounts :: Text -> Zuul.ConfigLoader.ConfigMap a b -> Html ()
+  objectCounts n m = do
+    with' tr_ "border-b" do
+      with' td_ "p-1" (toHtml n)
+      with' td_ "p-1" (toHtml $ show $ Map.size $ Map.filterWithKey forTenants m)
+  forTenants :: a -> [(ConfigLoc, b)] -> Bool
+  forTenants _ xs = case ctx.scope of
+    Scoped tenants -> any (keepTenants tenants . fst) xs
+    UnScoped -> True
+  vForTenants v = case ctx.scope of
+    Scoped tenants -> v.tenants `Set.isSubsetOf` tenants
+    UnScoped -> True
 
-    keepTenants :: Set TenantName -> ConfigLoc -> Bool
-    keepTenants tenants loc = loc.tenants `Set.isSubsetOf` tenants
+  keepTenants :: Set TenantName -> ConfigLoc -> Bool
+  keepTenants tenants loc = loc.tenants `Set.isSubsetOf` tenants

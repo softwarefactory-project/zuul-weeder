@@ -11,48 +11,48 @@
 -- The Zuul Configuration data types.
 --
 -- See: https://zuul-ci.org/docs/zuul/latest/project-config.html#configuration-items
-module Zuul.Config
-  ( -- * Newtype wrappers
-    TenantName (..),
-    JobName (..),
-    ProjectName (..),
-    ProjectRegex (..),
-    PipelineName (..),
-    NodesetName (..),
-    NodeLabelName (..),
-    ProjectTemplateName (..),
-    SecretName (..),
-    QueueName (..),
-    SemaphoreName (..),
+module Zuul.Config (
+  -- * Newtype wrappers
+  TenantName (..),
+  JobName (..),
+  ProjectName (..),
+  ProjectRegex (..),
+  PipelineName (..),
+  NodesetName (..),
+  NodeLabelName (..),
+  ProjectTemplateName (..),
+  SecretName (..),
+  QueueName (..),
+  SemaphoreName (..),
 
-    -- * Project identifiers
-    BranchName (..),
-    ProviderName (..),
-    ConnectionName (..),
-    ConnectionUrl (..),
-    CanonicalProjectName (..),
+  -- * Project identifiers
+  BranchName (..),
+  ProviderName (..),
+  ConnectionName (..),
+  ConnectionUrl (..),
+  CanonicalProjectName (..),
 
-    -- * Configuration data types
-    BaseJob (..),
-    Job,
-    JobNodeset (..),
-    Project,
-    BaseProject (..),
-    ProjectPipeline (..),
-    PipelineJob (..),
-    PipelineTrigger (..),
-    PipelineReporter (..),
-    Pipeline (..),
-    Nodeset (..),
-    ProjectTemplate,
-    BaseProjectTemplate (..),
+  -- * Configuration data types
+  BaseJob (..),
+  Job,
+  JobNodeset (..),
+  Project,
+  BaseProject (..),
+  ProjectPipeline (..),
+  PipelineJob (..),
+  PipelineTrigger (..),
+  PipelineReporter (..),
+  Pipeline (..),
+  Nodeset (..),
+  ProjectTemplate,
+  BaseProjectTemplate (..),
 
-    -- * Configuration identifiers
-    BaseConfigLoc (..),
-    ConfigLoc,
-    ZuulConfigElement (..),
-    ZuulConfigType (..),
-  )
+  -- * Configuration identifiers
+  BaseConfigLoc (..),
+  ConfigLoc,
+  ZuulConfigElement (..),
+  ZuulConfigType (..),
+)
 where
 
 import ZuulWeeder.Prelude
@@ -112,8 +112,8 @@ newtype SemaphoreName = SemaphoreName Text
   deriving newtype (Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
 data CanonicalProjectName = CanonicalProjectName
-  { provider :: ProviderName,
-    project :: ProjectName
+  { provider :: ProviderName
+  , project :: ProjectName
   }
   deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, FromJSONKey, ToJSON, ToJSONKey)
 
@@ -148,8 +148,8 @@ data JobNodeset
   deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, ToJSON)
 
 data Nodeset = Nodeset
-  { name :: NodesetName,
-    labels :: [NodeLabelName]
+  { name :: NodesetName
+  , labels :: [NodeLabelName]
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
@@ -157,24 +157,24 @@ data Nodeset = Nodeset
 -- required-projects list, but to resolve a project name, we need to know the tenant
 -- owning the job, and this is presently only possible after the config element has been decoded.
 data BaseJob project = BaseJob
-  { name :: JobName,
-    abstract :: Maybe Bool,
-    parent :: Maybe JobName,
-    nodeset :: Maybe JobNodeset,
-    branches :: Maybe [BranchName],
-    dependencies :: Maybe [JobName],
-    requiredProjects :: Maybe [project],
-    semaphores :: Maybe [SemaphoreName],
-    secrets :: Maybe [SecretName]
+  { name :: JobName
+  , abstract :: Maybe Bool
+  , parent :: Maybe JobName
+  , nodeset :: Maybe JobNodeset
+  , branches :: Maybe [BranchName]
+  , dependencies :: Maybe [JobName]
+  , requiredProjects :: Maybe [project]
+  , semaphores :: Maybe [SemaphoreName]
+  , secrets :: Maybe [SecretName]
   }
   deriving (Show, Eq, Ord, Generic, Hashable)
 
 type Job = BaseJob CanonicalProjectName
 
-instance (FromJSON a) => FromJSON (BaseJob a) where
+instance FromJSON a => FromJSON (BaseJob a) where
   parseJSON = genericParseJSON defaultOptions {omitNothingFields = True}
 
-instance (ToJSON a) => ToJSON (BaseJob a) where
+instance ToJSON a => ToJSON (BaseJob a) where
   toJSON = genericToJSON defaultOptions {omitNothingFields = True}
 
 data PipelineJob a
@@ -188,25 +188,25 @@ instance From (PipelineJob a) JobName where
     PJJob job -> job.name
 
 data ProjectPipeline a = ProjectPipeline
-  { name :: PipelineName,
-    jobs :: [PipelineJob a]
+  { name :: PipelineName
+  , jobs :: [PipelineJob a]
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 data BaseProject a = Project
-  { name :: ProjectName,
-    templates :: [ProjectTemplateName],
-    queue :: Maybe QueueName,
-    pipelines :: Set (ProjectPipeline a)
+  { name :: ProjectName
+  , templates :: [ProjectTemplateName]
+  , queue :: Maybe QueueName
+  , pipelines :: Set (ProjectPipeline a)
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
 type Project = BaseProject CanonicalProjectName
 
 data BaseProjectTemplate a = ProjectTemplate
-  { name :: ProjectTemplateName,
-    queue :: Maybe QueueName,
-    pipelines :: Set (ProjectPipeline a)
+  { name :: ProjectTemplateName
+  , queue :: Maybe QueueName
+  , pipelines :: Set (ProjectPipeline a)
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
@@ -221,10 +221,10 @@ newtype PipelineReporter = PipelineReporter {connectionName :: ConnectionName}
   deriving newtype (Hashable, FromJSON, ToJSON)
 
 data Pipeline = Pipeline
-  { name :: PipelineName,
-    timers :: [Text],
-    triggers :: [PipelineTrigger],
-    reporters :: [PipelineReporter]
+  { name :: PipelineName
+  , timers :: [Text]
+  , triggers :: [PipelineTrigger]
+  , reporters :: [PipelineReporter]
   }
   deriving (Show, Eq, Ord, Generic, Hashable, FromJSON, ToJSON)
 
@@ -265,11 +265,11 @@ data ZuulConfigType
 
 -- | The configuration source context location
 data BaseConfigLoc resolved = BaseConfigLoc
-  { project :: CanonicalProjectName,
-    branch :: BranchName,
-    path :: FilePathT,
-    url :: ConnectionUrl,
-    tenants :: Set resolved
+  { project :: CanonicalProjectName
+  , branch :: BranchName
+  , path :: FilePathT
+  , url :: ConnectionUrl
+  , tenants :: Set resolved
   }
   deriving (Show, Eq, Ord, Generic, FromJSON, ToJSON)
 

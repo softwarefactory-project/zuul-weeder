@@ -10,8 +10,7 @@ cabal test -O0 --test-show-details=direct --test-option=--accept
 cabal check
 
 log "Formatting"
-ormolu -o -XPatternSynonyms -o -XTypeApplications -o -XImportQualifiedPost -o -XOverloadedRecordDot --mode inplace \
-  $(find src/ -name "*.hs")
+fourmolu --mode inplace ./app ./src ./test
 
 log "Haskell weeder"
 weeder

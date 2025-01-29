@@ -34,16 +34,16 @@ import ZuulWeeder.UI.App (CacheRender)
 import ZuulWeeder.UI.App qualified
 
 data Args = Args
-  { zkPath :: FilePathT,
-    configPath :: FilePathT
+  { zkPath :: FilePathT
+  , configPath :: FilePathT
   }
 
 getEnvArgs :: IO Args
 getEnvArgs =
   Args <$> envPath "WEEDER_DATA" "/var/tmp/weeder" <*> envPath "ZUUL_CONF" "/etc/zuul/zuul.conf"
-  where
-    envPath :: String -> FilePath -> IO FilePathT
-    envPath name def = FilePathT . Text.pack . fromMaybe def <$> lookupEnv name
+ where
+  envPath :: String -> FilePath -> IO FilePathT
+  envPath name def = FilePathT . Text.pack . fromMaybe def <$> lookupEnv name
 
 -- | The main function loads the config, prepare the analysis and serve the UI.
 main :: IO ()
@@ -79,11 +79,11 @@ runWeb logger config cacheRender = do
   -- monitornig
   monitoring <- ZuulWeeder.Monitoring.mkMonitoring logger
   Warp.run port (monitoring app)
-  where
-    ensureTrailingSlash url = case Text.unsnoc url of
-      Nothing -> "/"
-      Just (x, '/') -> ensureTrailingSlash x
-      _ -> Text.snoc url '/'
+ where
+  ensureTrailingSlash url = case Text.unsnoc url of
+    Nothing -> "/"
+    Just (x, '/') -> ensureTrailingSlash x
+    _ -> Text.snoc url '/'
 
 newtype ConfigDumper = ConfigDumper {dumpConfig :: ExceptT Text IO ()}
 
@@ -100,38 +100,38 @@ configReloader logger configDumper configLoader cacheRender = do
   cache <- newIORef (newAnalysisStatus $ uncurry analyzeConfig conf)
   ts <- newMVar (now, cache)
   pure (modifyMVar ts go)
-  where
-    go :: (Int64, IORef AnalysisStatus) -> IO ((Int64, IORef AnalysisStatus), AnalysisStatus)
-    go (ts, cache) = do
-      status <- readIORef cache
-      now <- getSec
-      if now - ts < 3600
-        then pure ((ts, cache), status)
-        else do
-          modifyIORef cache (#refreshing `set` True)
-          reload cache
-          pure ((now, cache), status)
+ where
+  go :: (Int64, IORef AnalysisStatus) -> IO ((Int64, IORef AnalysisStatus), AnalysisStatus)
+  go (ts, cache) = do
+    status <- readIORef cache
+    now <- getSec
+    if now - ts < 3600
+      then pure ((ts, cache), status)
+      else do
+        modifyIORef cache (#refreshing `set` True)
+        reload cache
+        pure ((now, cache), status)
 
-    -- Load the config in a background thread
-    reload :: IORef AnalysisStatus -> IO ()
-    reload cache = void $ forkIO do
-      let setError err = modifyIORef cache ((#loadingError `set` Just err) . (#refreshing `set` False))
-      res <- timeout 600_000_000 $ do
-        info logger "ReLoading the configuration"
-        confE <- runExceptT do
-          configDumper.dumpConfig
-          configLoader.loadConfig
-        case confE of
-          Left e -> do
-            info logger ("Error reloading config: " <> encodeUtf8 e)
-            setError e
-          Right conf -> do
-            info logger "Caching the graph result"
-            writeIORef cache (newAnalysisStatus $ uncurry analyzeConfig conf)
-            modifyMVar cacheRender (\_ -> pure (mempty, ()))
-      when (isNothing res) do
-        info logger "Error reloading config timeout"
-        setError "Loading config timeout"
+  -- Load the config in a background thread
+  reload :: IORef AnalysisStatus -> IO ()
+  reload cache = void $ forkIO do
+    let setError err = modifyIORef cache ((#loadingError `set` Just err) . (#refreshing `set` False))
+    res <- timeout 600_000_000 $ do
+      info logger "ReLoading the configuration"
+      confE <- runExceptT do
+        configDumper.dumpConfig
+        configLoader.loadConfig
+      case confE of
+        Left e -> do
+          info logger ("Error reloading config: " <> encodeUtf8 e)
+          setError e
+        Right conf -> do
+          info logger "Caching the graph result"
+          writeIORef cache (newAnalysisStatus $ uncurry analyzeConfig conf)
+          modifyMVar cacheRender (\_ -> pure (mempty, ()))
+    when (isNothing res) do
+      info logger "Error reloading config timeout"
+      setError "Loading config timeout"
 
 -- | Create IO actions to dump and load the config
 mkConfigLoader :: Logger -> FilePathT -> FilePathT -> ExceptT Text IO (ConfigDumper, ConfigLoader)
@@ -139,29 +139,29 @@ mkConfigLoader logger dataBaseDir configFile = do
   -- Load the zuul.conf
   serviceConfig <- readServiceConfig (readFileText configFile)
   pure (configDumper serviceConfig, go serviceConfig)
-  where
-    dataDir = dataBaseDir </> "data"
-    configDumper :: ServiceConfig -> ConfigDumper
-    configDumper serviceConfig = ConfigDumper do
-      env <- lift $ lookupEnv "ZUUL_WEEDER_NO_ZK"
-      case env of
-        Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
-        Nothing -> Zuul.ZooKeeper.fetchConfigs logger dataDir serviceConfig.zookeeper
-    cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
-    go :: ServiceConfig -> ConfigLoader
-    go serviceConfig = ConfigLoader do
-      -- ensure data-dir exists
-      whenM (not <$> lift (doesDirectoryExist cp)) (dumpConfig $ configDumper serviceConfig)
-      -- read the tenants config from dataDir
-      systemConfig <- readTenantsConfig dataDir
-      -- decode the tenants config
-      tenantsConfig <- except (decodeTenantsConfig systemConfig)
-      -- load all the config objects
-      let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
-          allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
-          allProjects = getCanonicalProjects serviceConfig.connections tenantsConfig
-      config <- lift $ loadConfigFiles allProjects allTenants serviceConfig.urlBuilders tr dataDir
-      pure (tenantsConfig, Zuul.ConfigLoader.postProcess config)
+ where
+  dataDir = dataBaseDir </> "data"
+  configDumper :: ServiceConfig -> ConfigDumper
+  configDumper serviceConfig = ConfigDumper do
+    env <- lift $ lookupEnv "ZUUL_WEEDER_NO_ZK"
+    case env of
+      Just _ -> lift $ hPutStrLn stderr "[+] ZUUL_WEEDER_NO_ZK is set, skipping dumpZK"
+      Nothing -> Zuul.ZooKeeper.fetchConfigs logger dataDir serviceConfig.zookeeper
+  cp = dataDir </> FilePathT "zuul/system/conf/0000000000"
+  go :: ServiceConfig -> ConfigLoader
+  go serviceConfig = ConfigLoader do
+    -- ensure data-dir exists
+    whenM (not <$> lift (doesDirectoryExist cp)) (dumpConfig $ configDumper serviceConfig)
+    -- read the tenants config from dataDir
+    systemConfig <- readTenantsConfig dataDir
+    -- decode the tenants config
+    tenantsConfig <- except (decodeTenantsConfig systemConfig)
+    -- load all the config objects
+    let tr = Zuul.Tenant.mkResolver serviceConfig tenantsConfig
+        allTenants = Set.fromList $ Map.keys tenantsConfig.tenants
+        allProjects = getCanonicalProjects serviceConfig.connections tenantsConfig
+    config <- lift $ loadConfigFiles allProjects allTenants serviceConfig.urlBuilders tr dataDir
+    pure (tenantsConfig, Zuul.ConfigLoader.postProcess config)
 
 loadConfigFiles :: Map CanonicalProjectName (Set TenantName) -> Set TenantName -> ConnectionUrlMap -> TenantResolver -> FilePathT -> IO Zuul.ConfigLoader.Config
 loadConfigFiles projs tenants ub tr =
@@ -238,14 +238,14 @@ unparsed_abide:
   -- pPrint analysis.config.triggers
   -- pPrint (Algebra.Graph.edgeList analysis.dependentGraph)
   pure (newAnalysisStatus analysis)
-  where
-    mkConfigFile conn proj conf =
-      ZKFile conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
-    configFiles =
-      [ mkConfigFile
-          "sftests.com"
-          "config"
-          [s|
+ where
+  mkConfigFile conn proj conf =
+    ZKFile conn proj "main" (FilePathT ".zuul.yaml") (FilePathT "/") <$> decodeThrow conf
+  configFiles =
+    [ mkConfigFile
+        "sftests.com"
+        "config"
+        [s|
 - job:
     name: base
     abstract: true
@@ -310,22 +310,22 @@ unparsed_abide:
         - zena-job
         - linter:
             nodeset: centos
-|],
-        mkConfigFile
-          "sftests.com"
-          "sf-jobs"
-          [s|
+|]
+    , mkConfigFile
+        "sftests.com"
+        "sf-jobs"
+        [s|
 - job:
     name: linter
     nodeset:
       nodes:
         - name: container
           label: pod-centos-7
-|],
-        mkConfigFile
-          "localhost"
-          "project-config"
-          [s|
+|]
+    , mkConfigFile
+        "localhost"
+        "project-config"
+        [s|
 - job:
     name: base
     nodeset: rhel
@@ -344,4 +344,4 @@ unparsed_abide:
       - name: runner
         label: cloud-rhel-7
 |]
-      ]
+    ]
