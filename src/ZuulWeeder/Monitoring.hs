@@ -32,7 +32,10 @@ mkMonitoring logger = do
 monitoring :: Logger -> (Prometheus.Counter, Prometheus.Counter) -> Wai.Middleware
 monitoring logger (counter, error_counter) baseApp req resp = case Wai.rawPathInfo req of
   "/health" -> resp $ Wai.responseLBS HTTP.ok200 [] mempty
-  "/metrics" -> resp . Wai.responseLBS HTTP.ok200 [] =<< Prometheus.exportMetricsAsText
+  "/metrics" -> do
+    metrics <- Prometheus.exportMetricsAsText
+    let headers = [("Content-Type", "text/plain; version=0.0.4")]
+    resp $ Wai.responseLBS HTTP.ok200 headers metrics
   p | "/dists/" `BS.isPrefixOf` p -> baseApp req resp
   p -> do
     measure <- intervalMilliSec
