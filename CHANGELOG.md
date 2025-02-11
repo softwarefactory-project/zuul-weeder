@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Added /metrics HTTP header to support latest prometheus scapper
+
 ## 0.1.1
 
 - Added support for zuul job roles attribute
