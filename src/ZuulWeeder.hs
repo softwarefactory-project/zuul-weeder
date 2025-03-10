@@ -16,10 +16,11 @@ import Data.Map qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as Text
 import Data.Yaml (decodeThrow)
-import Network.Wai.Handler.Warp as Warp (run)
+import Network.Wai.Handler.Warp qualified as Warp
 import Streaming
 import Streaming.Prelude qualified as S
 import System.Environment
+import System.Posix.Signals (Handler (Catch), installHandler, sigTERM)
 import Web.HttpApiData (toHeader)
 import Zuul.Config (CanonicalProjectName, TenantName)
 import Zuul.ConfigLoader (Config (..), ConnectionUrlMap, emptyConfig, loadConfig, postProcess)
@@ -78,8 +79,10 @@ runWeb logger config cacheRender = do
   let app = ZuulWeeder.UI.App.app config cacheRender (ZuulWeeder.UI.BasePath rootUrl) distPath
   -- monitornig
   monitoring <- ZuulWeeder.Monitoring.mkMonitoring logger
-  Warp.run port (monitoring app)
+  Warp.runSettings (wsettings port) (monitoring app)
  where
+  wsettings port = Warp.defaultSettings & Warp.setPort port & Warp.setInstallShutdownHandler tHandler
+  tHandler closeSocket = void $ installHandler sigTERM (Catch closeSocket) Nothing
   ensureTrailingSlash url = case Text.unsnoc url of
     Nothing -> "/"
     Just (x, '/') -> ensureTrailingSlash x

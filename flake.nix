@@ -1,6 +1,5 @@
 # Build the container image using:
-#   nix build -L .#containerImage
-#   TMPDIR=/tmp/podman podman load < result
+#   $(nix build --no-link --print-out-paths -L .#container) | gzip --fast | podman load
 {
   description = "Zuul Weeder";
   nixConfig.bash-prompt = "[nix(zuul-weeder)]$ ";
@@ -67,7 +66,7 @@
           '';
           contents = [ exe distFiles python ];
           config = {
-            Entrypoint = [ "zuul-weeder" ];
+            Cmd = [ "zuul-weeder" ];
             Env = [ "WEEDER_DIST_PATH=${toString distFiles}" ];
           };
         };

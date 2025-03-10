@@ -1,6 +1,6 @@
 cabal-version:       3.0
 name:                zuul-weeder
-version:             0.1.2
+version:             0.1.3
 synopsis:            Zuul configuration analyzer
 description:
     Analyze [zuul-ci.org](https://zuul-ci.org) configuration.
@@ -110,6 +110,7 @@ library
                      , wai
                      , with-utf8
                      , th-env
+                     , unix
                      -- Monitoring
                      , pretty-simple
                      , fast-logger
